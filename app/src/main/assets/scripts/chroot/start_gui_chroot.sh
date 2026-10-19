@@ -159,10 +159,21 @@ fi
 export TERMUX_X11_APK_PATH
 echo "FluxLinux: APK path = $TERMUX_X11_APK_PATH"
 
+# Prefer the package manager's read-only libXlorie.so (nativeLibraryDir, extractNativeLibs):
+# Android 17 refuses System.load of a writable file, so the /data/data copy fails there.
+NATIVE_LIB="$(dirname "$TERMUX_X11_APK_PATH")/lib/arm64/libXlorie.so"
+[ -f "$NATIVE_LIB" ] || NATIVE_LIB="$(dirname "$TERMUX_X11_APK_PATH")/lib/arm/libXlorie.so"
+if [ -n "$TERMUX_X11_APK_PATH" ] && [ -f "$NATIVE_LIB" ]; then
+  export TERMUX_X11_LIB_PATH="$NATIVE_LIB"
+  echo "FluxLinux: libXlorie.so = $NATIVE_LIB (read-only)"
+else
+  TERMUX_X11_LIB_PATH=""
+fi
+
 APP_LIB_DIR="/data/data/$PKG/lib"
 mkdir -p "$APP_LIB_DIR" 2>/dev/null
-# Re-extract when the APK is newer, else an app update keeps running the old X server.
-if { [ ! -f "$APP_LIB_DIR/libXlorie.so" ] || [ "$TERMUX_X11_APK_PATH" -nt "$APP_LIB_DIR/libXlorie.so" ]; } && [ -n "$TERMUX_X11_APK_PATH" ]; then
+# Fallback only: re-extract when the APK is newer, else an app update keeps running the old X server.
+if [ -z "$TERMUX_X11_LIB_PATH" ] && { [ ! -f "$APP_LIB_DIR/libXlorie.so" ] || [ "$TERMUX_X11_APK_PATH" -nt "$APP_LIB_DIR/libXlorie.so" ]; } && [ -n "$TERMUX_X11_APK_PATH" ]; then
   echo "FluxLinux: Extracting libXlorie.so..."
   ( cd "$APP_LIB_DIR" && \
     unzip -o "$TERMUX_X11_APK_PATH" 'lib/arm64-v8a/libXlorie.so' 2>/dev/null && \
@@ -171,6 +182,7 @@ if { [ ! -f "$APP_LIB_DIR/libXlorie.so" ] || [ "$TERMUX_X11_APK_PATH" -nt "$APP_
     unzip -o "$TERMUX_X11_APK_PATH" 'lib/armeabi-v7a/libXlorie.so' 2>/dev/null && \
     mv -f lib/armeabi-v7a/libXlorie.so . && rm -rf lib )
   touch "$APP_LIB_DIR/libXlorie.so" 2>/dev/null # unzip keeps the 1981 entry mtime
+  chmod 0555 "$APP_LIB_DIR/libXlorie.so" 2>/dev/null || true # best effort: not writable
 fi
 
 rm -f "$TMPDIR/.X0-lock" "$TMPDIR/.X1-lock" "$TMPDIR/.tX0-lock" \
@@ -191,6 +203,7 @@ fi
 LD_LIBRARY_PATH="" LD_PRELOAD="" \
 CLASSPATH="$TERMUX_PREFIX/libexec/termux-x11/loader.apk" \
 TERMUX_X11_APK_PATH="$TERMUX_X11_APK_PATH" \
+TERMUX_X11_LIB_PATH="$TERMUX_X11_LIB_PATH" \
 TERMUX_X11_OVERRIDE_PACKAGE="$PKG" \
 LANG=en_US.UTF-8 \
 /system/bin/app_process / \
