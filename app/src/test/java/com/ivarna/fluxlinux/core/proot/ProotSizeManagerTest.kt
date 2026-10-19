@@ -1,5 +1,6 @@
 package com.ivarna.fluxlinux.core.proot
 
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import com.ivarna.fluxlinux.core.terminal.FakeContext
 import com.ivarna.fluxlinux.core.terminal.SessionRegistry
 import org.junit.Assert.assertEquals
@@ -31,7 +32,29 @@ class ProotSizeManagerTest {
             assertNotNull("Bytes must not be null", res.bytes)
             assertTrue("Bytes must be >= 150", (res.bytes ?: 0L) >= 150L)
         } finally {
-            tempDir.deleteRecursively()
+            SafeFiles.deleteTree(tempDir)
+        }
+    }
+
+    @Test
+    fun measure_symlinkedDirInsideContainer_isNotFollowedOrCounted() {
+        val tempDir = Files.createTempDirectory("proot_test_link").toFile()
+        val victim = Files.createTempDirectory("proot_test_victim").toFile()
+        try {
+            File(victim, "sentinel.bin").writeBytes(ByteArray(10_000))
+            val containerDir = File(tempDir, "usr/var/lib/proot-distro/containers/debian")
+            val storage = File(containerDir, "home/flux/storage")
+            storage.mkdirs()
+            File(containerDir, "test.bin").writeBytes(ByteArray(150))
+            Files.createSymbolicLink(File(storage, "shared").toPath(), victim.toPath())
+
+            val res = ProotSizeManager.measure(FakeContext(tempDir, "/fake/jni"), "debian")
+
+            assertNull("Error must be null", res.error)
+            assertEquals("only the container's regular file is counted", 150L, res.bytes)
+        } finally {
+            SafeFiles.deleteTree(tempDir)
+            SafeFiles.deleteTree(victim)
         }
     }
 
@@ -46,7 +69,7 @@ class ProotSizeManagerTest {
             assertEquals("no_dir", res.error)
             assertNull(res.bytes)
         } finally {
-            tempDir.deleteRecursively()
+            SafeFiles.deleteTree(tempDir)
         }
     }
 
@@ -83,7 +106,7 @@ class ProotSizeManagerTest {
                 assertEquals("uninstalling", res.error)
                 assertNull(res.bytes)
             } finally {
-                tempDir.deleteRecursively()
+                SafeFiles.deleteTree(tempDir)
             }
         } finally {
             SessionRegistry.clearForTest()
@@ -110,7 +133,7 @@ class ProotSizeManagerTest {
             ProotSizeManager.onFileVisitForTest = { _ ->
                 visitedCount++
                 if (visitedCount == 1) {
-                    containerDir.deleteRecursively()
+                    SafeFiles.deleteTree(containerDir)
                 }
             }
 
@@ -123,7 +146,7 @@ class ProotSizeManagerTest {
             assertFalse("dirExists must be false", res.dirExists)
         } finally {
             ProotSizeManager.onFileVisitForTest = null
-            tempDir.deleteRecursively()
+            SafeFiles.deleteTree(tempDir)
         }
     }
 
@@ -167,7 +190,7 @@ class ProotSizeManagerTest {
             assertEquals(priorBytes, ProotInfoStore.cachedBytes(prefsCtx, "debian"))
         } finally {
             SessionRegistry.clearForTest()
-            tempDir.deleteRecursively()
+            SafeFiles.deleteTree(tempDir)
         }
     }
 
@@ -199,7 +222,7 @@ class ProotSizeManagerTest {
             ProotSizeManager.onFileVisitForTest = { _ ->
                 visitedCount++
                 if (visitedCount == 1) {
-                    containerDir.deleteRecursively()
+                    SafeFiles.deleteTree(containerDir)
                 }
             }
 
@@ -215,7 +238,7 @@ class ProotSizeManagerTest {
             assertEquals("SharedPreferences must retain 1.5 GB cache", priorBytes, ProotInfoStore.cachedBytes(fakeCtx, "debian"))
         } finally {
             ProotSizeManager.onFileVisitForTest = null
-            tempDir.deleteRecursively()
+            SafeFiles.deleteTree(tempDir)
         }
     }
 }

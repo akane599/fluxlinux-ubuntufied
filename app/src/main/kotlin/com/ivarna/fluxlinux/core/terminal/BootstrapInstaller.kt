@@ -1,9 +1,11 @@
 package com.ivarna.fluxlinux.core.terminal
 
 import android.content.Context
+import android.content.res.AssetManager
 import android.util.Log
 import com.ivarna.fluxlinux.core.install.HostBootstrap
 import com.ivarna.fluxlinux.core.install.RootfsDownloader
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -92,7 +94,7 @@ object BootstrapInstaller {
         }
         return try {
             val tmpDir = File(ctx.filesDir, TMP_DIR)
-            tmpDir.deleteRecursively()
+            SafeFiles.deleteTree(tmpDir)
             File(tmpDir, "usr/tmp").mkdirs()
             File(tmpDir, "usr/etc").mkdirs()
             File(ctx.filesDir, "home").mkdirs()
@@ -121,21 +123,29 @@ object BootstrapInstaller {
             if (!File(tmpUsr, "lib/libtermux-exec.so").isFile) {
                 throw IllegalStateException("extract missing usr/lib/libtermux-exec.so")
             }
-            if (dstUsr.exists()) dstUsr.deleteRecursively()
+            if (preserved == null && File(dstUsr, "var/lib/proot-distro").exists()) {
+                // Preservation failed but guests are still inside usr/: never delete them.
+                throw IllegalStateException("could not preserve usr/var/lib/proot-distro; aborting re-extract")
+            }
+            SafeFiles.deleteTree(dstUsr)
             if (!tmpUsr.renameTo(dstUsr)) {
                 // Same-FS rename should not fail; fall back to copy.
-                tmpUsr.copyRecursively(dstUsr, overwrite = true)
-                tmpUsr.deleteRecursively()
+                SafeFiles.copyTree(tmpUsr, dstUsr, overwrite = true)
+                SafeFiles.deleteTree(tmpUsr)
             }
-            tmpDir.deleteRecursively()
+            SafeFiles.deleteTree(tmpDir)
 
             if (preserved != null) {
                 val target = File(dstUsr, "var/lib/proot-distro")
                 target.parentFile?.mkdirs()
                 if (!preserved.renameTo(target)) {
                     Log.w(TAG, "preserve: renameTo failed, copying proot-distro back")
-                    preserved.copyRecursively(target, overwrite = true)
-                    preserved.deleteRecursively()
+                    if (SafeFiles.copyTree(preserved, target, overwrite = true)) {
+                        SafeFiles.deleteTree(preserved)
+                    } else {
+                        // Keep the only complete copy of the guests in place.
+                        Log.e(TAG, "preserve: copy back incomplete; keeping ${preserved.absolutePath}")
+                    }
                 }
                 Log.i(TAG, "preserved installed proot-distro containers across re-extract")
             }
@@ -147,7 +157,7 @@ object BootstrapInstaller {
         } catch (e: Exception) {
             Log.e(TAG, "bootstrap extract failed", e)
             clearMarker(ctx)
-            File(ctx.filesDir, TMP_DIR).deleteRecursively()
+            SafeFiles.deleteTree(File(ctx.filesDir, TMP_DIR))
             false
         }
     }
@@ -164,12 +174,18 @@ object BootstrapInstaller {
         onProgress: (done: Long, total: Long, phase: String) -> Unit
     ): BootstrapSource? {
         try {
+            val stream = ctx.assets.open(ASSET_NAME, AssetManager.ACCESS_STREAMING)
             val total = try {
                 ctx.assets.openFd(ASSET_NAME).use { it.length }
             } catch (_: Exception) {
-                0L
+                // Compressed (deflated) asset: openFd is unsupported, but a fresh
+                // AssetInputStream reports the remaining uncompressed length.
+                try {
+                    stream.available().toLong()
+                } catch (_: Exception) {
+                    0L
+                }
             }
-            val stream = ctx.assets.open(ASSET_NAME)
             Log.i(TAG, "Using APK asset $ASSET_NAME ($total bytes)")
             return BootstrapSource(stream, total)
         } catch (_: Exception) {
@@ -200,19 +216,20 @@ object BootstrapInstaller {
 
     /**
      * Move `usr/var/lib/proot-distro` aside (same-FS rename) so a re-extract can
-     * restore installed guests. Returns null when nothing to preserve.
+     * restore installed guests. Returns null when nothing to preserve, or when the
+     * copy fallback failed (the caller then refuses to delete `usr/`).
      */
     private fun preserveProotDistro(ctx: Context): File? {
         val src = File(ctx.filesDir, "usr/var/lib/proot-distro")
         if (!src.exists()) return null
         val aside = File(ctx.filesDir, ".preserved_proot_distro")
-        aside.deleteRecursively()
-        return if (src.renameTo(aside)) aside else {
-            // Rename failed (unlikely on same FS) — copy so we never lose the guest.
-            aside.mkdirs()
-            src.copyRecursively(aside, overwrite = true)
-            aside
-        }
+        SafeFiles.deleteTree(aside)
+        if (src.renameTo(aside)) return aside
+        // Rename failed (unlikely on same FS) — copy so we never lose the guest.
+        // Links (guest ~/storage -> shared storage) are copied as links, never followed.
+        if (SafeFiles.copyTree(src, aside, overwrite = true)) return aside
+        Log.e(TAG, "preserve: could not copy proot-distro aside")
+        return null
     }
 
     /** Streaming tar extractor (POSIX ustar). Entries rooted at usr/ or data/data/<pkg>/files/. */
