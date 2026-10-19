@@ -21,7 +21,7 @@ There is one host bootstrap per applicationId, because termux-packages debs bake
 | `assemble_bootstrap.py --package-name <appId> --mode full` | Build `bootstrap.tar` and jniLibs from the debs |
 | `verify_bootstrap.sh <appId>`, `verify_deb_prefix.sh` | Check prefix/RUNPATH correctness |
 | `package_host_assets.sh <appId>` | Stage the bootstrap, jniLibs and pulse-runtime into `app/src/<flavor>/`. Called by Gradle |
-| `verify_apk_host_assets.sh` | unzip checks on a built APK. **Stale:** it says ivarna must not package `bootstrap.tar`, but `HostBootstrap.downloadsFromRelease` returns `false` and both flavors package it |
+| `verify_apk_host_assets.sh <apk>` | unzip checks on a built APK, for either flavor: the six jniLibs, `assets/bootstrap.tar` present and STORED, and zero `assets/rootfs/*` entries |
 | `build_loader_apk.sh`, `build_guest_helpers.sh` | Rebuild `loader.apk`, `bwrap-proot-shim` and `libevp_md2.so`. Needed after F-Droid's scanner deletes binaries |
 | `upload_rootfs_release.sh`, `upload_host_bootstrap_release.sh`, `verify_rootfs_shas.sh` | Upload to and verify the GitHub release tag `rootfs` |
 
