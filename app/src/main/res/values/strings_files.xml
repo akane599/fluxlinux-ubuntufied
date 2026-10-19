@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Root titles shown by UbuntuDocumentsProvider in the system file picker / Files app. -->
+    <string name="ubuntu_files_root_home">Ubuntu</string>
+    <string name="ubuntu_files_root_system">Ubuntu filesystem</string>
+</resources>
