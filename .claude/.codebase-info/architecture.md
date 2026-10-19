@@ -41,10 +41,12 @@ Guest rootfs (Ubuntu-first; 12 distros supported, downloaded from GitHub release
 5. `LinuxCommandBuilder.currentMethod` ("proot" or "chroot") selects `ProotCommandBuilder` or `ChrootCommandBuilder`.
 
 **Embedded terminal**
-1. `KT/ui/screens/TerminalScreen.kt` hosts `com.termux.view.TerminalView` (jitpack terminal-view).
+1. `KT/ui/screens/TerminalScreen.kt` hosts `com.termux.view.TerminalView` (jitpack terminal-view). There is no distro picker (v2.1.2): with no sessions it auto-opens an Ubuntu PRoot user shell once per entry (failure shows a retry state), "+" opens another Ubuntu tab, and long-press "+" offers Ubuntu root, Ubuntu chroot (root granted + installed) and the Termux host shell. `KT/ui/terminal/TerminalSessionDefaults.kt` picks those cards from `TerminalShellCatalog`. Tabs are pills with a 48dp close target each; long-press offers Close / Close other tabs.
 2. `FluxTerminalSessionManager.openSessionAfterHost` calls `GuestSessionFactory.prepareSession`, which creates `com.termux.terminal.TerminalSession` (`:terminal-emulator`).
 3. `SessionRegistry` keeps sessions alive through `AppTerminalService`.
 4. Variants: host shell (`HostCommandBuilder`), install, uninstall, component and root-script sessions.
+5. Extra-keys bar: `KT/ui/terminal/TerminalExtraKeys.kt`; arrows/BKSP/DEL repeat while held on the schedule in `KT/ui/terminal/KeyRepeat.kt` (400 ms, then 100→30 ms).
+6. Ubuntu zsh profile: `KT/core/terminal/ZshPluginSet.kt` is the single source of truth for the oh-my-zsh plugin order, the managed `.zshrc` block (plugins built at start-up from what is installed; Up/Down bound to history-substring-search), apt deps (fzf, zoxide, command-not-found) and the fzf-tab clone. `GuestZshrcRepair` upgrades existing Ubuntu profiles that still carry the Flux default plugin line (backup `.zshrc.flux-bak`), `ProotZshBootstrap` clones fzf-tab and installs the deps lazily, and `scripts/common/setup/setup_customization_xfce.sh` carries a verbatim copy enforced by `ZshPluginSetTest`.
 
 **File access (v2.1.0)**
 1. `KT/core/system/GuestStorageLinks.kt` `ensure(ctx, "ubuntu")` creates Termux-style `~/storage/{shared,downloads,documents,dcim,pictures,music,movies}` links to `/storage/emulated/0[/...]` in `/home/flux` and `/root`. It is idempotent and never deletes or replaces anything. It is called from Home, `GuestSessionFactory`, `DesktopLauncher` and `OnboardingInstallRunner`.

@@ -14,7 +14,7 @@
 ## `:app` packages (`app/src/main/kotlin/com/ivarna/fluxlinux/`)
 | Package | Purpose | Key files |
 |---|---|---|
-| `core/terminal` | Core: host prefix, command builders, sessions, shell exec, audio | `BootstrapInstaller`, `HostScriptDeployer`, `TerminalLauncher`, `FluxTerminalSessionManager`, `SessionRegistry`, `GuestSessionFactory`, `Install/UninstallSessionFactory`, `Linux/Proot/Chroot/HostCommandBuilder`, `ShellCommandRunner`, `PulseHost`, `TermuxHostPaths`, guest repair (`GuestApkDbRepair`, `GuestZshrcRepair`, `GuestRepairCache`), `GpuAccelDetector` |
+| `core/terminal` | Core: host prefix, command builders, sessions, shell exec, audio | `BootstrapInstaller`, `HostScriptDeployer`, `TerminalLauncher`, `FluxTerminalSessionManager`, `SessionRegistry`, `GuestSessionFactory`, `ZshPluginSet`, `Install/UninstallSessionFactory`, `Linux/Proot/Chroot/HostCommandBuilder`, `ShellCommandRunner`, `PulseHost`, `TermuxHostPaths`, guest repair (`GuestApkDbRepair`, `GuestZshrcRepair`, `GuestRepairCache`), `GpuAccelDetector` |
 | `core/install` | Install pipeline and pins | `HostBootstrap`, `PinnedReleaseArchive`, `RootfsDownloader`, `DistroInstallProfile` (rootfs SHA SSOT), `BaseDesktopInstallPlan`, `OnboardingInstallRunner`, `ProotXfceAssetInstaller`, `ProotZshBootstrap` |
 | `core/desktop` | GUI session lifecycle | `DesktopLauncher`, `DesktopSession` (`DesktopSessionQuery`), `GuiDesktopLog` |
 | `core/service` | Foreground services | see [entry-points.md](entry-points.md) |
@@ -25,4 +25,4 @@
 | `core/files` | SAF access to the Ubuntu rootfs | `UbuntuDocumentsProvider`, `GuestDocumentPaths` (pure, unit-tested path/link resolution), `UbuntuFiles` (authority, open, notifyRootsChanged) |
 | `core/data`, `core/model` | Distro catalog and Termux intent and script layer | `DistroRepository`, `Distro`, `DistroSpec`, `ScriptManager`, `TermuxIntentFactory` |
 | `core/utils` | Prefs, misc | `StateManager`, `UbuntuLaunchPreferences`, `TerminalPreferences`, `ThemePreferences`, `TermuxX11Preferences`, `EmbeddedX11`, `InstallationQueueManager`, `LocalInstallServer`, `LogcatStreamer` |
-| `ui/*` | Compose UI | `screens/`, `onboarding/`, `components/` (Glass* design components), `terminal/` (extra keys, IME), `install/`, `theme/` (Color/Theme/Type) |
+| `ui/*` | Compose UI | `screens/`, `onboarding/`, `components/` (Glass* design components), `terminal/` (extra keys + `KeyRepeat`, `TerminalSessionDefaults`, IME), `install/`, `theme/` (Color/Theme/Type) |
