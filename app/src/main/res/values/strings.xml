@@ -1,4 +1,28 @@
 <resources>
     <string name="app_name">FluxLinux</string>
     <string name="accessibility_service_description">FluxLinux Keyboard Toggle allows you to toggle the keyboard in Termux:X11 using a floating button.</string>
+
+    <!-- Terminal -->
+    <string name="terminal_new_tab">New Ubuntu tab</string>
+    <string name="terminal_more_shells">More shells</string>
+    <string name="terminal_shell_ubuntu_root">Ubuntu root shell</string>
+    <string name="terminal_shell_ubuntu_chroot">Ubuntu chroot</string>
+    <string name="terminal_shell_host">Termux (host) shell</string>
+    <string name="terminal_tab_switch">Switch to %1$s</string>
+    <string name="terminal_tab_menu">Tab options</string>
+    <string name="terminal_tab_close_named">Close %1$s</string>
+    <string name="terminal_tab_close">Close</string>
+    <string name="terminal_tab_close_others">Close other tabs</string>
+    <string name="terminal_tab_selected">Selected</string>
+    <string name="terminal_empty_title">Ubuntu terminal</string>
+    <string name="terminal_empty_opening">Opening an Ubuntu shell…</string>
+    <string name="terminal_empty_closed">All tabs are closed.</string>
+    <string name="terminal_open_ubuntu">Open Ubuntu terminal</string>
+    <string name="terminal_error_tab_limit">Tab limit reached (%1$d)</string>
+    <string name="terminal_error_host_bootstrap">Host bootstrap not ready — check Settings</string>
+    <string name="terminal_error_host_not_ready">Host not ready — check Settings</string>
+    <string name="terminal_error_host_failed">Host shell failed to open</string>
+    <string name="terminal_error_chroot_failed">Chroot session failed to open</string>
+    <string name="terminal_error_session_failed">Session failed to open</string>
+    <string name="terminal_error_ubuntu_missing">Ubuntu is not installed yet. Install it from Home, then try again.</string>
 </resources>
