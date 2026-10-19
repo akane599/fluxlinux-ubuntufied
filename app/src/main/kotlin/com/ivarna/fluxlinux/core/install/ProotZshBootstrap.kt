@@ -5,8 +5,10 @@ import android.util.Log
 import com.ivarna.fluxlinux.core.system.SafeFiles
 import com.ivarna.fluxlinux.core.terminal.HostCommandBuilder
 import com.ivarna.fluxlinux.core.terminal.TermuxHostPaths
+import com.ivarna.fluxlinux.core.terminal.ZshPluginSet
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Host-side Oh My Zsh + essential plugins into the proot rootfs.
@@ -20,10 +22,7 @@ object ProotZshBootstrap {
 
     private const val TAG = "ProotZshBootstrap"
     private const val OMZ_URL = "https://github.com/ohmyzsh/ohmyzsh.git"
-    private const val AUTOSUGGEST =
-        "https://github.com/zsh-users/zsh-autosuggestions.git"
-    private const val SYNTAX =
-        "https://github.com/zsh-users/zsh-syntax-highlighting.git"
+    private const val APT_TIMEOUT_SEC = 600L
     private const val THEME_URL =
         "https://raw.githubusercontent.com/zakaziko99/agnosterzak-ohmyzsh-theme/master/agnosterzak.zsh-theme"
 
@@ -49,7 +48,7 @@ object ProotZshBootstrap {
         val omz = omzDir(rootfs)
         if (isOmzInstalled(rootfs)) {
             onLog("Oh My Zsh already installed — skip")
-            ensurePlugins(app, omz, onLog)
+            ensurePlugins(app, omz, prootName, onLog)
             return true
         }
 
@@ -79,29 +78,83 @@ object ProotZshBootstrap {
             return false
         }
         onLog("Oh My Zsh ready")
-        ensurePlugins(app, omz, onLog)
+        ensurePlugins(app, omz, prootName, onLog)
         return true
     }
 
-    private fun ensurePlugins(app: Context, omz: File, onLog: (String) -> Unit) {
+    /** Once per process: a failed (offline) attempt waits for the next app start. */
+    private val depsAttempted = AtomicBoolean(false)
+
+    /**
+     * Existing Ubuntu proot installs whose `.zshrc` carries the managed
+     * [ZshPluginSet] block: clone missing external plugins (host git) and
+     * install missing guest apt packages, on a daemon thread so opening a
+     * terminal never waits. Cheap host stat checks gate it; the zshrc block
+     * already skips whatever is still missing.
+     */
+    fun ensurePluginDepsAsync(ctx: Context, prootName: String) {
+        if (!ZshPluginSet.appliesTo(prootName) || depsAttempted.get()) return
+        val app = ctx.applicationContext
+        val rootfs = ProotXfceAssetInstaller.prootRootfs(app, prootName)
+        if (!isOmzInstalled(rootfs)) return
+        val omz = omzDir(rootfs)
+        val missingPlugins = ZshPluginSet.missingExternalPlugins(
+            File(omz, "custom/plugins"), File(omz, "plugins"), prootName
+        )
+        val missingPkgs = ZshPluginSet.missingAptPackages(rootfs)
+        if (missingPlugins.isEmpty() && missingPkgs.isEmpty()) return
+        // A user who customized the plugin line did not ask for these packages.
+        if (!ZshPluginSet.isManaged(File(rootfs, "home/flux/.zshrc"))) return
+        if (!depsAttempted.compareAndSet(false, true)) return
+        Thread({
+            val log: (String) -> Unit = { Log.i(TAG, it) }
+            try {
+                if (missingPlugins.isNotEmpty() && File(app.filesDir, "usr/bin/git").isFile) {
+                    val plugins = File(omz, "custom/plugins").apply { mkdirs() }
+                    missingPlugins.forEach { (name, url) ->
+                        clonePluginIfMissing(app, File(plugins, name), url, log)
+                    }
+                }
+                if (missingPkgs.isNotEmpty() && File(TermuxHostPaths.PROOT_DISTRO).isFile) {
+                    installGuestAptPackages(app, prootName, missingPkgs, log)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "zsh plugin deps failed: ${e.message}")
+            }
+        }, "flux-zsh-deps").apply { isDaemon = true }.start()
+    }
+
+    private fun installGuestAptPackages(
+        app: Context,
+        prootName: String,
+        packages: List<String>,
+        onLog: (String) -> Unit
+    ) {
+        onLog("Guest apt (best-effort): ${packages.joinToString(" ")}")
+        val guest = ZshPluginSet.aptInstallScript(packages)
+        val script = "exec python ${TermuxHostPaths.PROOT_DISTRO} login $prootName -- sh -c '$guest'"
+        val code = runHostBash(app, script, APT_TIMEOUT_SEC, onLog)
+        onLog(
+            if (code == 0) "Guest zsh plugin packages ready"
+            else "Guest zsh plugin packages incomplete (exit $code) — plugins stay skipped"
+        )
+    }
+
+    private fun ensurePlugins(
+        app: Context,
+        omz: File,
+        prootName: String,
+        onLog: (String) -> Unit
+    ) {
         val custom = File(omz, "custom")
         val plugins = File(custom, "plugins")
         val themes = File(custom, "themes")
         plugins.mkdirs()
         themes.mkdirs()
 
-        clonePluginIfMissing(
-            app,
-            File(plugins, "zsh-autosuggestions"),
-            AUTOSUGGEST,
-            onLog
-        )
-        clonePluginIfMissing(
-            app,
-            File(plugins, "zsh-syntax-highlighting"),
-            SYNTAX,
-            onLog
-        )
+        ZshPluginSet.externalPluginsFor(prootName).forEach { (name, url) ->
+            clonePluginIfMissing(app, File(plugins, name), url, onLog)
+        }
         // Do NOT install zsh-autocomplete (known 30s+ startup under proot)
 
         val themeFile = File(themes, "agnosterzak.zsh-theme")
@@ -137,7 +190,6 @@ object ProotZshBootstrap {
         onLog: (String) -> Unit
     ): Boolean {
         dest.parentFile?.mkdirs()
-        val bash = TermuxHostPaths.libBash(app).absolutePath
         // Quote paths for shell
         val destQ = dest.absolutePath.replace("'", "'\\''")
         val script =
@@ -147,13 +199,33 @@ object ProotZshBootstrap {
                 "export GIT_HTTP_LOW_SPEED_TIME=30; " +
                 "rm -rf '$destQ'; " +
                 "git clone --depth 1 --single-branch --quiet '$url' '$destQ'"
+        val code = runHostBash(app, script, timeoutSec, onLog)
+        if (code != 0) {
+            if (code != null) onLog("git clone exit $code: $url")
+            SafeFiles.deleteTree(dest)
+            return false
+        }
+        return dest.isDirectory
+    }
+
+    /**
+     * Run [script] with host libbash + host env; output goes to logcat.
+     * @return exit code, or null on timeout (process killed) / launch error.
+     */
+    private fun runHostBash(
+        app: Context,
+        script: String,
+        timeoutSec: Long,
+        onLog: (String) -> Unit
+    ): Int? {
+        val bash = TermuxHostPaths.libBash(app).absolutePath
         return try {
             val pb = ProcessBuilder(bash, "-c", script)
             HostCommandBuilder.applyTo(app, pb, forceHostSetup = false)
             pb.redirectErrorStream(true)
             runCatching { pb.directory(File(TermuxHostPaths.BIN)) }
             val proc = pb.start()
-            val reader = Thread {
+            Thread {
                 try {
                     proc.inputStream.bufferedReader().forEachLine { line ->
                         if (line.isNotBlank()) Log.d(TAG, line)
@@ -161,25 +233,16 @@ object ProotZshBootstrap {
                 } catch (_: Exception) {
                 }
             }.also { it.isDaemon = true; it.start() }
-            val finished = proc.waitFor(timeoutSec, TimeUnit.SECONDS)
-            if (!finished) {
-                proc.destroyForcibly()
-                onLog("git clone timed out after ${timeoutSec}s: $url")
-                SafeFiles.deleteTree(dest)
-                return false
-            }
-            val code = proc.exitValue()
-            if (code != 0) {
-                onLog("git clone exit $code: $url")
-                SafeFiles.deleteTree(dest)
-                false
+            if (proc.waitFor(timeoutSec, TimeUnit.SECONDS)) {
+                proc.exitValue()
             } else {
-                dest.isDirectory
+                proc.destroyForcibly()
+                onLog("host command timed out after ${timeoutSec}s")
+                null
             }
         } catch (e: Exception) {
-            onLog("git clone error: ${e.message}")
-            SafeFiles.deleteTree(dest)
-            false
+            onLog("host command error: ${e.message}")
+            null
         }
     }
 
