@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ubuntu dashboard (Home) -->
+    <string name="home_ubuntu_name">Ubuntu</string>
+    <string name="home_ubuntu_version">26.04 · PRoot</string>
+    <string name="home_ubuntu_logo">Ubuntu logo</string>
+
+    <string name="home_status_running">Running</string>
+    <string name="home_status_starting">Starting</string>
+    <string name="home_status_stopped">Stopped</string>
+    <string name="home_status_not_installed">Not installed</string>
+
+    <string name="home_hero_running">The XFCE desktop is running.</string>
+    <string name="home_hero_starting">Starting the XFCE desktop…</string>
+    <string name="home_hero_stopped">The XFCE desktop is ready to start.</string>
+    <string name="home_hero_not_installed">Ubuntu isn\'t set up on this device yet. Other installed distros are kept.</string>
+    <string name="home_hero_other_running">%1$s desktop is running. Stop it to start Ubuntu.</string>
+
+    <string name="home_action_start_desktop">Start desktop</string>
+    <string name="home_action_open_desktop">Open desktop</string>
+    <string name="home_action_stop">Stop</string>
+    <string name="home_action_set_up">Set up Ubuntu</string>
+
+    <!-- Auto-start countdown -->
+    <string name="home_autostart_title">Starting Ubuntu…</string>
+    <string name="home_autostart_body">The desktop opens in a moment.</string>
+    <string name="home_autostart_cancel">Cancel</string>
+
+    <!-- Crash-loop guard banner -->
+    <string name="home_failed_title">Ubuntu didn\'t start last time</string>
+    <string name="home_failed_body">Automatic start is paused until the desktop starts once.</string>
+    <string name="home_failed_view_log">View log</string>
+    <string name="home_failed_try_again">Try again</string>
+    <string name="home_failed_recovery">Recovery</string>
+
+    <!-- Quick actions -->
+    <string name="home_quick_terminal">Terminal</string>
+    <string name="home_quick_root_terminal">Root terminal</string>
+    <string name="home_quick_files">Files</string>
+    <string name="home_quick_filesystem">Ubuntu filesystem</string>
+    <string name="home_files_unavailable">No file manager could open Ubuntu\'s files</string>
+
+    <!-- Shared storage -->
+    <string name="home_storage_title">Shared storage</string>
+    <string name="home_storage_granted">Ubuntu can see your phone\'s storage.</string>
+    <string name="home_storage_denied">Ubuntu can\'t see your phone\'s storage yet.</string>
+    <string name="home_storage_allow">Allow access</string>
+    <string name="home_storage_unsupported">Shared storage isn\'t available in this build.</string>
+    <string name="home_storage_links_ready">Folders in ~/storage are linked:</string>
+    <string name="home_storage_links_missing">Link your phone\'s folders into ~/storage:</string>
+    <string name="home_storage_create_links">Create links</string>
+    <string name="home_storage_creating_links">Creating links…</string>
+    <string name="home_storage_links_report">Links: %1$d created, %2$d already there</string>
+    <string name="home_storage_links_skipped">Kept existing: %1$s</string>
+    <string name="home_storage_links_failed">Couldn\'t create links: %1$s</string>
+    <string name="home_storage_links_no_rootfs">Ubuntu isn\'t installed yet</string>
+
+    <!-- Recovery -->
+    <string name="home_recovery_title">Recovery</string>
+    <string name="home_recovery_view_log">View desktop log</string>
+    <string name="home_recovery_view_log_sub">Output from the last desktop start</string>
+    <string name="home_recovery_stop_all">Stop everything</string>
+    <string name="home_recovery_stop_all_sub">Close terminals and stop the desktop</string>
+    <string name="home_recovery_stop_all_done">Terminals closed and desktop stopped</string>
+    <string name="home_recovery_repair">Repair host files</string>
+    <string name="home_recovery_repair_sub">Re-extract FluxLinux\'s built-in tools. Ubuntu and your files are kept.</string>
+    <string name="home_recovery_rerun">Re-run Ubuntu setup</string>
+    <string name="home_recovery_rerun_sub">Reinstall the desktop packages. Your Ubuntu files are kept.</string>
+    <string name="home_recovery_settings">Ubuntu settings</string>
+    <string name="home_recovery_settings_sub">Components, hardware acceleration, uninstall</string>
+    <string name="home_recovery_troubleshooting">Troubleshooting</string>
+    <string name="home_recovery_troubleshooting_sub">Fixes for common problems</string>
+
+    <string name="home_repair_dialog_title">Repair host files?</string>
+    <string name="home_repair_dialog_body">FluxLinux closes its terminals, stops the desktop and re-extracts its built-in Linux tools. Installed Ubuntu and your files are kept.</string>
+    <string name="home_repair_dialog_confirm">Repair</string>
+    <string name="home_repair_dialog_cancel">Cancel</string>
+    <string name="home_repair_running">Repairing host files…</string>
+    <string name="home_repair_done">Host files repaired</string>
+    <string name="home_repair_failed">Repair failed. Check your connection and try again.</string>
+
+    <!-- Settings -->
+    <string name="settings_autostart_title">Open Ubuntu desktop when FluxLinux starts</string>
+    <string name="settings_autostart_sub">Starts the desktop each time you open the app</string>
+    <string name="settings_advanced_header">Advanced</string>
+
+    <!-- PRoot / Chroot storage lists (Settings > Advanced) -->
+    <string name="storage_go_home">Go to Home</string>
+    <string name="storage_proot_empty_hint">Set up Ubuntu from Home.</string>
+    <string name="storage_chroot_empty_hint">Root-level Linux lives outside app storage. This app sets up Ubuntu with PRoot from Home.</string>
+
+    <!-- Troubleshooting -->
+    <string name="trouble_desktop_title">The desktop doesn\'t open</string>
+    <string name="trouble_desktop_body">On Home, open Recovery and tap View desktop log to see why. Tap Stop everything, then Start desktop. If the log mentions missing host files, use Repair host files.</string>
+    <string name="trouble_black_title">Black screen</string>
+    <string name="trouble_black_body">XFCE draws a few seconds after the display opens. If it stays black, stop the desktop and start it again. Settings > X11 Display controls scaling and fullscreen.</string>
+    <string name="trouble_sound_title">No sound</string>
+    <string name="trouble_sound_body">Settings > Audio shows whether PulseAudio is running and can restart it. Ubuntu plays through PULSE_SERVER=tcp:127.0.0.1, so don\'t install a sound server inside Ubuntu.</string>
+    <string name="trouble_links_title">~/storage folders are empty</string>
+    <string name="trouble_links_body">The links point at your phone\'s folders. On Home, allow shared storage, then tap Create links. Existing files with the same names are never replaced.</string>
+    <string name="trouble_phantom_title">Android 12+ closes Linux apps</string>
+    <string name="trouble_phantom_body">Android\'s phantom process killer can stop the desktop or terminal. Settings > Process killer fix turns it off with root, Shizuku or adb.</string>
+    <string name="trouble_reinstall_title">Reinstall without losing files</string>
+    <string name="trouble_reinstall_body">Re-run Ubuntu setup reinstalls the desktop packages and keeps your files. Repair host files re-extracts FluxLinux\'s tools and keeps Ubuntu too. Only Uninstall in Ubuntu settings deletes Ubuntu.</string>
+</resources>

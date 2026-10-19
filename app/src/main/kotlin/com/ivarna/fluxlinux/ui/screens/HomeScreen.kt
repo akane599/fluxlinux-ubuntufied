@@ -3,105 +3,106 @@ package com.ivarna.fluxlinux.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ivarna.fluxlinux.core.data.DistroRepository
-import com.ivarna.fluxlinux.core.data.Distro
-import com.ivarna.fluxlinux.core.data.ScriptManager
-import com.ivarna.fluxlinux.core.data.TermuxIntentFactory
-
-import com.ivarna.fluxlinux.core.desktop.DesktopLauncher
-import com.ivarna.fluxlinux.core.desktop.DesktopSession
-import com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
-import com.ivarna.fluxlinux.core.root.RootShell
-import com.ivarna.fluxlinux.core.utils.StateManager
-import com.ivarna.fluxlinux.ui.components.ActiveDesktopCard
-import com.ivarna.fluxlinux.ui.components.MethodTab
-import com.ivarna.fluxlinux.ui.components.MethodTabs
-import com.ivarna.fluxlinux.ui.components.isChrootCard
-import com.ivarna.fluxlinux.ui.theme.*
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.PermissionState
-import com.google.accompanist.permissions.isGranted
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeChild
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
-import kotlinx.coroutines.launch
+import com.ivarna.fluxlinux.R
+import com.ivarna.fluxlinux.core.data.Distro
+import com.ivarna.fluxlinux.core.data.DistroRepository
+import com.ivarna.fluxlinux.core.desktop.DesktopLauncher
+import com.ivarna.fluxlinux.core.desktop.DesktopSession
+import com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
+import com.ivarna.fluxlinux.core.files.UbuntuFiles
+import com.ivarna.fluxlinux.core.system.GuestStorageLinks
+import com.ivarna.fluxlinux.core.system.SharedStorageAccess
+import com.ivarna.fluxlinux.core.terminal.BootstrapInstaller
+import com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager
+import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
+import com.ivarna.fluxlinux.core.utils.StateManager
+import com.ivarna.fluxlinux.core.utils.UbuntuLaunchPreferences
+import com.ivarna.fluxlinux.ui.components.SharedStorageUi
+import com.ivarna.fluxlinux.ui.components.UbuntuDashboard
+import com.ivarna.fluxlinux.ui.components.UbuntuDashboardActions
+import com.ivarna.fluxlinux.ui.components.UbuntuDashboardState
+import com.ivarna.fluxlinux.ui.components.UbuntuStatus
 
-@OptIn(ExperimentalPermissionsApi::class, ExperimentalHazeMaterialsApi::class)
+/** The one distro this build's Home is about. Other installed containers are left alone. */
+const val UBUNTU_DISTRO_ID = "ubuntu"
+
+/** Pure status mapping for the Ubuntu hero card. */
+internal fun ubuntuStatus(installed: Boolean, autoStartPending: Boolean, session: DesktopSession?): UbuntuStatus {
+    val ubuntu = session?.takeIf { it.distroId == UBUNTU_DISTRO_ID }
+    return when {
+        !installed -> UbuntuStatus.NOT_INSTALLED
+        autoStartPending -> UbuntuStatus.STARTING
+        ubuntu?.phase == DesktopSession.Phase.Running -> UbuntuStatus.RUNNING
+        ubuntu?.phase == DesktopSession.Phase.Starting -> UbuntuStatus.STARTING
+        else -> UbuntuStatus.STOPPED
+    }
+}
+
+/**
+ * Home: the Ubuntu dashboard. Status and start/open/stop, terminal and file shortcuts,
+ * shared storage, and recovery. Device state is read here; the leaves in
+ * [UbuntuDashboard] are stateless (see the screenshot previews).
+ */
 @Composable
 fun HomeScreen(
-    permissionState: PermissionState,
-    hazeState: HazeState,
     scriptRefreshTrigger: Int = 0,
-    onStartService: (android.content.Intent) -> Unit,
-    onStartActivity: (android.content.Intent) -> Unit,
-    onNavigateToInstall: (com.ivarna.fluxlinux.core.data.Distro) -> Unit,
-    onNavigateToSettings: (com.ivarna.fluxlinux.core.data.Distro) -> Unit,
+    autoStartPending: Boolean = false,
+    onCancelAutoStart: () -> Unit = {},
     onOpenTerminal: (distroId: String, root: Boolean) -> Unit = { _, _ -> },
-    /** Switch bottom-nav to Terminal after an in-app session is opened (e.g. Qwen). */
-    onShowTerminal: () -> Unit = {}
+    onNavigateToInstall: (Distro) -> Unit,
+    onNavigateToSettings: (Distro) -> Unit,
+    onNavigateToTroubleshooting: () -> Unit
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    
-    // State for Launch Popup
-    val distroToLaunch = remember { mutableStateOf<com.ivarna.fluxlinux.core.data.Distro?>(null) }
-    // State for KDE GPU mode picker (sub-dialog)
-    val showKdeGpuPicker = remember { mutableStateOf<com.ivarna.fluxlinux.core.data.Distro?>(null) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val ubuntuDistro = remember {
+        DistroRepository.supportedDistros.firstOrNull { it.id == UBUNTU_DISTRO_ID }
+    }
+
     // Live desktop start/stop logs (termux-lib VIEW LOGS parity)
     val desktopUi by DesktopLauncher.uiState.collectAsState()
     var showDesktopLogs by remember { mutableStateOf(false) }
     // Only auto-open on a *new* tick (start/fail). Do NOT open when Home is
-    // re-entered while tick is already > 0 from a prior start — that made the
-    // Graphical Desktop Log dialog appear every time the user went Home.
+    // re-entered while tick is already > 0 from a prior start.
     var lastSeenAutoShowTick by remember { mutableIntStateOf(-1) }
     LaunchedEffect(desktopUi.autoShowLogsTick) {
         val tick = desktopUi.autoShowLogsTick
         if (lastSeenAutoShowTick < 0) {
-            // First observation after this Home composition: consume current tick.
             lastSeenAutoShowTick = tick
             return@LaunchedEffect
         }
@@ -110,497 +111,204 @@ fun HomeScreen(
             showDesktopLogs = true
         }
     }
-    
-    // Refresh key to trigger recomposition
-    val refreshKey = remember { mutableStateOf(0) }
 
-    // React to external refresh trigger (from MainActivity)
-    LaunchedEffect(scriptRefreshTrigger) {
-        if (scriptRefreshTrigger > 0) {
-            refreshKey.value++
+    var refreshKey by remember { mutableIntStateOf(0) }
+    LaunchedEffect(scriptRefreshTrigger) { refreshKey++ }
+    LaunchedEffect(desktopUi.phase, desktopUi.displayReady) { refreshKey++ }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Re-check storage permission / links after returning from Settings.
+                refreshKey++
+                runCatching { UbuntuFiles.notifyRootsChanged(context) }
+                // Drop a "desktop running" state whose X server died with the app.
+                Thread {
+                    DesktopSessionQuery.reconcileStale(context.applicationContext)
+                    mainHandler.post { refreshKey++ }
+                }.start()
+            }
         }
-    }
-    // Recompose cards when desktop phase changes
-    LaunchedEffect(desktopUi.phase, desktopUi.displayReady) {
-        refreshKey.value++
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val stateRefresh by StateManager.refreshTrigger.collectAsState()
-    val session = remember(desktopUi, stateRefresh, refreshKey.value) {
+    val session = remember(desktopUi, stateRefresh, refreshKey) {
         DesktopSessionQuery.current(context, desktopUi)
     }
-    
+    val installed = remember(stateRefresh, refreshKey) {
+        TerminalLauncher.isProotInstalled(context, UBUNTU_DISTRO_ID)
+    }
+    val lastStartFailed = remember(stateRefresh, refreshKey, autoStartPending) {
+        UbuntuLaunchPreferences.lastAutoStartFailed(context)
+    }
+    var creatingLinks by remember { mutableStateOf(false) }
+    val storage = remember(refreshKey, creatingLinks, installed) {
+        SharedStorageUi(
+            supported = SharedStorageAccess.isSupported(context),
+            granted = SharedStorageAccess.granted(context),
+            linksPresent = installed && GuestStorageLinks.linksPresent(context, UBUNTU_DISTRO_ID),
+            linkNames = GuestStorageLinks.LINKS.map { it.name },
+            creatingLinks = creatingLinks
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { refreshKey++ }
+
+    var showRepairConfirm by remember { mutableStateOf(false) }
+    var repairing by remember { mutableStateOf(false) }
+
+    fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+
+    fun startDesktop() {
+        try {
+            DesktopLauncher.start(context, UBUNTU_DISTRO_ID) { ok ->
+                if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(context)
+                refreshKey++
+                if (!ok) showDesktopLogs = true
+            }
+        } catch (e: Exception) {
+            toast("Launch failed: ${e.message}")
+        }
+    }
+
+    fun stopDesktop(onDone: (() -> Unit)? = null) {
+        UbuntuLaunchPreferences.clearAutoStartAttempt(context)
+        val id = session?.distroId ?: desktopUi.distroId ?: UBUNTU_DISTRO_ID
+        try {
+            DesktopLauncher.stop(context, id) {
+                refreshKey++
+                onDone?.invoke()
+            }
+        } catch (e: Exception) {
+            toast("Stop failed: ${e.message}")
+            onDone?.invoke()
+        }
+    }
+
+    fun openFiles(rootId: String) {
+        val opened = runCatching { UbuntuFiles.open(context, rootId) }.getOrDefault(false)
+        if (!opened) toast(context.getString(R.string.home_files_unavailable))
+    }
+
+    fun createLinks() {
+        if (creatingLinks) return
+        creatingLinks = true
+        val app = context.applicationContext
+        Thread {
+            val result = runCatching { GuestStorageLinks.ensure(app, UBUNTU_DISTRO_ID) }
+            mainHandler.post {
+                creatingLinks = false
+                refreshKey++
+                val report = result.getOrNull()
+                val msg = when {
+                    result.isFailure -> app.getString(
+                        R.string.home_storage_links_failed,
+                        result.exceptionOrNull()?.message ?: "?"
+                    )
+                    report == null -> app.getString(R.string.home_storage_links_no_rootfs)
+                    report.skipped.isEmpty() -> app.getString(
+                        R.string.home_storage_links_report, report.created, report.existing
+                    )
+                    else -> app.getString(
+                        R.string.home_storage_links_report, report.created, report.existing
+                    ) + "\n" + app.getString(
+                        R.string.home_storage_links_skipped, report.skipped.joinToString(", ")
+                    )
+                }
+                Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
+            }
+        }.start()
+    }
+
+    fun repairHost() {
+        if (repairing) return
+        repairing = true
+        toast(context.getString(R.string.home_repair_running))
+        val app = context.applicationContext
+        FluxTerminalSessionManager.closeAll(app)
+        val extract = {
+            Thread {
+                // Containers under usr/var/lib/proot-distro are moved aside and restored.
+                val ok = runCatching { BootstrapInstaller.ensureExtracted(app, force = true) }
+                    .getOrDefault(false)
+                mainHandler.post {
+                    repairing = false
+                    refreshKey++
+                    Toast.makeText(
+                        app,
+                        app.getString(if (ok) R.string.home_repair_done else R.string.home_repair_failed),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }.start()
+        }
+        if (session != null || DesktopLauncher.isSessionActive()) stopDesktop { extract() } else extract()
+    }
+
+    val state = UbuntuDashboardState(
+        status = ubuntuStatus(installed, autoStartPending, session),
+        autoStartPending = autoStartPending,
+        lastStartFailed = lastStartFailed,
+        otherDesktopRunning = session?.takeIf { it.distroId != UBUNTU_DISTRO_ID }?.distroName,
+        storage = storage
+    )
+    val actions = UbuntuDashboardActions(
+        onStartDesktop = { startDesktop() },
+        onOpenDesktop = { DesktopLauncher.reopenDisplay(context) },
+        onStopDesktop = { stopDesktop() },
+        onCancelAutoStart = onCancelAutoStart,
+        onSetUpUbuntu = { ubuntuDistro?.let(onNavigateToInstall) },
+        onTerminal = { onOpenTerminal(UBUNTU_DISTRO_ID, false) },
+        onRootTerminal = { onOpenTerminal(UBUNTU_DISTRO_ID, true) },
+        onFiles = { openFiles(UbuntuFiles.ROOT_HOME) },
+        onFilesystem = { openFiles(UbuntuFiles.ROOT_SYSTEM) },
+        onAllowStorage = {
+            val perms = SharedStorageAccess.legacyPermissions()
+            if (perms.isNotEmpty()) permissionLauncher.launch(perms)
+            else SharedStorageAccess.openSettings(context)
+        },
+        onCreateLinks = { createLinks() },
+        onViewLog = { showDesktopLogs = true },
+        onStopEverything = {
+            FluxTerminalSessionManager.closeAll(context)
+            stopDesktop()
+            toast(context.getString(R.string.home_recovery_stop_all_done))
+        },
+        onRepairHost = { showRepairConfirm = true },
+        onRerunSetup = { ubuntuDistro?.let(onNavigateToInstall) },
+        onUbuntuSettings = { ubuntuDistro?.let(onNavigateToSettings) },
+        onTroubleshooting = onNavigateToTroubleshooting
+    )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .verticalScroll(rememberScrollState())
     ) {
-        // Trigger initial refresh on mount
-        LaunchedEffect(Unit) {
-            refreshKey.value++
-        }
-
-        // Installed Distros Detection — filesystem truth (plan P4-T13): a stale
-        // "installed" pref without a rootfs on disk must show Install, not a broken shell.
-        val installedDistros = remember(refreshKey.value) {
-            DistroRepository.sortForDistroPage(
-                DistroRepository.supportedDistros.filter {
-                    com.ivarna.fluxlinux.core.terminal.TerminalLauncher.isDistroInstalledOnFs(context, it.id)
-                }
-            )
-        }
-
-        if (session != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            ActiveDesktopCard(
-                session = session,
-                onOpen = { DesktopLauncher.reopenDisplay(context) },
-                onStop = {
-                    try {
-                        DesktopLauncher.stop(context, session.distroId) {
-                            refreshKey.value++
-                        }
-                    } catch (e: Exception) {
-                        android.widget.Toast.makeText(context, "Stop failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onLogs = { showDesktopLogs = true },
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Installed Distros",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-        )
-
-        val prootInstalled = installedDistros.filter { !it.isChrootCard() }
-        val chrootInstalled = installedDistros.filter { it.isChrootCard() }
-        var methodTab by remember { mutableStateOf(MethodTab.PROOT) }
-        var rootAvailable by remember { mutableStateOf(false) }
-        val visibleDistros = if (methodTab == MethodTab.CHROOT) {
-            chrootInstalled
-        } else {
-            prootInstalled
-        }
-
-        fun probeRoot(force: Boolean = false) {
-            RootShell.probeRootAvailable(forceClearCache = force) { ok ->
-                rootAvailable = ok
-            }
-        }
-        LaunchedEffect(Unit) { probeRoot() }
-        val lifecycleOwner = LocalLifecycleOwner.current
-        DisposableEffect(lifecycleOwner) {
-            val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) {
-                    probeRoot(force = true)
-                    // Drop a "desktop running" card whose X server died with the app.
-                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                        DesktopSessionQuery.reconcileStale(context)
-                    }
-                }
-            }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        MethodTabs(
-            selected = methodTab,
-            onSelected = { tab ->
-                methodTab = tab
-                if (tab == MethodTab.CHROOT) probeRoot(force = true)
-            },
-            prootCount = prootInstalled.size,
-            chrootCount = chrootInstalled.size
-        )
-
-        if (methodTab == MethodTab.CHROOT && !rootAvailable && chrootInstalled.isNotEmpty()) {
-            Text(
-                text = "Installed, but no root given to the app. Grant superuser to FluxLinux to start these guests.",
-                color = MaterialTheme.colorScheme.error.copy(alpha = 0.92f),
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (installedDistros.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "No distros installed yet",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Install a distribution from the Distros tab",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                    textAlign = TextAlign.Center
-                )
-            }
-        } else if (visibleDistros.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = if (methodTab == MethodTab.CHROOT) {
-                        "No chroot guests installed"
-                    } else {
-                        "No PRoot guests installed"
-                    },
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    textAlign = TextAlign.Center
-                )
-            }
-        } else {
-            visibleDistros.forEach { distro ->
-                val desktopForThis =
-                    desktopUi.distroId == null || desktopUi.distroId == distro.id
-                val isStarting =
-                    desktopForThis && desktopUi.phase == DesktopLauncher.Phase.Starting
-                val isRunning =
-                    StateManager.isGuiRunning(context, distro.id) ||
-                        (desktopForThis && desktopUi.phase == DesktopLauncher.Phase.Running)
-                val logsOk =
-                    desktopForThis && (desktopUi.logsAvailable || desktopUi.logText.isNotBlank())
-                val needsRoot = distro.isChrootCard()
-                val canStart = !needsRoot || rootAvailable
-                com.ivarna.fluxlinux.ui.components.DistroCard(
-                    distro = distro,
-                    isInstalled = true,
-                    isGuiRunning = isRunning,
-                    isGuiStarting = isStarting,
-                    logsAvailable = logsOk ||
-                        com.ivarna.fluxlinux.core.desktop.GuiDesktopLog.hasContent(context),
-                    startEnabled = canStart,
-                    statusMessage = if (needsRoot && !rootAvailable) {
-                        "Installed · no root given to app"
-                    } else {
-                        null
-                    },
-                    statusIsError = needsRoot && !rootAvailable,
-                    onInstall = { onNavigateToInstall(distro) },
-                    onUninstall = { /* Handled in Settings */ },
-                    onNavigateToSettings = { onNavigateToSettings(distro) },
-                    onNavigateToStart = {
-                        if (!canStart) {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Grant superuser to FluxLinux first",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        } else if (session != null && session.distroId != distro.id) {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Stop ${session.distroName} ${session.type} first",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        } else {
-                            distroToLaunch.value = distro
-                        }
-                    },
-                    onOpenDisplay = {
-                        DesktopLauncher.reopenDisplay(context)
-                    },
-                    onViewLogs = { showDesktopLogs = true },
-                    onStop = {
-                        try {
-                            DesktopLauncher.stop(context, distro.id) {
-                                refreshKey.value++
-                            }
-                        } catch (e: Exception) {
-                            android.widget.Toast.makeText(context, "Stop failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                )
-            }
-        }
-
-        // Keep the last card above the floating bottom nav (72 + 24*2 padding).
-        Spacer(modifier = Modifier.height(128.dp))
+        UbuntuDashboard(state = state, actions = actions)
     }
 
-    // Launch mode dialog (shell / root / desktop)
-    if (distroToLaunch.value != null) {
-        val distro = distroToLaunch.value!!
-        val accent = MaterialTheme.colorScheme.secondary
-        val titleColor = MaterialTheme.colorScheme.onBackground
-        val muted = MaterialTheme.colorScheme.onSurfaceVariant
-        val llmInstalled = StateManager.isComponentInstalled(context, distro.id, "vulkan_llamacpp")
-        val modelInstalled = StateManager.isComponentInstalled(context, distro.id, "qwen25_model")
-        val kdeInstalled = StateManager.isComponentInstalled(context, distro.id, "kde_plasma")
-        val isGuiRunning = StateManager.isGuiRunning(context, distro.id)
-        val runningType = StateManager.getGuiRunningType(context, distro.id)
-
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { distroToLaunch.value = null },
-            properties = androidx.compose.ui.window.DialogProperties(
-                usePlatformDefaultWidth = false
-            )
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(0.92f),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(accent.copy(alpha = 0.12f))
-                            .border(
-                                BorderStroke(1.dp, accent.copy(alpha = 0.25f)),
-                                RoundedCornerShape(20.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (distro.iconRes != null) {
-                            androidx.compose.foundation.Image(
-                                painter = androidx.compose.ui.res.painterResource(id = distro.iconRes),
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp)
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.PlayArrow,
-                                contentDescription = null,
-                                tint = accent,
-                                modifier = Modifier.size(36.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Text(
-                        text = "Start ${distro.name}",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = titleColor
-                    )
-                    Text(
-                        text = "Choose launch mode",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = muted,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-
-                    Spacer(Modifier.height(22.dp))
-
-                    // Shell — in-app terminal (no external Termux)
-                    LaunchModeAction(
-                        icon = Icons.Filled.Terminal,
-                        label = "Open Shell",
-                        subtitle = "User session",
-                        containerColor = Color(0xFFF8BBD9),
-                        contentColor = Color(0xFF4A1028),
-                        onClick = {
-                            onOpenTerminal(distro.id, false)
-                            distroToLaunch.value = null
-                        }
-                    )
-
-                    Spacer(Modifier.height(10.dp))
-
-                    LaunchModeAction(
-                        icon = Icons.Filled.AdminPanelSettings,
-                        label = "Open Root Shell",
-                        subtitle = "Privileged session",
-                        containerColor = Color(0xFFB71C1C),
-                        contentColor = Color.White,
-                        onClick = {
-                            onOpenTerminal(distro.id, true)
-                            distroToLaunch.value = null
-                        }
-                    )
-
-                    if (llmInstalled && modelInstalled) {
-                        Spacer(Modifier.height(10.dp))
-                        LaunchModeAction(
-                            icon = Icons.Filled.Psychology,
-                            label = "Run Qwen2.5-1.5B",
-                            subtitle = "In-app model session",
-                            containerColor = Color(0xFF5E35B1),
-                            contentColor = Color.White,
-                            onClick = {
-                                val scriptManager = ScriptManager(context)
-                                val scriptContent = scriptManager.getScriptContent(
-                                    "debian/common/addon/launch_qwen25.sh"
-                                )
-                                val scriptB64 = android.util.Base64.encodeToString(
-                                    scriptContent.toByteArray(),
-                                    android.util.Base64.NO_WRAP
-                                )
-                                val payload = "echo '$scriptB64' | base64 -d | bash"
-                                com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager.openSessionAfterHost(
-                                    context,
-                                    type = "shell",
-                                    title = "Qwen2.5-1.5B",
-                                    shellCmd = payload,
-                                    method = com.ivarna.fluxlinux.core.data.terminalComponentFor(distro.id).method,
-                                    onResult = { result ->
-                                        if (result == com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager.SessionOpenResult.OPENED) {
-                                            onShowTerminal()
-                                        }
-                                    }
-                                )
-                                distroToLaunch.value = null
-                            }
-                        )
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    val isCurrentSessionXfce = session != null && session.distroId == distro.id && session.type == DesktopSession.Type.XFCE4
-                    LaunchModeAction(
-                        icon = Icons.Filled.DesktopWindows,
-                        label = if (isCurrentSessionXfce) "Open XFCE4" else "Launch XFCE4",
-                        subtitle = if (isCurrentSessionXfce) "Running on :0" else "Graphical desktop",
-                        containerColor = Color(0xFF6A1B9A),
-                        contentColor = Color.White,
-                        onClick = {
-                            if (session != null && session.distroId != distro.id) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Stop ${session.distroName} ${session.type} first",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            } else if (isCurrentSessionXfce) {
-                                DesktopLauncher.reopenDisplay(context)
-                                distroToLaunch.value = null
-                            } else {
-                                try {
-                                    DesktopLauncher.start(context, distro.id) { ok ->
-                                        refreshKey.value++
-                                        if (!ok) showDesktopLogs = true
-                                    }
-                                    showDesktopLogs = true
-                                    distroToLaunch.value = null
-                                } catch (e: Exception) {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "Launch failed: ${e.message}",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        }
-                    )
-
-                    Spacer(Modifier.height(10.dp))
-
-                    val isCurrentSessionKde = session != null && session.distroId == distro.id && session.type == DesktopSession.Type.KDE
-                    LaunchModeAction(
-                        icon = Icons.Filled.Widgets,
-                        label = if (isCurrentSessionKde) "Open KDE Plasma" else if (kdeInstalled) "Launch KDE Plasma" else "Launch KDE",
-                        subtitle = if (isCurrentSessionKde) "Running on :0" else if (kdeInstalled) "GPU mode picker" else "Not installed",
-                        containerColor = if (kdeInstalled) {
-                            Color(0xFF283593)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                        },
-                        contentColor = if (kdeInstalled) {
-                            Color.White
-                        } else {
-                            muted
-                        },
-                        enabled = true,
-                        onClick = {
-                            if (session != null && session.distroId != distro.id) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Stop ${session.distroName} ${session.type} first",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            } else if (isCurrentSessionKde) {
-                                DesktopLauncher.reopenDisplay(context)
-                                distroToLaunch.value = null
-                            } else if (session != null || DesktopLauncher.isSessionActive()) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Stop ${session?.distroName ?: "active desktop"} ${session?.type ?: ""} first",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            } else if (kdeInstalled) {
-                                showKdeGpuPicker.value = distro
-                            } else if (!kdeInstalled) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Install KDE Plasma Desktop first from Settings.",
-                                    android.widget.Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    )
-
-                    if (isGuiRunning) {
-                        Spacer(Modifier.height(10.dp))
-                        LaunchModeAction(
-                            icon = Icons.Filled.Stop,
-                            label = if (runningType == "kde") "Stop KDE Plasma" else "Stop XFCE4",
-                            subtitle = "End desktop session",
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                            onClick = {
-                                DesktopLauncher.stop(context, distro.id)
-                                distroToLaunch.value = null
-                            }
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    TextButton(
-                        onClick = { distroToLaunch.value = null },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        colors = ButtonDefaults.textButtonColors(contentColor = titleColor)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Cancel", fontWeight = FontWeight.SemiBold)
-                    }
+    if (showRepairConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRepairConfirm = false },
+            title = { Text(stringResource(R.string.home_repair_dialog_title)) },
+            text = { Text(stringResource(R.string.home_repair_dialog_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRepairConfirm = false
+                    repairHost()
+                }) { Text(stringResource(R.string.home_repair_dialog_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRepairConfirm = false }) {
+                    Text(stringResource(R.string.home_repair_dialog_cancel))
                 }
             }
-        }
+        )
     }
 
     // ─── Graphical Desktop live logs (termux-lib VIEW LOGS) ─────────────────
@@ -624,41 +332,8 @@ fun HomeScreen(
                     DesktopLauncher.readLog(context)
                 }
                 cm.setPrimaryClip(ClipData.newPlainText("desktop_log", text))
-                android.widget.Toast.makeText(context, "Log copied", android.widget.Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Log copied", Toast.LENGTH_SHORT).show()
             }
-        )
-    }
-
-    // ─── KDE GPU Mode Picker Sub-Dialog ───────────────────────────────────────
-    if (showKdeGpuPicker.value != null) {
-        val distro = showKdeGpuPicker.value!!
-        // Same built-in X11 path as XFCE; gpu null = installed driver, "software" = llvmpipe.
-        val launchKde = { gpu: String? ->
-            val curr = DesktopSessionQuery.current(context, DesktopLauncher.uiState.value)
-            if (curr != null || DesktopLauncher.isSessionActive()) {
-                if (curr?.distroId == distro.id && curr.type == DesktopSession.Type.KDE) {
-                    DesktopLauncher.reopenDisplay(context)
-                } else {
-                    android.widget.Toast.makeText(
-                        context,
-                        "Stop ${curr?.distroName ?: "active desktop"} first",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                }
-            } else {
-                DesktopLauncher.start(context, distro.id, "kde", gpu) { ok ->
-                    refreshKey.value++
-                    if (!ok) showDesktopLogs = true
-                }
-            }
-            showKdeGpuPicker.value = null
-            distroToLaunch.value = null
-        }
-        KdeGpuPickerDialog(
-            distro = distro,
-            onDismiss = { showKdeGpuPicker.value = null },
-            onSelectHardware = { launchKde(null) },
-            onSelectSoftware = { launchKde("software") }
         )
     }
 }
@@ -829,326 +504,3 @@ private fun DesktopLogsDialog(
         }
     }
 }
-
-// ─── Launch mode action row ────────────────────────────────────────────────────
-@Composable
-private fun LaunchModeAction(
-    icon: ImageVector,
-    label: String,
-    subtitle: String,
-    containerColor: Color,
-    contentColor: Color,
-    enabled: Boolean = true,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = containerColor,
-            contentColor = contentColor,
-            disabledContainerColor = containerColor.copy(alpha = 0.45f),
-            disabledContentColor = contentColor.copy(alpha = 0.55f)
-        ),
-        shape = RoundedCornerShape(16.dp),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-        modifier = Modifier.fillMaxWidth().height(64.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(contentColor.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                Text(
-                    label,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    color = contentColor
-                )
-                Text(
-                    subtitle,
-                    fontSize = 11.sp,
-                    color = contentColor.copy(alpha = 0.78f)
-                )
-            }
-        }
-    }
-}
-
-// ─── KDE GPU Picker Dialog ─────────────────────────────────────────────────────
-@Composable
-private fun KdeGpuPickerDialog(
-    distro: com.ivarna.fluxlinux.core.data.Distro,
-    onDismiss: () -> Unit,
-    onSelectHardware: () -> Unit,
-    onSelectSoftware: () -> Unit
-) {
-    val ctx = LocalContext.current
-    val driverBadge = remember(distro.id) {
-        com.ivarna.fluxlinux.core.gpu.GpuDriverInstaller.badge(ctx, distro.id)
-    }
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .clip(RoundedCornerShape(28.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFF1E1E1E).copy(alpha = 0.95f),
-                            Color(0xFF121212).copy(alpha = 0.98f)
-                        )
-                    )
-                )
-                .border(
-                    BorderStroke(1.dp, Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.15f),
-                            Color.Transparent
-                        )
-                    )),
-                    RoundedCornerShape(28.dp)
-                )
-        ) {
-            // Top glow
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-
-            Column(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.Widgets,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = "KDE Plasma",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Choose GPU Renderer",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                // GPU Option Cards — Vertical List of Horizontal Cards
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // ── Turnip Card ─────────────────────────
-                    GpuOptionCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Filled.Bolt,
-                        title = "Hardware",
-                        subtitle = "Installed GPU driver",
-                        description = "Turnip / PanVK / VirGL, whichever is installed. Best performance.",
-                        accentColor = Color(0xFFFF6F00),
-                        badgeText = driverBadge,
-                        onClick = onSelectHardware
-                    )
-
-                    // ── Software Card ───────────────────────
-                    GpuOptionCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Filled.Memory,
-                        title = "Software",
-                        subtitle = "LLVMpipe",
-                        description = "CPU-only. No GPU required. Works on all devices.",
-                        accentColor = Color(0xFF4CAF50),
-                        badgeText = "Safe Fallback",
-                        onClick = onSelectSoftware
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Info note
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White.copy(alpha = 0.05f))
-                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(12.dp))
-                        .padding(12.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.Top) {
-                        Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Hardware needs a GPU driver installed. Software works on any device (slower).",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                TextButton(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onBackground
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Cancel", fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
-    }
-}
-
-// ─── Reusable GPU Option Card ──────────────────────────────────────────────────
-@Composable
-private fun GpuOptionCard(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    description: String,
-    accentColor: Color,
-    badgeText: String?,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        accentColor.copy(alpha = 0.18f),
-                        accentColor.copy(alpha = 0.06f)
-                    )
-                )
-            )
-            .border(
-                BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
-                RoundedCornerShape(20.dp)
-            )
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(accentColor.copy(alpha = 0.22f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = title,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    if (badgeText != null) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(accentColor.copy(alpha = 0.25f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = badgeText,
-                                fontSize = 9.sp,
-                                color = accentColor,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = subtitle,
-                    fontSize = 11.sp,
-                    color = accentColor,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = description,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Start,
-                    lineHeight = 15.sp
-                )
-            }
-        }
-    }
-}
-

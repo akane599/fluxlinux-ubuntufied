@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,15 +34,18 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.isGranted
 import com.ivarna.fluxlinux.ui.components.BottomTab
-import com.ivarna.fluxlinux.ui.components.GlassBottomNavigation
 import com.ivarna.fluxlinux.ui.components.GlassScaffold
 import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
 import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.core.utils.ThemePreferences
+import com.ivarna.fluxlinux.core.utils.UbuntuLaunchPreferences
+import com.ivarna.fluxlinux.ui.screens.UBUNTU_DISTRO_ID
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import dev.chrisbanes.haze.HazeState
@@ -523,6 +527,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * A plain app open: launcher (MAIN) or an explicit component start with no action.
+     * Not the fluxlinux:// deep link, not the FGS notification's target page.
+     */
+    private fun isPlainLaunch(intent: android.content.Intent?): Boolean {
+        if (intent == null) return true
+        val action = intent.action
+        if (action != null && action != android.content.Intent.ACTION_MAIN) return false
+        if (intent.data != null) return false
+        return intent.getStringExtra("EXTRA_TARGET_PAGE") == null &&
+            intent.getStringExtra("target_page") == null
+    }
+
+    /** Auto-start runs at most once per cold launch (also guarded by rememberSaveable). */
+    private var coldLaunchAutoStart = false
+
+    /**
+     * Ubuntu auto-start preconditions other than the cold-launch flag. The crash-loop guard
+     * ([UbuntuLaunchPreferences.lastAutoStartFailed]) keeps a failing start from looping.
+     */
+    private fun autoStartAllowed(): Boolean =
+        StateManager.isOnboardingComplete(this) &&
+            UbuntuLaunchPreferences.isAutoStartDesktop(this) &&
+            !UbuntuLaunchPreferences.lastAutoStartFailed(this) &&
+            com.ivarna.fluxlinux.core.terminal.TerminalLauncher.isProotInstalled(this, UBUNTU_DISTRO_ID)
+
+    /** Starts Ubuntu after the countdown; the attempt flag clears only on a ready desktop. */
+    private fun launchUbuntuAutoStart() {
+        val app = applicationContext
+        UbuntuLaunchPreferences.markAutoStartAttempt(app)
+        try {
+            com.ivarna.fluxlinux.core.desktop.DesktopLauncher.start(this, UBUNTU_DISTRO_ID) { ok ->
+                if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(app)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FluxLinux", "Ubuntu auto-start failed", e)
+        }
+    }
+
     override fun onDestroy() {
         GpuDriverInstaller.onPending = null
         DriverRelease.disarm(this)
@@ -535,6 +578,8 @@ class MainActivity : ComponentActivity() {
         GpuDriverInstaller.onPending = { runOnUiThread { armDriverResume() } }
         armDriverResume()
         if (savedInstanceState == null) {
+            // Read before the callback dispatch, which may rewrite the intent to MAIN.
+            coldLaunchAutoStart = isPlainLaunch(intent)
             dispatchLegacyTermuxCallback(intent)
         }
         requestNotificationPermissionIfNeeded()
@@ -606,10 +651,51 @@ class MainActivity : ComponentActivity() {
                     if (externalScreen != currentScreen) currentScreen = externalScreen
                 }
 
-                /** Open the Terminal bottom-nav page (termux-lib style). */
+                /** Open the in-app Terminal page (termux-lib style). */
                 val openTerminalTab: () -> Unit = {
                     currentScreen = Screen.HOME
                     currentTab = BottomTab.TERMINAL
+                }
+
+                // ── Ubuntu auto-start: once per cold launch ──
+                // rememberSaveable survives recreation, so returning from X11 or rotating
+                // never starts a second time; a restored countdown resumes instead.
+                var autoStartHandled by rememberSaveable { mutableStateOf(false) }
+                var autoStartPending by rememberSaveable { mutableStateOf(false) }
+                LaunchedEffect(Unit) {
+                    if (!autoStartPending) {
+                        if (autoStartHandled || !coldLaunchAutoStart) return@LaunchedEffect
+                        autoStartHandled = true
+                        if (!autoStartAllowed()) return@LaunchedEffect
+                        withContext(Dispatchers.IO) {
+                            com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
+                                .reconcileStale(applicationContext)
+                        }
+                        val running = com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery.current(
+                            this@MainActivity,
+                            com.ivarna.fluxlinux.core.desktop.DesktopLauncher.uiState.value
+                        )
+                        if (running != null ||
+                            com.ivarna.fluxlinux.core.desktop.DesktopLauncher.isSessionActive()
+                        ) {
+                            if (running != null) {
+                                com.ivarna.fluxlinux.core.desktop.DesktopLauncher.reopenDisplay(this@MainActivity)
+                            }
+                            return@LaunchedEffect
+                        }
+                        autoStartPending = true
+                    }
+                    delay(1500)
+                    if (!autoStartPending) return@LaunchedEffect
+                    autoStartPending = false
+                    launchUbuntuAutoStart()
+                }
+
+                // Troubleshooting opens from Settings or from Home recovery; Back returns there.
+                var troubleshootingReturn by remember { mutableStateOf(Screen.SETTINGS) }
+                val openTroubleshooting: (Screen) -> Unit = { from ->
+                    troubleshootingReturn = from
+                    currentScreen = Screen.TROUBLESHOOTING
                 }
 
                 BackHandler {
@@ -623,9 +709,11 @@ class MainActivity : ComponentActivity() {
                         || currentScreen == Screen.SETTINGS_CHROOT
                         || currentScreen == Screen.SETTINGS_PROOT
                         || currentScreen == Screen.SETTINGS_LEGACY_TERMUX
-                        || currentScreen == Screen.TROUBLESHOOTING
                         || currentScreen == Screen.ROOT_ACCESS) {
                         currentScreen = Screen.SETTINGS
+                    } else if (currentScreen == Screen.TROUBLESHOOTING) {
+                        currentScreen = troubleshootingReturn
+                        if (troubleshootingReturn == Screen.HOME) currentTab = BottomTab.HOME
                     } else if (currentScreen == Screen.SETTINGS
                         || currentScreen == Screen.DISTRO_SETTINGS
                         || currentScreen == Screen.INSTALL_WIZARD) {
@@ -761,25 +849,13 @@ class MainActivity : ComponentActivity() {
                     when (tab) {
                         BottomTab.HOME -> {
                             com.ivarna.fluxlinux.ui.screens.HomeScreen(
-                                permissionState = permissionState,
-                                hazeState = hazeState,
                                 scriptRefreshTrigger = refreshKey + lifecycleRefreshKey,
-                                onStartService = onStartServiceStub,
-                                onStartActivity = onStartActivityStub,
-                                // Pass navigation callbacks
+                                autoStartPending = autoStartPending,
+                                onCancelAutoStart = { autoStartPending = false },
+                                onOpenTerminal = onOpenTerminal,
                                 onNavigateToInstall = onNavigateToInstall,
                                 onNavigateToSettings = onNavigateToDistroSettings,
-                                onOpenTerminal = onOpenTerminal,
-                                onShowTerminal = openTerminalTab
-                            )
-                        }
-                        BottomTab.DISTROS -> {
-                            com.ivarna.fluxlinux.ui.screens.DistroScreen(
-                                permissionState = permissionState,
-                                hazeState = hazeState,
-                                onStartService = onStartServiceStub,
-                                onStartActivity = onStartActivityStub,
-                                onNavigateToInstall = onNavigateToInstall
+                                onNavigateToTroubleshooting = { openTroubleshooting(Screen.HOME) }
                             )
                         }
                         BottomTab.TERMINAL -> {
@@ -938,15 +1014,6 @@ class MainActivity : ComponentActivity() {
                                         displayLive = session != null
                                     )
                                 }
-                            },
-                            bottomBar = {
-                                if (currentTab != BottomTab.TERMINAL) {
-                                    GlassBottomNavigation(
-                                        selectedTab = currentTab,
-                                        onTabSelected = { currentTab = it },
-                                        hazeState = hazeState
-                                    )
-                                }
                             }
                         ) {
                             MainScreenContent(
@@ -965,7 +1032,7 @@ class MainActivity : ComponentActivity() {
                                 StateManager.setOnboardingComplete(this@MainActivity, false)
                                 currentScreen = Screen.ONBOARDING
                             },
-                            onNavigateToTroubleshooting = { currentScreen = Screen.TROUBLESHOOTING },
+                            onNavigateToTroubleshooting = { openTroubleshooting(Screen.SETTINGS) },
                             onNavigateToRootCheck = { currentScreen = Screen.ROOT_ACCESS },
                             onNavigateToTerminalSettings = {
                                 currentScreen = Screen.SETTINGS_TERMINAL
@@ -1009,9 +1076,9 @@ class MainActivity : ComponentActivity() {
                                 storageTargetId = id
                                 currentScreen = Screen.SETTINGS_CHROOT_DETAIL
                             },
-                            onNavigateToDistros = {
+                            onNavigateToHome = {
                                 currentScreen = Screen.HOME
-                                currentTab = BottomTab.DISTROS
+                                currentTab = BottomTab.HOME
                             }
                         )
                     }
@@ -1045,9 +1112,9 @@ class MainActivity : ComponentActivity() {
                                 storageTargetId = id
                                 currentScreen = Screen.SETTINGS_PROOT_DETAIL
                             },
-                            onNavigateToDistros = {
+                            onNavigateToHome = {
                                 currentScreen = Screen.HOME
-                                currentTab = BottomTab.DISTROS
+                                currentTab = BottomTab.HOME
                             }
                         )
                     }
@@ -1082,7 +1149,10 @@ class MainActivity : ComponentActivity() {
                     }
                     Screen.TROUBLESHOOTING -> {
                         com.ivarna.fluxlinux.ui.screens.TroubleshootingScreen(
-                            onBack = { currentScreen = Screen.SETTINGS }
+                            onBack = {
+                                currentScreen = troubleshootingReturn
+                                if (troubleshootingReturn == Screen.HOME) currentTab = BottomTab.HOME
+                            }
                         )
                     }
                     Screen.TERMINAL -> {
