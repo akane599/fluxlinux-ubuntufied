@@ -1,7 +1,8 @@
 package com.ivarna.fluxlinux.ui.onboarding
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -40,9 +41,6 @@ import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FolderShared
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Memory
@@ -52,7 +50,6 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -67,7 +64,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -85,27 +81,23 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
-import com.ivarna.fluxlinux.core.data.Distro
-import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.install.HostBootstrap
 import com.ivarna.fluxlinux.core.install.OnboardingInstallRunner
-import com.ivarna.fluxlinux.core.root.RootShell
+import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
-import com.ivarna.fluxlinux.ui.components.CompactDistroCard
 import com.ivarna.fluxlinux.ui.components.MethodChip
-import com.ivarna.fluxlinux.ui.components.MethodTab
-import com.ivarna.fluxlinux.ui.components.MethodTabs
-import com.ivarna.fluxlinux.ui.components.isChrootCard
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
 import com.ivarna.fluxlinux.ui.theme.BrandCream
 import com.ivarna.fluxlinux.ui.theme.FluxAccentCyan
@@ -116,13 +108,22 @@ import com.ivarna.fluxlinux.ui.theme.FluxBodyMuted
 import com.ivarna.fluxlinux.ui.theme.FluxHairline
 import com.ivarna.fluxlinux.ui.theme.FluxSwitchUncheckedTrack
 import com.ivarna.fluxlinux.ui.theme.fluxMutedText
+import kotlin.concurrent.thread
 
-private enum class OnboardStep { Welcome, Consent, HostSetup, DistroPick, Options, Storage, Running, Done }
+private enum class OnboardStep { Welcome, Consent, HostSetup, Options, Storage, Running, Done }
+
+/** First-run setup always installs this proot guest (Ubuntu 26.04, see DistroInstallProfile). */
+private const val UBUNTU_DISTRO_ID = "ubuntu"
+
+/** Numbered setup steps shown in [StepHeader]: Consent, Host setup, Options, Storage. */
+private const val ONBOARD_STEP_COUNT = 4
+
+private val OnboardSuccess = Color(0xFF69F0AE)
 
 /**
- * Redesigned full first-run onboarding:
- * Welcome → Disclosure/Consent → Host Setup → Distro Selection → Options → Progress → Complete.
- * Installs rootfs + XFCE + customization with unified glassmorphic styling and responsive layouts.
+ * First-run onboarding:
+ * Welcome → Disclosure/Consent → Host Setup → Options → Storage access → Progress → Complete.
+ * Installs the Ubuntu rootfs + XFCE + customization. An existing Ubuntu rootfs is reused, never wiped.
  */
 @Composable
 fun OnboardingFlowScreen(
@@ -132,7 +133,6 @@ fun OnboardingFlowScreen(
 ) {
     val context = LocalContext.current
     var step by remember { mutableStateOf(OnboardStep.Welcome) }
-    var selectedDistroId by remember { mutableStateOf("debian") }
     var theme by remember { mutableStateOf("dark") }
 
     var percent by remember { mutableIntStateOf(0) }
@@ -156,7 +156,7 @@ fun OnboardingFlowScreen(
         logText = ""
         failed = false
         errorMessage = null
-        runner.start(selectedDistroId, theme) { p ->
+        runner.start(UBUNTU_DISTRO_ID, theme) { p ->
             percent = p.overallPercent
             phaseLabel = p.phaseLabel
             detail = p.detail
@@ -168,6 +168,11 @@ fun OnboardingFlowScreen(
                     failed = true
                     errorMessage = p.errorMessage
                 } else {
+                    // Idempotent: only creates missing ~/storage links, never replaces anything.
+                    val appContext = context.applicationContext
+                    thread(name = "onboarding-storage-links") {
+                        runCatching { GuestStorageLinks.ensure(appContext, UBUNTU_DISTRO_ID) }
+                    }
                     step = OnboardStep.Done
                 }
             }
@@ -188,21 +193,14 @@ fun OnboardingFlowScreen(
             )
             OnboardStep.HostSetup -> HostSetupPage(
                 onBack = { step = OnboardStep.Consent },
-                onNext = { step = OnboardStep.DistroPick }
-            )
-            OnboardStep.DistroPick -> DistroPickPage(
-                selectedId = selectedDistroId,
-                onSelect = { selectedDistroId = it },
-                onBack = { step = OnboardStep.HostSetup },
                 onNext = { step = OnboardStep.Options }
             )
             OnboardStep.Options -> OptionsPage(
-                distroId = selectedDistroId,
                 theme = theme,
                 onTheme = { theme = it },
-                onBack = { step = OnboardStep.DistroPick },
+                onBack = { step = OnboardStep.HostSetup },
                 onInstall = {
-                    if (SharedStorageAccess.declared(context) && !SharedStorageAccess.granted()) {
+                    if (SharedStorageAccess.isSupported(context) && !SharedStorageAccess.granted(context)) {
                         step = OnboardStep.Storage
                     } else {
                         startInstall()
@@ -229,10 +227,9 @@ fun OnboardingFlowScreen(
                 }
             )
             OnboardStep.Done -> DonePage(
-                distroId = selectedDistroId,
                 onHome = onFinished,
                 onTerminal = onOpenTerminal,
-                onDesktop = { onStartDesktop(selectedDistroId) }
+                onDesktop = { onStartDesktop(UBUNTU_DISTRO_ID) }
             )
         }
     }
@@ -295,7 +292,7 @@ private fun WelcomePage(onNext: () -> Unit) {
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "Full Linux desktop on Android — no Termux app required",
+                text = stringResource(R.string.onboarding_welcome_tagline),
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 color = colors.onBackground.copy(alpha = 0.72f),
@@ -312,12 +309,12 @@ private fun WelcomePage(onNext: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Feature 1: PRoot & Chroot
+            // Feature 1: what setup installs
             ModernFeatureCard(
                 icon = Icons.Filled.Storage,
                 iconTint = FluxAccentMagenta,
-                title = "PRoot & Chroot",
-                description = "No root required with PRoot mode, or run with full native speed via Chroot on rooted devices."
+                title = stringResource(R.string.onboarding_feature_ubuntu_title),
+                description = stringResource(R.string.onboarding_feature_ubuntu_desc)
             )
 
             // Feature 2: Desktop & Themes
@@ -450,7 +447,7 @@ private fun ConsentPage(onBack: () -> Unit, onNext: () -> Unit) {
         // Step Navigation Bar
         StepHeader(
             currentStep = 1,
-            totalSteps = 5,
+            totalSteps = ONBOARD_STEP_COUNT,
             title = "External Downloads",
             onBack = onBack
         )
@@ -518,7 +515,7 @@ private fun ConsentPage(onBack: () -> Unit, onNext: () -> Unit) {
                             modifier = Modifier.weight(1f)
                         )
                         DownloadItemBadge(
-                            title = "Distro Rootfs",
+                            title = "Ubuntu Rootfs",
                             size = "~80-150 MiB",
                             modifier = Modifier.weight(1f)
                         )
@@ -628,7 +625,7 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
     ) {
         StepHeader(
             currentStep = 2,
-            totalSteps = 5,
+            totalSteps = ONBOARD_STEP_COUNT,
             title = "Host Environment",
             onBack = onBack
         )
@@ -800,261 +797,16 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. DISTRO SELECTION PAGE
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun DistroPickPage(
-    selectedId: String,
-    onSelect: (String) -> Unit,
-    onBack: () -> Unit,
-    onNext: () -> Unit
-) {
-    var methodTab by remember { mutableStateOf(MethodTab.PROOT) }
-    var rootAvailable by remember { mutableStateOf(false) }
-    var probingRoot by remember { mutableStateOf(false) }
-    var showRootHint by remember { mutableStateOf(false) }
-    val colors = MaterialTheme.colorScheme
-
-    fun applyTab(tab: MethodTab) {
-        methodTab = tab
-        val next = DistroRepository.installableVariant(selectedId, chroot = tab == MethodTab.CHROOT)
-        if (next != null && next.id != selectedId) onSelect(next.id)
-    }
-
-    fun probeRoot(openChrootIfGranted: Boolean) {
-        probingRoot = true
-        RootShell.probeRootAvailable(forceClearCache = openChrootIfGranted) { ok ->
-            rootAvailable = ok
-            probingRoot = false
-            if (ok) {
-                showRootHint = false
-                if (openChrootIfGranted) applyTab(MethodTab.CHROOT)
-            } else if (openChrootIfGranted) {
-                showRootHint = true
-                if (methodTab == MethodTab.CHROOT) applyTab(MethodTab.PROOT)
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) { probeRoot(openChrootIfGranted = false) }
-
-    val forTab = DistroRepository.supportedDistros.filter { distro ->
-        if (methodTab == MethodTab.CHROOT) distro.chrootSupported else distro.prootSupported
-    }
-    val installable = forTab.filter { !it.comingSoon }
-    val comingSoon = forTab.filter { it.comingSoon }.sortedBy { it.name }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-    ) {
-        StepHeader(
-            currentStep = 3,
-            totalSteps = 5,
-            title = "Choose Distribution",
-            onBack = onBack
-        )
-
-        Spacer(Modifier.height(14.dp))
-
-        // PRoot vs Chroot Mode Tabs
-        MethodTabs(
-            selected = methodTab,
-            onSelected = { tab ->
-                if (tab == MethodTab.CHROOT && !rootAvailable) {
-                    showRootHint = true
-                    probeRoot(openChrootIfGranted = true)
-                } else {
-                    applyTab(tab)
-                }
-            },
-            chrootLabel = "Chroot (Rooted)",
-            chrootEnabled = true,
-            horizontalPadding = 0.dp
-        )
-
-        // Root Warning / Notice Card
-        if (showRootHint && !rootAvailable) {
-            Spacer(Modifier.height(10.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(colors.error.copy(alpha = 0.12f))
-                    .border(1.dp, colors.error.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                    .padding(12.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = null,
-                        tint = colors.error,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = if (probingRoot) "Checking superuser access…"
-                        else "Grant superuser to FluxLinux in Magisk/KernelSU, then tap Chroot again.",
-                        color = colors.error,
-                        fontSize = 12.5.sp,
-                        lineHeight = 16.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // Distro Card List
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                text = "Available Distributions",
-                fontWeight = FontWeight.Bold,
-                color = colors.onBackground,
-                fontSize = 14.sp
-            )
-
-            installable.forEach { distro ->
-                ModernSelectableDistroCard(
-                    distro = distro,
-                    selected = selectedId == distro.id,
-                    onClick = { onSelect(distro.id) }
-                )
-            }
-
-            if (comingSoon.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Coming Soon",
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.onBackground.copy(alpha = 0.6f),
-                    fontSize = 13.sp
-                )
-                comingSoon.forEach { distro ->
-                    CompactDistroCard(distro = distro)
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Navigation Actions
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FluxGhostButton(
-                text = "Back",
-                onClick = onBack,
-                modifier = Modifier.weight(0.7f)
-            )
-
-            FluxPrimaryButton(
-                text = "Continue",
-                enabled = installable.any { it.id == selectedId },
-                icon = Icons.AutoMirrored.Filled.ArrowForward,
-                onClick = onNext,
-                modifier = Modifier.weight(1.3f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModernSelectableDistroCard(
-    distro: Distro,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    val borderColor by animateColorAsState(
-        if (selected) FluxAccentMagenta else FluxHairline,
-        label = "border"
-    )
-    val bgColor = if (selected) FluxAccentMagenta.copy(alpha = 0.12f)
-    else colors.surface.copy(alpha = 0.72f)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(bgColor)
-            .border(if (selected) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onClick,
-            colors = RadioButtonDefaults.colors(
-                selectedColor = FluxAccentMagenta,
-                unselectedColor = colors.onSurface.copy(alpha = 0.4f)
-            )
-        )
-
-        Spacer(Modifier.width(8.dp))
-
-        if (distro.iconRes != null) {
-            Image(
-                painter = painterResource(id = distro.iconRes),
-                contentDescription = distro.name,
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(10.dp))
-            )
-            Spacer(Modifier.width(12.dp))
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = distro.name,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.onSurface,
-                    fontSize = 15.5.sp
-                )
-                MethodChip(
-                    label = if (distro.chrootSupported) "CHROOT" else "PROOT",
-                    color = if (distro.chrootSupported) Color(0xFFE040FB) else Color(0xFF00B8D4)
-                )
-            }
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = distro.description,
-                color = colors.onSurface.copy(alpha = 0.68f),
-                fontSize = 12.sp,
-                lineHeight = 16.sp
-            )
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // 5. OPTIONS PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun OptionsPage(
-    distroId: String,
     theme: String,
     onTheme: (String) -> Unit,
     onBack: () -> Unit,
     onInstall: () -> Unit
 ) {
-    val distro = DistroRepository.supportedDistros.find { it.id == distroId }
     var downloadConsent by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
 
@@ -1064,8 +816,8 @@ private fun OptionsPage(
             .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
         StepHeader(
-            currentStep = 4,
-            totalSteps = 5,
+            currentStep = 3,
+            totalSteps = ONBOARD_STEP_COUNT,
             title = "Desktop Options",
             onBack = onBack
         )
@@ -1088,23 +840,21 @@ private fun OptionsPage(
                     .padding(14.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (distro?.iconRes != null) {
-                        Image(
-                            painter = painterResource(id = distro.iconRes),
-                            contentDescription = null,
-                            modifier = Modifier.size(38.dp)
-                        )
-                        Spacer(Modifier.width(12.dp))
-                    }
+                    Image(
+                        painter = painterResource(id = R.drawable.distro_ubuntu),
+                        contentDescription = null,
+                        modifier = Modifier.size(38.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = distro?.name ?: distroId,
+                            text = stringResource(R.string.onboarding_options_distro_name),
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = colors.onSurface
                         )
                         Text(
-                            text = "Base XFCE4 desktop with Flux customizations",
+                            text = stringResource(R.string.onboarding_options_distro_desc),
                             fontSize = 12.sp,
                             color = colors.onSurface.copy(alpha = 0.65f)
                         )
@@ -1171,19 +921,11 @@ private fun OptionsPage(
                     Spacer(Modifier.height(10.dp))
 
                     val items = listOf(
-                        when {
-                            distroId.startsWith("alpine") -> "Alpine 3.24 minirootfs"
-                            distroId.startsWith("fedora") -> "Fedora 44 container rootfs"
-                            distroId.startsWith("void") -> "Void Linux (glibc aarch64) rootfs"
-                            distroId.startsWith("opensuse") -> "openSUSE Tumbleweed rootfs"
-                            else -> "Debian 13 rootfs"
-                        },
+                        stringResource(R.string.onboarding_manifest_rootfs),
                         "XFCE4 lightweight desktop environment",
-                        if (distroId.startsWith("fedora") || distroId.startsWith("void") || distroId.startsWith("opensuse"))
-                            "Mesa / VirGL 3D hardware acceleration" else null,
                         "Flux themes, wallpapers, and Nerd fonts",
                         "Embedded X11 display server + Zsh terminal"
-                    ).filterNotNull()
+                    )
 
                     items.forEach { item ->
                         Row(
@@ -1204,24 +946,6 @@ private fun OptionsPage(
                             )
                         }
                     }
-                }
-            }
-
-            if (distroId.contains("chroot")) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.error.copy(alpha = 0.12f))
-                        .border(1.dp, colors.error.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                        .padding(12.dp)
-                ) {
-                    Text(
-                        text = "Rooted path: Magisk, KernelSU, or APatch superuser is required for Chroot guest execution.",
-                        color = colors.error,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    )
                 }
             }
 
@@ -1334,175 +1058,160 @@ private fun ThemeOptionCard(
 // 6. DONE / COMPLETION PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Stateless completion page (also rendered by the onboarding screenshot previews). */
 @Composable
-private fun DonePage(
-    distroId: String,
+internal fun DonePage(
     onHome: () -> Unit,
     onTerminal: () -> Unit,
     onDesktop: () -> Unit
 ) {
-    val distro = DistroRepository.supportedDistros.find { it.id == distroId }
-    val displayName = distro?.name?.removeSuffix(" (Rooted)") ?: distroId
-    val isChroot = distro?.isChrootCard() == true
-    val methodColor = if (isChroot) Color(0xFFE040FB) else Color(0xFF00B8D4)
     val colors = MaterialTheme.colorScheme
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 24.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        // Celebration Badge
-        Box(contentAlignment = Alignment.BottomEnd) {
-            Box(
-                modifier = Modifier
-                    .size(108.dp)
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                colors.surface.copy(alpha = 0.85f),
-                                colors.surfaceVariant.copy(alpha = 0.6f)
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Ubuntu badge with a success status mark
+            Box(contentAlignment = Alignment.BottomEnd) {
+                Box(
+                    modifier = Modifier
+                        .size(108.dp)
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    colors.surface.copy(alpha = 0.85f),
+                                    colors.surfaceVariant.copy(alpha = 0.6f)
+                                )
                             )
                         )
-                    )
-                    .border(1.5.dp, FluxHairline, RoundedCornerShape(32.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (distro?.iconRes != null) {
+                        .border(1.5.dp, FluxHairline, RoundedCornerShape(32.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Image(
-                        painter = painterResource(id = distro.iconRes),
-                        contentDescription = displayName,
+                        painter = painterResource(id = R.drawable.distro_ubuntu),
+                        contentDescription = stringResource(R.string.onboarding_done_icon_desc),
                         modifier = Modifier.size(68.dp)
                     )
-                } else {
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(FluxDarkSurface)
+                        .padding(3.dp)
+                        .clip(CircleShape)
+                        .background(OnboardSuccess),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
-                        imageVector = Icons.Filled.CheckCircle,
+                        imageVector = Icons.Filled.Check,
                         contentDescription = null,
-                        tint = Color(0xFF69F0AE),
-                        modifier = Modifier.size(52.dp)
+                        tint = FluxDarkSurface,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
 
-            Box(
+            Spacer(Modifier.height(24.dp))
+
+            Text(
+                text = stringResource(R.string.onboarding_done_title),
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                color = colors.onBackground
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = stringResource(R.string.onboarding_done_body),
+                textAlign = TextAlign.Center,
+                color = colors.onBackground.copy(alpha = 0.72f),
+                fontSize = 14.5.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            MethodChip(
+                label = stringResource(R.string.onboarding_done_chip),
+                color = FluxAccentCyan
+            )
+
+            Spacer(Modifier.height(32.dp))
+
+            // Primary action: start the Ubuntu desktop
+            Button(
+                onClick = onDesktop,
                 modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(FluxDarkSurface)
-                    .padding(3.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF69F0AE)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = BrandCream,
+                    contentColor = FluxDarkGrey
+                ),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = null,
-                    tint = FluxDarkSurface,
-                    modifier = Modifier.size(18.dp)
+                Icon(Icons.Filled.DesktopWindows, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.onboarding_done_start_desktop),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
                 )
             }
-        }
 
-        Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
 
-        Text(
-            text = "You're Ready!",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = colors.onBackground
-        )
+            // Secondary action: open a terminal
+            Button(
+                onClick = onTerminal,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 50.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = FluxAccentMagenta.copy(alpha = 0.16f),
+                    contentColor = colors.onBackground
+                ),
+                border = BorderStroke(1.dp, FluxAccentMagenta.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Filled.Terminal, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.onboarding_done_open_terminal),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp
+                )
+            }
 
-        Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
 
-        Text(
-            text = "$displayName base desktop is installed. Launch your graphical session or open an interactive shell.",
-            textAlign = TextAlign.Center,
-            color = colors.onBackground.copy(alpha = 0.72f),
-            fontSize = 14.5.sp,
-            lineHeight = 20.sp,
-            modifier = Modifier.padding(horizontal = 12.dp)
-        )
-
-        Spacer(Modifier.height(14.dp))
-
-        MethodChip(
-            label = if (isChroot) "CHROOT GUEST" else "PROOT GUEST",
-            color = methodColor
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        // Primary Action: Launch Desktop
-        Button(
-            onClick = onDesktop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = BrandCream,
-                contentColor = FluxDarkGrey
-            ),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Icon(Icons.Filled.DesktopWindows, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            Text("Start Desktop", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // Secondary Action: Open Terminal
-        Button(
-            onClick = onTerminal,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = FluxAccentMagenta.copy(alpha = 0.20f),
-                contentColor = Color.White
-            ),
-            border = BorderStroke(1.dp, FluxAccentMagenta.copy(alpha = 0.5f)),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Icon(Icons.Filled.Terminal, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(10.dp))
-            Text("Open Terminal", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // Tertiary Action: Go to Dashboard
-        Button(
-            onClick = onHome,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = colors.surface.copy(alpha = 0.6f),
-                contentColor = colors.onSurface
-            ),
-            border = BorderStroke(1.dp, FluxHairline),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Icon(Icons.Filled.Home, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Go to Dashboard", fontWeight = FontWeight.SemiBold, fontSize = 14.5.sp)
+            // Tertiary action: leave setup for the dashboard
+            FluxGhostButton(
+                text = stringResource(R.string.onboarding_done_dashboard),
+                onClick = onHome,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STORAGE ACCESS PAGE (ivarna flavor, Android 11+, only while not yet granted)
+// STORAGE ACCESS PAGE (shown only while shared storage access is supported but not granted)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun StoragePage(onBack: () -> Unit, onNext: () -> Unit) {
     val context = LocalContext.current
-    val colors = MaterialTheme.colorScheme
     var resumeKey by remember { mutableIntStateOf(0) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -1510,15 +1219,62 @@ private fun StoragePage(onBack: () -> Unit, onNext: () -> Unit) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val granted = remember(resumeKey) { SharedStorageAccess.granted() }
-    val success = Color(0xFF69F0AE)
+    // API < 30: runtime READ/WRITE prompt. API >= 30: all-files access in system Settings.
+    val legacyPermissions = remember { SharedStorageAccess.legacyPermissions() }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { resumeKey++ }
+    val granted = remember(resumeKey) { SharedStorageAccess.granted(context) }
+
+    StorageAccessContent(
+        granted = granted,
+        opensSettings = legacyPermissions.isEmpty(),
+        onBack = onBack,
+        onGrant = {
+            if (legacyPermissions.isNotEmpty()) {
+                permissionLauncher.launch(legacyPermissions)
+            } else {
+                SharedStorageAccess.openSettings(context)
+            }
+        },
+        onContinue = onNext
+    )
+}
+
+/** `~/storage/<name>` entries Ubuntu gets (mirrors GuestStorageLinks.LINKS), with plain descriptions. */
+private val StorageLinkRows = listOf(
+    "shared" to R.string.onboarding_storage_link_shared,
+    "downloads" to R.string.onboarding_storage_link_downloads,
+    "documents" to R.string.onboarding_storage_link_documents,
+    "dcim" to R.string.onboarding_storage_link_dcim,
+    "pictures" to R.string.onboarding_storage_link_pictures,
+    "music" to R.string.onboarding_storage_link_music,
+    "movies" to R.string.onboarding_storage_link_movies
+)
+
+/** Stateless storage step (also rendered by the onboarding screenshot previews). */
+@Composable
+internal fun StorageAccessContent(
+    granted: Boolean,
+    opensSettings: Boolean,
+    onBack: () -> Unit,
+    onGrant: () -> Unit,
+    onContinue: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val accent = if (granted) OnboardSuccess else FluxAccentMagenta
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
-        StepHeader(currentStep = 5, totalSteps = 5, title = "Access your files", onBack = onBack)
+        StepHeader(
+            currentStep = 4,
+            totalSteps = ONBOARD_STEP_COUNT,
+            title = stringResource(R.string.onboarding_storage_title),
+            onBack = onBack
+        )
 
         Spacer(Modifier.height(16.dp))
 
@@ -1531,39 +1287,66 @@ private fun StoragePage(onBack: () -> Unit, onNext: () -> Unit) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(84.dp)
+                    .size(72.dp)
                     .clip(CircleShape)
-                    .background((if (granted) success else FluxAccentMagenta).copy(alpha = 0.15f)),
+                    .background(accent.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Filled.FolderShared,
-                    contentDescription = "Shared storage",
-                    tint = if (granted) success else FluxAccentMagenta,
-                    modifier = Modifier.size(44.dp)
+                    contentDescription = stringResource(R.string.onboarding_storage_icon_desc),
+                    tint = accent,
+                    modifier = Modifier.size(38.dp)
                 )
             }
 
             Text(
-                text = "Your Linux distros can read and write your phone's storage (/sdcard: Downloads, Documents, USB drives), so you can open and save files from Linux apps.",
-                color = colors.onSurface.copy(alpha = 0.75f),
-                fontSize = 13.5.sp,
-                lineHeight = 19.sp,
-                textAlign = TextAlign.Center
+                text = stringResource(R.string.onboarding_storage_intro),
+                color = colors.onSurface.copy(alpha = 0.8f),
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.fillMaxWidth()
             )
 
+            // The ~/storage links Ubuntu gets
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(colors.surface.copy(alpha = 0.72f))
                     .border(1.dp, FluxHairline, RoundedCornerShape(16.dp))
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                StorageBenefit(Icons.Filled.FolderOpen, "Open files from Linux apps")
-                StorageBenefit(Icons.Filled.Save, "Save to Downloads and Documents")
-                StorageBenefit(Icons.Filled.Usb, "Use USB drives and SD cards")
+                StorageLinkRows.forEach { (name, descRes) ->
+                    StorageLinkRow(path = "~/storage/$name", description = stringResource(descRes))
+                }
+            }
+
+            // The other direction: the phone's file manager sees Ubuntu's home
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(FluxAccentCyan.copy(alpha = 0.08f))
+                    .border(1.dp, FluxAccentCyan.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.FolderOpen,
+                    contentDescription = null,
+                    tint = FluxAccentCyan,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.onboarding_storage_file_manager),
+                    color = colors.onSurface.copy(alpha = 0.85f),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.weight(1f)
+                )
             }
 
             if (granted) {
@@ -1571,20 +1354,34 @@ private fun StoragePage(onBack: () -> Unit, onNext: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(success.copy(alpha = 0.12f))
-                        .border(1.dp, success.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                        .background(OnboardSuccess.copy(alpha = 0.12f))
+                        .border(1.dp, OnboardSuccess.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
                         .semantics { liveRegion = LiveRegionMode.Polite }
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = success, modifier = Modifier.size(22.dp))
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = OnboardSuccess, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Access granted", color = success, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(
+                        stringResource(R.string.onboarding_storage_granted),
+                        color = OnboardSuccess,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
                 }
             } else {
+                if (opensSettings) {
+                    Text(
+                        text = stringResource(R.string.onboarding_storage_settings_hint),
+                        color = colors.onSurface.copy(alpha = 0.7f),
+                        fontSize = 12.5.sp,
+                        lineHeight = 17.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
                 Text(
-                    text = "You can change this later in Settings > Shared storage.",
+                    text = stringResource(R.string.onboarding_storage_later),
                     color = colors.onSurface.copy(alpha = 0.6f),
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center
@@ -1594,23 +1391,54 @@ private fun StoragePage(onBack: () -> Unit, onNext: () -> Unit) {
 
         Spacer(Modifier.height(16.dp))
 
-        FluxPrimaryButton(
-            text = if (granted) "Continue" else "Grant access",
-            icon = if (granted) Icons.AutoMirrored.Filled.ArrowForward else null,
-            onClick = if (granted) onNext else { { SharedStorageAccess.openSettings(context) } }
-        )
-        if (!granted) {
-            FluxGhostButton(text = "Skip for now", onClick = onNext, modifier = Modifier.fillMaxWidth())
+        if (granted) {
+            FluxPrimaryButton(
+                text = stringResource(R.string.onboarding_continue),
+                icon = Icons.AutoMirrored.Filled.ArrowForward,
+                onClick = onContinue
+            )
+        } else {
+            FluxPrimaryButton(
+                text = stringResource(R.string.onboarding_storage_grant),
+                icon = Icons.Filled.LockOpen,
+                onClick = onGrant
+            )
+            FluxGhostButton(
+                text = stringResource(R.string.onboarding_storage_skip),
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
 
 @Composable
-private fun StorageBenefit(icon: ImageVector, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = FluxAccentCyan, modifier = Modifier.size(22.dp))
+private fun StorageLinkRow(path: String, description: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Icon(
+            imageVector = Icons.Filled.FolderOpen,
+            contentDescription = null,
+            tint = FluxAccentCyan,
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(18.dp)
+        )
         Spacer(Modifier.width(12.dp))
-        Text(text, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = path,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.5.sp
+            )
+            Text(
+                text = description,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
+        }
     }
 }
 
