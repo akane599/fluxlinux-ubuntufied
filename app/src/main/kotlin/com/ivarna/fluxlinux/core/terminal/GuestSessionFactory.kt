@@ -6,6 +6,7 @@ import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.data.terminalComponentFor
+import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.utils.TerminalPreferences
 import com.termux.terminal.TerminalSession
 
@@ -51,6 +52,10 @@ object GuestSessionFactory {
         GuestZshrcRepair.repairIfNeeded(ctx, method, distroId)
         // Alpine proot: ensure apk db/lock is app-writable so `sudo apk` works.
         GuestApkDbRepair.repairIfNeeded(ctx, method, distroId)
+        // Proot: Termux-style ~/storage links (same distro fallback as LinuxCommandBuilder).
+        if (method != "chroot") {
+            runCatching { GuestStorageLinks.ensure(ctx, distroId ?: "debian") }
+        }
         val user = LinuxCommandBuilder.sessionUserForType(type)
         // Always ZSH or BASH from prefs — never null (chroot root follows the pref too).
         val loginShell = TerminalPreferences.getGuestLoginShell(ctx)
