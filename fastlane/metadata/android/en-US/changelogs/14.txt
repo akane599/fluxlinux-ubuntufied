@@ -1,0 +1,6 @@
+- Ubuntu-first: onboarding installs Ubuntu 26.04 directly, new Ubuntu dashboard
+- Desktop starts automatically on launch (can be turned off in Settings)
+- Ubuntu home and filesystem show up in the Android Files app
+- Termux-style ~/storage links to shared storage
+- Existing installs and guest files are preserved
+- Much smaller APK (~65 MB)
