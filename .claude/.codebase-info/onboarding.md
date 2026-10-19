@@ -10,7 +10,7 @@
 4. Build and test: `bash .claude/kit/gradle-check.sh :app:assembleIvarnaDebug :app:testIvarnaDebugUnitTest`.
 5. Install: `./gradlew :app:installIvarnaDebug -q && adb shell am start -n com.ivarna.fluxlinux/.MainActivity`. The ivarna flavor ships arm64 only; x86_64 emulators run it via native bridge.
 
-Sidequest worktrees get `bootstrap.tar` linked in through the board's `worktreeDependencyPaths`. Submodules are not linked, so a fresh worktree can't run `:termux-x11` native builds.
+Sidequest worktrees are set up automatically. `bootstrap.tar` is copied in through `worktreeDependencyPaths` (`link` mode only works for directories). The board's `worktreeSetup` clones the 16 termux-x11 submodules from the main checkout over `file://`, with no network, in about 1.5 s.
 
 ## Common tasks
 | Task | Where |
