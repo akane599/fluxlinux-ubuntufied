@@ -6,7 +6,7 @@ Android, developed on Ubuntu from the CLI. **If the STACK block still has `<plac
 
 <!-- STACK:BEGIN (filled by /bootstrap) -->
 - Origin: fork of abhay-byte/fluxlinux (origin = akane599/fluxlinux-ubuntufied) @ 7f6e61d · Integration branch: main
-- Language: mixed — 162 Kotlin / 45 Java (:app is all Kotlin; Java only in :termux-x11, :terminal-emulator, :stub) + C/CMake (:termux-x11 X server) · UI: Compose (+7 XML layouts) · screenshot tests: none
+- Language: mixed — 162 Kotlin / 45 Java (:app is all Kotlin; Java only in :termux-x11, :terminal-emulator, :stub) + C/CMake (:termux-x11 X server) · UI: Compose (+7 XML layouts) · screenshot tests: compose-preview (ivarna flavor)
 - JDK target 17 · Gradle 8.14 · AGP 8.7.3 · Kotlin 2.0.20 · compileSdk 36 · targetSdk 36 · minSdk 26
 - Modules: :app :termux-x11 :terminal-emulator :stub · Architecture: single-activity Compose, no DI framework · DI/DB/Net: none / none / okhttp
 - Flavors (dimension `store`): `ivarna` = com.ivarna.fluxlinux (F-Droid/GitHub, arm64-v8a only) · `zenithblue` = com.zenithblue.fluxlinux (Play) · Launcher: .MainActivity
@@ -27,7 +27,7 @@ Android, developed on Ubuntu from the CLI. **If the STACK block still has `<plac
 
 ## Commands
 - There is no plain `Debug` variant: always name a flavor. Build: `bash .claude/kit/gradle-check.sh :app:assembleIvarnaDebug` · Unit: `:app:testIvarnaDebugUnitTest` · Lint: `:app:lintIvarnaDebug`
-- Screenshots: none configured yet (once added: `:app:updateIvarnaDebugScreenshotTest` / `:app:validateIvarnaDebugScreenshotTest`)
+- Screenshots: `:app:updateIvarnaDebugScreenshotTest` (write refs to `app/src/screenshotTestIvarnaDebug/reference`) · `:app:validateIvarnaDebugScreenshotTest` (diff). Previews live in `app/src/screenshotTest/` (`@PreviewTest`, fake state only); plugin `com.android.compose.screenshot` 0.0.1-alpha10 (alpha11+ need Kotlin ≥2.2)
 - Device: `./gradlew :app:installIvarnaDebug -q && adb shell am start -n com.ivarna.fluxlinux/.MainActivity` · logs: `adb logcat -d --pid=$(adb shell pidof -s com.ivarna.fluxlinux) | tail -80`
 - Emulator: `emulator -avd pixel-api35 -no-window -no-audio &` then `adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'` (ivarna ships arm64-v8a host binaries only; x86_64 emulators run them via native bridge)
 - Fresh checkout prerequisites (the build fails without them):
