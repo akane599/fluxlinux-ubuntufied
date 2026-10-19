@@ -15,6 +15,10 @@ android {
     namespace = "com.ivarna.fluxlinux"
     compileSdk = 36
     buildToolsVersion = "36.0.0"
+    // Same NDK as :termux-x11 / :terminal-emulator (F-Droid `ndk: r29`). Without it
+    // :app falls back to AGP's default NDK, which is not installed, so
+    // strip<Variant>DebugSymbols cannot run and release .so files ship unstripped.
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId = "com.ivarna.fluxlinux"
@@ -27,6 +31,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        // The app ships only default (English) strings; drop the translations
+        // bundled by AndroidX/Material libraries.
+        resourceConfigurations += listOf("en")
     }
 
     // Dual app-id flavors: ivarna (F-Droid/GitHub) + zenithblue (Play).
@@ -51,17 +58,24 @@ android {
         // Disable PNG crunching for reproducible builds
         @Suppress("UnstableApiUsage")
         ignoreAssetsPattern = "!.svn:!.git:.*:!CVS:!thumbs.db:!picasa.ini:!*.scc:*~"
-        // Critical — do not recompress archives; they must stay STORED in the APK.
-        // Rootfs archives are no longer packaged (GitHub release download) —
-        // only bootstrap.tar and the xfce theme assets remain.
+        // .xz assets are already compressed, so keep them STORED. bootstrap.tar is
+        // deflated by AAPT (~130 MB -> ~39 MB); BootstrapInstaller streams it via
+        // AssetManager.open(), which inflates transparently (openFd() only works
+        // on STORED assets, so its size probe falls back). Rootfs archives are
+        // not packaged (GitHub release download).
         @Suppress("UnstableApiUsage")
-        noCompress += listOf("xz", "tar")
+        noCompress += listOf("xz")
     }
 
     // Disable dependency metadata block for F-Droid
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false
+    }
+
+    val hasGitDir = rootProject.file(".git/HEAD").isFile
+    if (!hasGitDir) {
+        logger.warn("No .git/HEAD (linked worktree?): release APK will not embed version-control-info.textproto")
     }
 
     val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -100,6 +114,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Embed META-INF/version-control-info.textproto (git revision) so the
+            // release APK's commit can be checked against HEAD and the tag. AGP
+            // adds it at packaging time, so the META-INF/** exclude below does not
+            // strip it. AGP 8.7 reads <root>/.git/HEAD directly and fails the build
+            // in a linked git worktree (.git is a file there), so worktree builds
+            // skip it; releases are cut from the main checkout.
+            vcsInfo {
+                include = hasGitDir
+            }
             // Disable baseline profiles for F-Droid reproducible builds
             packaging {
                 resources.excludes.add("META-INF/**")
