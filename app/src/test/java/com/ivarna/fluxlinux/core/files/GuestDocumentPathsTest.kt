@@ -224,4 +224,107 @@ class GuestDocumentPathsTest {
         assertTrue(rootfs.isDirectory)
         assertTrue(File(shared, "Download/report.pdf").isFile)
     }
+
+    // ---- links are browse-only -----------------------------------------------------
+
+    @Test
+    fun traversesLinkOnlyForEntriesBelowALink() {
+        link("home/flux/storage/downloads", absentOnHost("/storage/emulated/0/Download"))
+        File(rootfs, "home/flux/Documents").mkdirs()
+        File(rootfs, "home/flux/Documents/a.txt").writeText("a")
+
+        assertTrue(GuestDocumentPaths.traversesLink(rootfs, "/home/flux/storage/downloads/report.pdf"))
+        assertTrue(GuestDocumentPaths.traversesLink(rootfs, "/home/flux/storage/downloads/sub/deeper.txt"))
+        // The link itself is the final component: not "through" a link.
+        assertFalse(GuestDocumentPaths.traversesLink(rootfs, "/home/flux/storage/downloads"))
+        assertFalse(GuestDocumentPaths.traversesLink(rootfs, "/home/flux/storage"))
+        assertFalse(GuestDocumentPaths.traversesLink(rootfs, "/home/flux/Documents/a.txt"))
+        // Fails closed on climbing components.
+        assertTrue(GuestDocumentPaths.traversesLink(rootfs, "/home/flux/../flux/Documents/a.txt"))
+    }
+
+    @Test
+    fun deleteThroughSharedLinkIsRefusedAndSharedFileSurvives() {
+        link("home/flux/storage/downloads", absentOnHost("/storage/emulated/0/Download"))
+        val victimFile = File(shared, "Download/report.pdf")
+        // The doc is readable through the link...
+        assertEquals(victimFile, GuestDocumentPaths.resolve(rootfs, "/home/flux/storage/downloads/report.pdf", shared))
+        // ...but never deletable through it.
+        assertFalse(GuestDocumentPaths.deleteEntry(rootfs, "/home/flux/storage/downloads/report.pdf", shared))
+        assertTrue("shared file must survive", victimFile.isFile)
+        assertEquals("pdf", victimFile.readText())
+    }
+
+    @Test
+    fun deleteThroughRootfsInternalLinkIsRefusedAndTargetSurvives() {
+        val big = File(rootfs, "opt/big").apply { mkdirs() }
+        val data = File(big, "data.bin").apply { writeText("data") }
+        link("home/flux/proj", absentOnHost("/opt/big"))
+        assertFalse(GuestDocumentPaths.deleteEntry(rootfs, "/home/flux/proj/data.bin", shared))
+        assertTrue(data.isFile)
+        // The same file through its real path is an ordinary entry.
+        assertTrue(GuestDocumentPaths.deleteEntry(rootfs, "/opt/big/data.bin", shared))
+        assertFalse(data.exists())
+    }
+
+    @Test
+    fun deletingTheLinkItselfOnlyUnlinks() {
+        val downloads = link("home/flux/storage/downloads", absentOnHost("/storage/emulated/0/Download"))
+        val victimLink = link("home/flux/storage/victim", victim.absolutePath)
+
+        assertTrue(GuestDocumentPaths.deleteEntry(rootfs, "/home/flux/storage/downloads", shared))
+        assertTrue(GuestDocumentPaths.deleteEntry(rootfs, "/home/flux/storage/victim", shared))
+        assertFalse(Files.exists(downloads.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        assertFalse(Files.exists(victimLink.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        assertTrue(File(rootfs, "home/flux/storage").isDirectory)
+        assertTrue(File(shared, "Download/report.pdf").isFile)
+        assertEquals("keep me", sentinel.readText())
+    }
+
+    @Test
+    fun treeChildNeverCrossesALink() {
+        link("home/flux/storage/shared", absentOnHost("/storage/emulated/0"))
+        File(rootfs, "home/flux/Documents").mkdirs()
+        val home = DocId(ROOT_HOME, "")
+
+        // Lexically a child, but reached through storage/shared: not part of a tree grant.
+        assertTrue(GuestDocumentPaths.isChild(home, DocId(ROOT_HOME, "storage/shared/Download")))
+        assertFalse(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_HOME, "storage/shared/Download")))
+        assertFalse(
+            GuestDocumentPaths.isChildWithoutLink(
+                rootfs, DocId(ROOT_HOME, "storage"), DocId(ROOT_HOME, "storage/shared/Download/report.pdf"),
+            ),
+        )
+        assertTrue(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_HOME, "Documents/a.txt")))
+        assertTrue(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_HOME, "storage/shared")))
+        assertFalse(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_SYSTEM, "etc")))
+    }
+
+    @Test
+    fun resolveEntryNeverReturnsAnAnchor() {
+        // proot-style host-absolute alias of the container: x/rootfs is the rootfs itself.
+        link("home/flux/x", container.absolutePath)
+        link("home/flux/sd", absentOnHost("/sdcard"))
+        assertNull(GuestDocumentPaths.resolveEntry(rootfs, "/home/flux/x/rootfs", shared))
+        assertFalse(GuestDocumentPaths.deleteEntry(rootfs, "/home/flux/x/rootfs", shared))
+        // Read resolution still reaches it (browsing is unaffected).
+        assertEquals(rootfs, GuestDocumentPaths.resolve(rootfs, "/home/flux/x/rootfs", shared))
+        assertEquals(shared, GuestDocumentPaths.resolve(rootfs, "/home/flux/sd", shared))
+        // The alias link entries themselves are ordinary entries.
+        assertEquals(File(rootfs, "home/flux/x"), GuestDocumentPaths.resolveEntry(rootfs, "/home/flux/x", shared))
+        assertTrue(rootfs.isDirectory)
+    }
+
+    @Test
+    fun linkChainLongerThanMaxHopsIsRefused() {
+        val target = File(rootfs, "home/flux/end.txt").apply { writeText("end") }
+        // l0 -> l1 -> ... -> l40 -> end.txt: resolving l0 follows 41 links.
+        for (i in 0..GuestDocumentPaths.MAX_HOPS) {
+            val next = if (i == GuestDocumentPaths.MAX_HOPS) "end.txt" else "l${i + 1}"
+            link("home/flux/l$i", next)
+        }
+        assertNull(GuestDocumentPaths.resolve(rootfs, "/home/flux/l0", null))
+        // Exactly MAX_HOPS links still resolve.
+        assertEquals(target, GuestDocumentPaths.resolve(rootfs, "/home/flux/l1", null))
+    }
 }

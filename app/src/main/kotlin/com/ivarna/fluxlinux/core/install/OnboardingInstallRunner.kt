@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.ivarna.fluxlinux.core.files.UbuntuFiles
 import com.ivarna.fluxlinux.core.gpu.GpuDriverInstaller
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.service.BaseInstallService
@@ -321,6 +322,8 @@ class OnboardingInstallRunner(private val ctx: Context) {
         if (abortIfCancelled(gen, phases, onProgress)) return
         // Termux-style ~/storage links exist right after setup.
         runCatching { GuestStorageLinks.ensure(appCtx, distroId) }
+        // The Ubuntu file-manager roots appear once the rootfs exists; make DocumentsUI re-query.
+        runCatching { UbuntuFiles.notifyRootsChanged(appCtx) }
         StateManager.setDistroInstalled(appCtx, distroId, true)
         StateManager.setComponentInstalled(appCtx, distroId, "xfce4_desktop", true)
         if (hwOk) {

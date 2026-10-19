@@ -27,7 +27,8 @@ import java.nio.file.attribute.BasicFileAttributes
  *
  * All path work goes through [GuestDocumentPaths]: reads/lists/opens follow guest
  * symlinks guest-style (confined to the container dir or shared storage), while
- * delete/rename/move act on the entry itself, never on a link's target.
+ * delete/rename/move act on the entry itself, never on a link's target. Documents reached
+ * through a link are browse-only, and tree grants never cross a link.
  */
 class UbuntuDocumentsProvider : DocumentsProvider() {
 
@@ -107,14 +108,21 @@ class UbuntuDocumentsProvider : DocumentsProvider() {
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean {
         val parent = GuestDocumentPaths.parse(parentDocumentId) ?: return false
         val doc = GuestDocumentPaths.parse(documentId) ?: return false
-        return GuestDocumentPaths.isChild(parent, doc)
+        // A tree grant never crosses a link (e.g. "Ubuntu home" must not reach shared storage).
+        return GuestDocumentPaths.isChildWithoutLink(rootfs, parent, doc)
     }
 
     // ---- content -----------------------------------------------------------------------
 
     override fun openDocument(documentId: String, mode: String, signal: CancellationSignal?): ParcelFileDescriptor {
         val file = resolve(parse(documentId))
-        if (file.isDirectory) throw FileNotFoundException("Is a directory: $documentId")
+        val attrs = try {
+            Files.readAttributes(file.toPath(), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        } catch (e: IOException) {
+            throw FileNotFoundException("Missing: $documentId")
+        }
+        // FIFOs, sockets and devices could block a binder thread forever.
+        if (!attrs.isRegularFile) throw FileNotFoundException("Not a regular file: $documentId")
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode))
     }
 
@@ -142,6 +150,7 @@ class UbuntuDocumentsProvider : DocumentsProvider() {
     override fun deleteDocument(documentId: String) {
         val doc = parse(documentId)
         if (doc.isRoot) throw UnsupportedOperationException("Cannot delete a root")
+        requireNotThroughLink(doc, "delete")
         if (!GuestDocumentPaths.deleteEntry(rootfs, guestPath(doc), sharedRoot)) {
             throw FileNotFoundException("Cannot delete $documentId")
         }
@@ -155,6 +164,7 @@ class UbuntuDocumentsProvider : DocumentsProvider() {
     override fun renameDocument(documentId: String, displayName: String): String {
         val doc = parse(documentId)
         if (doc.isRoot) throw UnsupportedOperationException("Cannot rename a root")
+        requireNotThroughLink(doc, "rename")
         val name = sanitize(displayName)
         val entry = entry(doc)
         val parent = GuestDocumentPaths.parentOf(doc) ?: throw FileNotFoundException(documentId)
@@ -172,6 +182,7 @@ class UbuntuDocumentsProvider : DocumentsProvider() {
         val target = parse(targetParentDocumentId)
         if (src.isRoot) throw UnsupportedOperationException("Cannot move a root")
         if (src.rootId != target.rootId) throw UnsupportedOperationException("Move only within one root")
+        requireNotThroughLink(src, "move")
         val entry = entry(src)
         val dir = targetDirOutside(src, target)
         val name = uniqueIn(dir, entry)
@@ -208,7 +219,18 @@ class UbuntuDocumentsProvider : DocumentsProvider() {
         GuestDocumentPaths.resolve(rootfs, guestPath(doc), sharedRoot)
             ?: throw FileNotFoundException("Unresolvable: $doc")
 
-    /** Host file of the entry itself (parent resolved, final component never followed). */
+    /**
+     * Refuses a destructive [op] on a document reached through a link: its data belongs to
+     * the link's target (e.g. shared storage via `~/storage/shared`), so it is browse-only.
+     */
+    private fun requireNotThroughLink(doc: GuestDocumentPaths.DocId, op: String) {
+        val path = guestPath(doc)
+        if (GuestDocumentPaths.traversesLink(rootfs, path)) {
+            throw UnsupportedOperationException("Cannot $op $path: reached through a link (browse-only)")
+        }
+    }
+
+    /** Host file of the entry itself (parent resolved, final component never followed; never an anchor). */
     private fun entry(doc: GuestDocumentPaths.DocId): File {
         val file = GuestDocumentPaths.resolveEntry(rootfs, guestPath(doc), sharedRoot)
         if (file == null || !Files.exists(file.toPath(), LinkOption.NOFOLLOW_LINKS)) {
@@ -270,16 +292,16 @@ class UbuntuDocumentsProvider : DocumentsProvider() {
         val writable = target?.canWrite() == true
         val name = displayName(doc)
         val writableParent = !doc.isRoot && (parentWritable ?: entryFile.parentFile?.canWrite() == true)
+        // Reached through a link: browse-only (no delete/rename/move), so a client-driven
+        // recursive move or delete can never empty a link's target such as shared storage.
+        val removable = writableParent && !GuestDocumentPaths.traversesLink(rootfs, path)
 
         var flags = 0
-        if (writableParent) {
-            flags = flags or Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME
-            if (target != null) {
-                flags = flags or Document.FLAG_SUPPORTS_MOVE or Document.FLAG_SUPPORTS_COPY
-                if (!isDir && writable) flags = flags or Document.FLAG_SUPPORTS_WRITE
-            }
-        } else if (target != null && !doc.isRoot) {
+        if (removable) flags = flags or Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME
+        if (target != null && !doc.isRoot) {
             flags = flags or Document.FLAG_SUPPORTS_COPY
+            if (removable) flags = flags or Document.FLAG_SUPPORTS_MOVE
+            if (writableParent && !isDir && writable) flags = flags or Document.FLAG_SUPPORTS_WRITE
         }
         if (isDir && writable) flags = flags or Document.FLAG_DIR_SUPPORTS_CREATE
 

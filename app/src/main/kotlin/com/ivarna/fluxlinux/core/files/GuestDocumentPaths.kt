@@ -19,6 +19,11 @@ import java.nio.file.Path
  * resolved path is confined to the container dir or the shared storage root. Operations
  * on an entry itself (delete/rename/move) use [resolveEntry], which resolves only the
  * PARENT, so a symlink entry is acted on as a link and never through its target.
+ *
+ * Anything reached THROUGH a link ([traversesLink]) is browse-only: it may be read,
+ * opened, written and created in, but never deleted, renamed or moved, and a tree grant
+ * never extends across a link. Otherwise a client-driven recursive move/delete of a
+ * folder holding `~/storage/shared` would empty the device's shared storage.
  */
 object GuestDocumentPaths {
     const val ROOT_HOME = "ubuntu_home"
@@ -78,6 +83,30 @@ object GuestDocumentPaths {
         parent.rootId == doc.rootId && doc.relPath != parent.relPath &&
             (parent.isRoot || doc.relPath.startsWith(parent.relPath + "/"))
 
+    /**
+     * [isChild] for tree grants: false when [doc] is reached through a link, so a grant on a
+     * Ubuntu root never extends to a link's target (e.g. shared storage via `storage/shared`).
+     */
+    fun isChildWithoutLink(rootfs: File, parent: DocId, doc: DocId): Boolean =
+        isChild(parent, doc) && !traversesLink(rootfs, guestPath(rootBase(rootfs, doc.rootId), doc))
+
+    /**
+     * True when any NON-final component of [guestPath] is a symlink, walking lexically from
+     * the rootfs without following anything. Such an entry is reached through a link and is
+     * browse-only. The link itself (the final component) is not "through" a link: deleting
+     * or renaming it only unlinks it. Fails closed (true) on `..` or NUL components.
+     */
+    fun traversesLink(rootfs: File, guestPath: String): Boolean {
+        val names = guestPath.split('/').filter { it.isNotEmpty() && it != "." }
+        if (names.any { it == ".." || '\u0000' in it }) return true
+        var cur = rootfs.toPath()
+        for (name in names.dropLast(1)) {
+            cur = cur.resolve(name)
+            if (Files.isSymbolicLink(cur)) return true
+        }
+        return false
+    }
+
     /** Guest base path of a root: home is `/home/flux`, falling back to `/root` when missing. */
     fun rootBase(rootfs: File, rootId: String): String = when (rootId) {
         ROOT_HOME -> if (resolve(rootfs, GUEST_HOME, null)?.isDirectory == true) GUEST_HOME else GUEST_ROOT_HOME
@@ -116,7 +145,8 @@ object GuestDocumentPaths {
 
     /**
      * Host path of the entry itself: the parent is resolved guest-style, the final
-     * component is NOT followed. Null for a guest root ("/") or unresolvable parent.
+     * component is NOT followed. Null for a guest root ("/"), an unresolvable parent, or
+     * when the entry would be an anchor (the rootfs, its container, or the shared root).
      */
     fun resolveEntry(rootfs: File, guestPath: String, sharedStorageRoot: File?): File? {
         val ctx = Ctx.of(rootfs, sharedStorageRoot) ?: return null
@@ -125,12 +155,12 @@ object GuestDocumentPaths {
 
     /**
      * Deletes the entry at [guestPath] (never a link's target; recursion via
-     * [SafeFiles.deleteTree], which never traverses links). Refuses guest `/`.
+     * [SafeFiles.deleteTree], which never traverses links). Refuses guest `/`, anchors,
+     * and anything reached through a link ([traversesLink]).
      */
     fun deleteEntry(rootfs: File, guestPath: String, sharedStorageRoot: File?): Boolean {
-        val ctx = Ctx.of(rootfs, sharedStorageRoot) ?: return false
-        val entry = ctx.walk(ctx.rootfs, ctx.rootfs, guestPath, followLast = false) ?: return false
-        if (ctx.isAnchor(entry.toPath())) return false
+        if (traversesLink(rootfs, guestPath)) return false
+        val entry = resolveEntry(rootfs, guestPath, sharedStorageRoot) ?: return false
         return SafeFiles.deleteTree(entry)
     }
 
@@ -183,7 +213,10 @@ object GuestDocumentPaths {
                 }
             }
             val result = cur.normalize()
-            return if (confined(result)) result.toFile() else null
+            if (!confined(result)) return null
+            // An entry is acted on itself (rename/move/delete): never the rootfs, container or shared root.
+            if (!followLast && isAnchor(result)) return null
+            return result.toFile()
         }
 
         /** Maps an absolute link target to (new anchor, remaining components), or null if unavailable. */
