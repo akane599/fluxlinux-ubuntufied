@@ -17,8 +17,10 @@ class GuestRootfsShellTest {
         File(root, "bin").mkdirs()
         File(root, "bin/busybox").writeBytes(byteArrayOf(0x7f, 0x45, 0x4c, 0x46))
         Files.createSymbolicLink(File(root, "bin/sh").toPath(), File("/bin/busybox").toPath())
-        // Host-style exists() is false for absolute guest symlink
-        assertFalse(File(root, "bin/sh").exists())
+        // Host-style exists() resolves the absolute target against the HOST:
+        // false on Android, true on a dev box that ships /bin/busybox. The
+        // probe must say "installed" either way, so do not assert exists().
+        assertTrue(Files.isSymbolicLink(File(root, "bin/sh").toPath()))
         assertTrue(TerminalLauncher.guestRootfsHasShell(root))
     }
 
