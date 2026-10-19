@@ -760,6 +760,22 @@ _flux_git_clone() {
     _flux_run "$_secs" git clone --depth 1 --single-branch "$_url" "$_dest"
 }
 
+# Ubuntu (proot + chroot) gets the extended oh-my-zsh plugin set.
+_flux_is_ubuntu() {
+    grep -qE '^ID="?ubuntu"?$' /etc/os-release 2>/dev/null
+}
+
+# Ubuntu zsh plugin tools (best-effort, bounded, one package at a time).
+# Keep in sync with ZshPluginSet.APT_PACKAGES (core/terminal/ZshPluginSet.kt).
+if _flux_is_ubuntu; then
+    echo "FluxLinux: Installing zsh plugin tools (fzf zoxide command-not-found)…"
+    for _zp in fzf zoxide command-not-found; do
+        _flux_run 300 env DEBIAN_FRONTEND=noninteractive \
+            apt-get install -y --no-install-recommends "$_zp" \
+            || echo "FluxLinux: WARNING: $_zp install failed — its zsh plugin stays off"
+    done
+fi
+
 echo "FluxLinux: Installing Oh My Zsh..."
 OMZ_OK=0
 if [ -f "$USER_HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
@@ -822,6 +838,20 @@ if [ "$OMZ_OK" = "1" ]; then
         fi
     else
         echo "FluxLinux: zsh-syntax-highlighting already present — skip"
+    fi
+    # Ubuntu only — keep in sync with ZshPluginSet.EXTERNAL_PLUGIN_URLS.
+    if _flux_is_ubuntu; then
+        if [ ! -f "$ZSH_CUSTOM/plugins/fzf-tab/fzf-tab.plugin.zsh" ]; then
+            echo "FluxLinux: Shallow clone fzf-tab (timeout 60s)…"
+            if ! _flux_git_clone "https://github.com/Aloxaf/fzf-tab.git" \
+                "$ZSH_CUSTOM/plugins/fzf-tab" 60 \
+                || [ ! -f "$ZSH_CUSTOM/plugins/fzf-tab/fzf-tab.plugin.zsh" ]; then
+                echo "FluxLinux: WARNING: fzf-tab clone failed or timed out"
+                _flux_safe_rm_tree "$ZSH_CUSTOM/plugins/fzf-tab"
+            fi
+        else
+            echo "FluxLinux: fzf-tab already present — skip"
+        fi
     fi
     if [ ! -s "$ZSH_CUSTOM/themes/agnosterzak.zsh-theme" ]; then
         echo "FluxLinux: Installing agnosterzak theme…"
@@ -924,8 +954,44 @@ if [ -f "$ZSH/oh-my-zsh.sh" ]; then
   DISABLE_UPDATE_PROMPT=true
   DISABLE_AUTO_UPDATE=true
   ZSH_DISABLE_COMPFIX=true
+ZSHEOF
+if _flux_is_ubuntu; then
+    # Verbatim copy of ZshPluginSet.managedBlock() — ZshPluginSetTest enforces it.
+    cat >> "$ZSHRC" << 'ZSHEOF'
+  # flux-zsh-plugins v1: managed by FluxLinux (ZshPluginSet.kt). Edit freely; Flux never rewrites it.
+  _flux_zc="${ZSH_CUSTOM:-$ZSH/custom}"
+  plugins=()
+  for _flux_p in git extract colored-man-pages copypath copyfile command-not-found fzf zoxide fzf-tab zsh-autosuggestions zsh-syntax-highlighting history-substring-search; do
+    [[ -d "$_flux_zc/plugins/$_flux_p" || -d "$ZSH/plugins/$_flux_p" ]] || continue
+    case "$_flux_p" in
+      fzf|fzf-tab) (( $+commands[fzf] )) || continue ;;
+      zoxide) (( $+commands[zoxide] )) || continue ;;
+      command-not-found) [[ -x /usr/lib/command-not-found || -x /usr/share/command-not-found/command-not-found ]] || continue ;;
+    esac
+    plugins+=("$_flux_p")
+  done
+  unset _flux_zc _flux_p
+  source "$ZSH/oh-my-zsh.sh"
+  if (( $+functions[history-substring-search-up] )); then
+    bindkey '^[[A' history-substring-search-up
+    bindkey '^[[B' history-substring-search-down
+    bindkey '^[OA' history-substring-search-up
+    bindkey '^[OB' history-substring-search-down
+    if [[ -n "${terminfo[kcuu1]}" ]]; then
+      bindkey "${terminfo[kcuu1]}" history-substring-search-up
+    fi
+    if [[ -n "${terminfo[kcud1]}" ]]; then
+      bindkey "${terminfo[kcud1]}" history-substring-search-down
+    fi
+  fi
+ZSHEOF
+else
+    cat >> "$ZSHRC" << 'ZSHEOF'
   plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
   source "$ZSH/oh-my-zsh.sh"
+ZSHEOF
+fi
+cat >> "$ZSHRC" << 'ZSHEOF'
 fi
 
 # Package managers need root. NOPASSWD sudo is configured for flux.

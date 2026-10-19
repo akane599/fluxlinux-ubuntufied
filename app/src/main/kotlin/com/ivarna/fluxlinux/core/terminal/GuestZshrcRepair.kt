@@ -130,15 +130,63 @@ fi
 """.trimStart()
 
     fun repairIfNeeded(ctx: Context, method: String, distroId: String? = null) {
+        val prefs = ctx.getSharedPreferences(GuestRepairCache.PREFS, Context.MODE_PRIVATE)
+        repairProfileIfNeeded(ctx, prefs, method, distroId)
+        if (ZshPluginSet.appliesTo(distroId)) {
+            upgradeZshPluginsIfNeeded(ctx, prefs, method, distroId)
+            if (method == "proot") {
+                // Background, best-effort: fzf-tab clone + guest apt deps.
+                runCatching {
+                    com.ivarna.fluxlinux.core.install.ProotZshBootstrap
+                        .ensurePluginDepsAsync(ctx, resolveProotName(distroId))
+                }
+            }
+        }
+    }
+
+    /**
+     * Existing Ubuntu installs: swap the Flux default plugin line for the
+     * [ZshPluginSet] block once (own versioned flag, so installs that already
+     * cached the profile pass still get it). Customized lines stay untouched.
+     */
+    private fun upgradeZshPluginsIfNeeded(
+        ctx: Context,
+        prefs: android.content.SharedPreferences,
+        method: String,
+        distroId: String?,
+    ) {
+        val key = ZshPluginSet.upgradeKey(distroId ?: method)
+        if (prefs.getBoolean(key, false)) return
+        val zshrc = resolveZshrc(ctx, method, distroId) ?: return
+        try {
+            when (ZshPluginSet.upgradeZshrcFile(zshrc)) {
+                ZshPluginSet.UpgradeResult.UPGRADED -> {
+                    Log.i(TAG, "Upgraded zsh plugin set in ${zshrc.absolutePath}")
+                    prefs.edit().putBoolean(key, true).apply()
+                }
+                ZshPluginSet.UpgradeResult.UNCHANGED -> prefs.edit().putBoolean(key, true).apply()
+                ZshPluginSet.UpgradeResult.SKIPPED -> Unit
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "zsh plugin upgrade failed: ${e.message}")
+        }
+    }
+
+    private fun repairProfileIfNeeded(
+        ctx: Context,
+        prefs: android.content.SharedPreferences,
+        method: String,
+        distroId: String?,
+    ) {
         // Versioned cache (proot-opt-01): after one successful verification pass
         // per distro, later session opens skip the file reads + regex sweeps.
         val cacheKey = GuestRepairCache.zshrcKey(distroId ?: method)
-        val prefs = ctx.getSharedPreferences(GuestRepairCache.PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(cacheKey, false)) return
         val zshrc = resolveZshrc(ctx, method, distroId) ?: return
         val rootfs = zshrc.parentFile?.parentFile?.parentFile // home/flux/.zshrc → rootfs
         val isApkGuest = isApkGuest(distroId)
         val needsPmWrap = !isApkGuest && isGlibcGuest(distroId)
+        val ubuntuPlugins = ZshPluginSet.appliesTo(distroId)
         try {
             if (zshrc.isFile) {
                 val text = zshrc.readText()
@@ -146,7 +194,7 @@ fi
                     if (!zshrc.canWrite()) {
                         Log.w(TAG, "zshrc needs repair but not writable: ${zshrc.absolutePath}")
                     } else {
-                        zshrc.writeText(profileFor(isApkGuest, needsPmWrap))
+                        zshrc.writeText(profileFor(isApkGuest, needsPmWrap, ubuntuPlugins))
                         Log.i(TAG, "Repaired defensive .zshrc at ${zshrc.absolutePath}")
                     }
                 } else if (isApkGuest && !text.contains("apk() {") && zshrc.canWrite()) {
@@ -169,7 +217,7 @@ fi
                 if (!home.canWrite() && !zshrc.canWrite()) {
                     Log.w(TAG, "cannot create .zshrc (home not writable): ${home.absolutePath}")
                 } else {
-                    zshrc.writeText(profileFor(isApkGuest, needsPmWrap))
+                    zshrc.writeText(profileFor(isApkGuest, needsPmWrap, ubuntuPlugins))
                     Log.i(TAG, "Created defensive .zshrc at ${zshrc.absolutePath}")
                 }
             }
@@ -322,10 +370,22 @@ exit 1
         }
     }
 
-    private fun profileFor(isApkGuest: Boolean, glibcPm: Boolean = false): String = when {
-        isApkGuest -> DEFENSIVE_ZSHRC + "\n" + ALPINE_APK_WRAPPER
-        glibcPm -> DEFENSIVE_ZSHRC + "\n" + GLIBC_PM_WRAPPER
-        else -> DEFENSIVE_ZSHRC
+    /** Ubuntu defensive profile: same shape, plugin line swapped for the [ZshPluginSet] block. */
+    private val UBUNTU_DEFENSIVE_ZSHRC: String by lazy {
+        ZshPluginSet.upgradeManagedZshrc(DEFENSIVE_ZSHRC) ?: DEFENSIVE_ZSHRC
+    }
+
+    private fun profileFor(
+        isApkGuest: Boolean,
+        glibcPm: Boolean = false,
+        ubuntuPlugins: Boolean = false,
+    ): String {
+        val base = if (ubuntuPlugins) UBUNTU_DEFENSIVE_ZSHRC else DEFENSIVE_ZSHRC
+        return when {
+            isApkGuest -> base + "\n" + ALPINE_APK_WRAPPER
+            glibcPm -> base + "\n" + GLIBC_PM_WRAPPER
+            else -> base
+        }
     }
 
     private fun isGlibcGuest(distroId: String?): Boolean {
