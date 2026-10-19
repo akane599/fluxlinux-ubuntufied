@@ -11,3 +11,5 @@ priority: 10
 - XML Views exist only in legacy code: ViewBinding, lifecycle-aware observers; no `findViewById`.
 
 - Adopted projects keep their existing architecture, collection types, DI, formatter and screenshot framework. Apply kit conventions to new work where compatible; adopting a new dependency or migrating an existing pattern needs a scoped ticket. Missing `@PreviewTest` support is not permission to install a new plugin.
+
+- Symlinks: recursive delete/copy/walk/chmod must go through `core/system/SafeFiles` (NOFOLLOW); never `File.deleteRecursively`/`copyRecursively`/`walk*`/`listFiles` recursion. Tests build links only inside `Files.createTempDirectory` fixtures pointing at temp victims, never at `user.home`, `/storage`, `/sdcard` or real dirs, and clean up only via `SafeFiles.deleteTree`.

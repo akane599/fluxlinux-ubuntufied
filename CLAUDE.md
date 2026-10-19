@@ -34,6 +34,8 @@ Android, developed on Ubuntu from the CLI. **If the STACK block still has `<plac
 - Fresh checkout prerequisites (the build fails without them):
   - termux-x11 C sources: `git submodule update --init --depth 1 -- $(git config -f .gitmodules --get-regexp 'submodule\.termux-x11.*\.path' | awk '{print $2}')`. Skip `native/termux-packages`, which is huge and only needed to rebuild debs.
   - Host bootstrap (gitignored, ~124 MB, built from the tracked `native/output/<appId>/*.deb`): `python3 scripts/assemble_bootstrap.py --package-name <appId> --mode full && bash scripts/verify_bootstrap.sh <appId>`. `:app:packageHostAssets<Flavor>` fails closed without it.
+  - Repo-local git identity, or executor worktrees can't commit: `git config user.name akane && git config user.email hackistek@gmail.com`
+- Executor worktrees get the gitignored `bootstrap.tar` and the termux-x11 sources from the board's `worktreeSetup` (copied from the main checkout); if a worktree build fails on missing assets, check that the main checkout has them.
 - Release: follow `.agent/workflows/fdroid-update.md` (commit-identity rule in live-rules). F-Droid metadata: `com.ivarna.fluxlinux.yml` (UpdateCheckMode: Tags).
 
 ## Parallel execution

@@ -14,7 +14,7 @@
     },
     {
       "path": "rules/android-code.md",
-      "hash": "2e619c89ac637eb7e4be3aaf979785c403bef8664de3bca68ad7b4884b34b537",
+      "hash": "588515ae30f5ca4bf07f8ce94006c2518213f955e44923b3724c13a252a1d123",
       "description": "Kotlin and Jetpack Compose conventions",
       "globs": [],
       "dirs": [],
@@ -25,7 +25,7 @@
     },
     {
       "path": "rules/android-orchestration.md",
-      "hash": "10d6e7a2fea27f2790f980cef94dbbd06baf2afa80a1c0363640a369a2dcf6d8",
+      "hash": "ca094b240435c4af6b766c3ffa1836dc4bb8830760caaacd5da77d5ecbc77e3d",
       "description": "Android ticket ownership, verification and native Claude routing through Sidequest profile android-kit-claude-max",
       "globs": [],
       "dirs": [],
@@ -47,7 +47,7 @@
     },
     {
       "path": "rules/release-commit-identity.md",
-      "hash": "a4b92cb8968efc8d35413a1402634bec6e300c612b6eac4ea276ac020a0b8080",
+      "hash": "ed9e28d6157c74a89b53e01793ef01268bf08a951f321d34e9b81d854e12b174",
       "description": "FluxLinux release commit identity",
       "globs": [
         "fastlane/metadata/**",
