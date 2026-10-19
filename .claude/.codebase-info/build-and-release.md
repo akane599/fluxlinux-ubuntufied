@@ -1,5 +1,5 @@
 # Build and release
-*Last Updated: 2026-10-19*
+*Last Updated: 2026-10-20*
 
 ## Toolchain and versions (`gradle/libs.versions.toml`, `app/build.gradle.kts`)
 - Gradle 8.14, AGP 8.7.3, Kotlin 2.0.20, JDK target 17. compileSdk/targetSdk 36, minSdk 26. NDK 29.0.14206865, arm64-v8a only.
@@ -20,8 +20,12 @@ Flavor source sets hold only assets and jniLibs; there are no Kotlin differences
 ## Reproducible builds
 - Archives use no timestamps and a fixed file order.
 - `app/fix-baseline-profiles.gradle` disables ART/startup profiles.
-- `dependenciesInfo` is off, and release excludes `META-INF/**` and `*.prof`.
-- Release signs only if the root `keystore.properties` exists (gitignored; never read it). R8 minify and shrink are on.
+- `dependenciesInfo` is off. Release excludes `META-INF/**` and `*.prof`, except that `vcsInfo` embeds `META-INF/version-control-info.textproto` when `.git/HEAD` is a real dir. A linked worktree logs a warning and omits it, so cut releases from the main checkout.
+- Release signs only if the root `keystore.properties` exists (gitignored; never read it). This fork signs with its own key in `~/.config/fluxlinux-ubuntufied/signing/`. R8 minify and shrink are on.
+- Size (v2.1.0, about 65 MB ivarna release):
+  - `bootstrap.tar` is deflated in the APK (`noCompress` is only `xz`).
+  - Native libs are stripped with NDK `29.0.14206865`.
+  - `resourceConfigurations = ["en"]`.
 
 ## Release
 - F-Droid recipe: `com.ivarna.fluxlinux.yml`. `UpdateCheckMode: Tags`, so a tag publishes. The 2.0.1 build uses `submodules: true`, `ndk: r29` and `NO_DOCKER=1` and runs `build_packages_for_appid.sh` → `build_loader_apk.sh` → `build_guest_helpers.sh` → `assemble_bootstrap.py`, with `scandelete`/`scanignore` lists.

@@ -1,7 +1,7 @@
 # FluxLinux codebase map
-*Last Updated: 2026-10-19*
+*Last Updated: 2026-10-20*
 
-FluxLinux runs full Linux desktops on Android without root via PRoot, or with root via chroot. It covers 12 distros, with XFCE/KDE over an embedded Termux-X11 server and PulseAudio. This repo is the `akane599/fluxlinux-ubuntufied` fork of `abhay-byte/fluxlinux`. It is a single-Activity Compose app (`:app`) with three vendored Termux-derived modules and a native host-bootstrap pipeline (`native/`, `scripts/`).
+FluxLinux runs full Linux desktops on Android without root via PRoot, or with root via chroot. It covers 12 distros, with XFCE/KDE over an embedded Termux-X11 server and PulseAudio. This repo is the `akane599/fluxlinux-ubuntufied` fork of `abhay-byte/fluxlinux`. Since v2.1.0 it is Ubuntu PRoot-first: Ubuntu-only onboarding, an Ubuntu dashboard, auto-start of the desktop, a SAF DocumentsProvider and `~/storage` links. It is a single-Activity Compose app (`:app`) with three vendored Termux-derived modules and a native host-bootstrap pipeline (`native/`, `scripts/`).
 
 The app embeds its own Termux-style host prefix: `bootstrap.tar` is extracted to `filesDir/usr`, and `libbash`/`libproot`/`libloader` come from jniLibs. Guest rootfs tarballs are downloaded at install time from the GitHub release tag `rootfs`. Shell scripts in `app/src/main/assets/scripts/` do most of the guest-side work.
 

@@ -1,5 +1,5 @@
 # Modules
-*Last Updated: 2026-10-19*
+*Last Updated: 2026-10-20*
 
 ## Gradle modules
 | Module | Lang | Purpose | Used by |
@@ -21,7 +21,8 @@
 | `core/root`, `core/chroot`, `core/proot` | su/BusyBox, and chroot/proot container state, size, settings, kill/process mgmt | `RootShell`, `ChrootPaths`, `BusyBoxPaths`, `ChrootDetection`, `ChrootSettingsModel`, `ProotSettingsModel`, `*SizeManager`, `*InfoStore` |
 | `core/gpu` | GPU drivers (VirGL, Panvk) | `GpuDriverInstaller`, `PanvkInstaller`, `DriverRelease` |
 | `core/legacy` | Bridge to v1.x Termux-hosted distros | `LegacyTermuxBridge`, `LegacyTermuxStore` |
-| `core/system` | Android workarounds | `PhantomProcessFixer`, `SharedStorageAccess` |
+| `core/system` | Android workarounds, file safety | `PhantomProcessFixer`, `SharedStorageAccess`, `SafeFiles` (no-follow tree ops), `GuestStorageLinks` (`~/storage`) |
+| `core/files` | SAF access to the Ubuntu rootfs | `UbuntuDocumentsProvider`, `GuestDocumentPaths` (pure, unit-tested path/link resolution), `UbuntuFiles` (authority, open, notifyRootsChanged) |
 | `core/data`, `core/model` | Distro catalog and Termux intent and script layer | `DistroRepository`, `Distro`, `DistroSpec`, `ScriptManager`, `TermuxIntentFactory` |
-| `core/utils` | Prefs, misc | `StateManager`, `TerminalPreferences`, `ThemePreferences`, `TermuxX11Preferences`, `EmbeddedX11`, `InstallationQueueManager`, `LocalInstallServer`, `LogcatStreamer` |
+| `core/utils` | Prefs, misc | `StateManager`, `UbuntuLaunchPreferences`, `TerminalPreferences`, `ThemePreferences`, `TermuxX11Preferences`, `EmbeddedX11`, `InstallationQueueManager`, `LocalInstallServer`, `LogcatStreamer` |
 | `ui/*` | Compose UI | `screens/`, `onboarding/`, `components/` (Glass* design components), `terminal/` (extra keys, IME), `install/`, `theme/` (Color/Theme/Type) |

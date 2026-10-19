@@ -1,11 +1,11 @@
 # Architecture
-*Last Updated: 2026-10-19*
+*Last Updated: 2026-10-20*
 
 Paths below abbreviate `app/src/main/kotlin/com/ivarna/fluxlinux/` as `KT/`.
 
 ## Layers
 ```
-MainActivity (manual Screen enum + BottomTab)          ui/screens, ui/onboarding, ui/components, ui/theme
+MainActivity (manual Screen enum; Ubuntu auto-start)          ui/screens, ui/onboarding, ui/components, ui/theme
         │  collectAsState on singleton StateFlows
         ▼
 core/* singleton `object`s (no ViewModels, no DI)
@@ -14,19 +14,20 @@ core/* singleton `object`s (no ViewModels, no DI)
   desktop/   GUI session start/stop/readiness            service/  foreground services
   root/ chroot/ proot/   su, BusyBox, per-container state  gpu/  VirGL/Panvk drivers
   utils/     SharedPreferences wrappers, EmbeddedX11, logcat
+  files/     SAF DocumentsProvider for the Ubuntu rootfs    system/  SafeFiles, ~/storage links, storage perms
         │  ProcessBuilder via ShellCommandRunner / RootShell
         ▼
 Host prefix  filesDir/usr  (from bootstrap.tar + jniLibs libbash/libproot/libloader)
         │  proot / chroot
         ▼
-Guest rootfs (12 distros, downloaded from GitHub release tag `rootfs`)
+Guest rootfs (Ubuntu-first; 12 distros supported, downloaded from GitHub release tag `rootfs`)
         ▲ X11 via in-process Termux-X11 server (:termux-x11)   ▲ audio via host PulseAudio
 ```
 
 ## Key flows
 **First run (onboarding → host → rootfs)**
 1. `KT/ui/onboarding/OnboardingFlowScreen.kt` calls `TerminalLauncher.prepareHost`.
-2. `KT/core/terminal/BootstrapInstaller.kt` `ensureExtracted` untars the asset `bootstrap.tar` with a hand-rolled tar reader, preserving existing proot containers.
+2. `KT/core/terminal/BootstrapInstaller.kt` `ensureExtracted` untars the asset `bootstrap.tar` with a hand-rolled tar reader. It preserves existing proot containers by moving `usr/var/lib/proot-distro` aside to `.preserved_proot_distro`. `recoverStrandedAside` restores an aside left by an interrupted run. An existing aside is never deleted; it is renamed with a timestamp instead.
 3. `HostScriptDeployer.deployScripts` runs, then `setup_termux.sh`.
 4. `KT/core/install/OnboardingInstallRunner.kt` drives `runProot`/`runChroot` phases from `BaseDesktopInstallPlan`.
 5. `RootfsDownloader.ensurePresent` downloads the rootfs and checks SHA-256 and free space against `DistroInstallProfile`/`PinnedReleaseArchive` pins.
@@ -45,6 +46,11 @@ Guest rootfs (12 distros, downloaded from GitHub release tag `rootfs`)
 3. `SessionRegistry` keeps sessions alive through `AppTerminalService`.
 4. Variants: host shell (`HostCommandBuilder`), install, uninstall, component and root-script sessions.
 
+**File access (v2.1.0)**
+1. `KT/core/system/GuestStorageLinks.kt` `ensure(ctx, "ubuntu")` creates Termux-style `~/storage/{shared,downloads,documents,dcim,pictures,music,movies}` links to `/storage/emulated/0[/...]` in `/home/flux` and `/root`. It is idempotent and never deletes or replaces anything. It is called from Home, `GuestSessionFactory`, `DesktopLauncher` and `OnboardingInstallRunner`.
+2. `KT/core/system/SharedStorageAccess.kt` handles permission state and requests: All files access on ivarna API 30+, legacy READ/WRITE below 30.
+3. `UbuntuDocumentsProvider` serves the rootfs to SAF. `KT/core/files/GuestDocumentPaths.kt` resolves guest-style symlinks confined to the rootfs, the container and shared storage. Docs reached through a symlinked directory (`traversesLink`) are browse/create only: no delete, move or rename, and no tree-grant child.
+
 **Settings**: SharedPreferences only. See [patterns.md](patterns.md).
 
 ## Boundaries and invariants
@@ -52,5 +58,6 @@ Guest rootfs (12 distros, downloaded from GitHub release tag `rootfs`)
 - Host binaries are exec'd from `nativeLibraryDir` because of W^X, so `jniLibs.useLegacyPackaging = true` must stay.
 - `FluxApp.onCreate` refreshes the host env because `nativeLibraryDir` changes on every app update.
 - Legacy v1.x Termux-based distros are bridged by `KT/core/legacy/`, and `Screen.SETTINGS_LEGACY_TERMUX` exposes them.
+- **Never follow symlinks in recursive file ops.** Guest homes link `~/storage/*` to shared storage. Use `KT/core/system/SafeFiles.kt` (`deleteTree`, `copyTree`, `walkNoFollow`, `isSymlink`; java.nio NOFOLLOW_LINKS). `SymlinkSafetyContractTest` fails on `deleteRecursively`, `copyRecursively`, `walkTopDown` and `File.walk()` in production code.
 
 Related: [entry-points.md](entry-points.md), [modules.md](modules.md).
