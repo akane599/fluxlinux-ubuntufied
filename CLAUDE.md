@@ -1,16 +1,16 @@
 <!-- android-kit -->
 # CLAUDE.md — FluxLinux (ubuntufied fork)
 
-Runs full Linux desktops (12 distros, PRoot or chroot, XFCE4 over Termux-X11, PulseAudio) on Android, for users who want a desktop Linux on their phone/tablet without root.
-Android, developed on Ubuntu from the CLI. **If the STACK block still has `<placeholders>`, run `/bootstrap` first.**
+Runs an Ubuntu 26.04 XFCE desktop (PRoot, no root; chroot with root) over Termux-X11 with PulseAudio on Android. This fork is Ubuntu-first: setup installs Ubuntu and opening the app starts its desktop; other distros' code and existing installs remain but aren't in the main UI.
+Android, developed on Ubuntu from the CLI.
 
 <!-- STACK:BEGIN (filled by /bootstrap) -->
 - Origin: fork of abhay-byte/fluxlinux (origin = akane599/fluxlinux-ubuntufied) @ 7f6e61d · Integration branch: main
-- Language: mixed — 162 Kotlin / 45 Java (:app is all Kotlin; Java only in :termux-x11, :terminal-emulator, :stub) + C/CMake (:termux-x11 X server) · UI: Compose (+7 XML layouts) · screenshot tests: compose-preview (ivarna flavor)
+- Language: mixed — Kotlin (:app is all Kotlin; Java only in :termux-x11, :terminal-emulator, :stub) + C/CMake (:termux-x11 X server) · UI: Compose (+7 XML layouts) · screenshot tests: compose-preview (ivarna flavor)
 - JDK target 17 · Gradle 8.14 · AGP 8.7.3 · Kotlin 2.0.20 · compileSdk 36 · targetSdk 36 · minSdk 26
 - Modules: :app :termux-x11 :terminal-emulator :stub · Architecture: single-activity Compose, no DI framework · DI/DB/Net: none / none / okhttp
 - Flavors (dimension `store`): `ivarna` = com.ivarna.fluxlinux (F-Droid/GitHub, arm64-v8a only) · `zenithblue` = com.zenithblue.fluxlinux (Play) · Launcher: .MainActivity
-- Baseline: build ok (ivarnaDebug) · 402 unit tests, 0 failures (PROGRESS.md)
+- Baseline: build ok (ivarnaDebug) · 463 unit tests, 0 failures (PROGRESS.md)
 <!-- STACK:END -->
 
 ## How work flows here

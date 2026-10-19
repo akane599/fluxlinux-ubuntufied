@@ -3,7 +3,7 @@
   "rules": [
     {
       "path": "rules/android-build.md",
-      "hash": "b792f5a08b202d1423d4e6fcb337fdddd435ece5eaf767384f5a551e0efa4306",
+      "hash": "9e9eb6f0b4370b85149eaae2757f8f67fda3c8003a36f55ce153fabae2ad6759",
       "description": "Android build, test and dependency rules",
       "globs": [],
       "dirs": [],
@@ -25,12 +25,12 @@
     },
     {
       "path": "rules/android-orchestration.md",
-      "hash": "ca094b240435c4af6b766c3ffa1836dc4bb8830760caaacd5da77d5ecbc77e3d",
+      "hash": "698257f31a7daf3d8a04e6d24758dc4f4e012a2cb4a8f165c264b79c31e427de",
       "description": "Android ticket ownership, verification and native Claude routing through Sidequest profile android-kit-claude-max",
       "globs": [],
       "dirs": [],
       "prompt": [],
-      "priority": 15,
+      "priority": -1,
       "enabled": true,
       "include": []
     },
@@ -47,7 +47,7 @@
     },
     {
       "path": "rules/release-commit-identity.md",
-      "hash": "ed9e28d6157c74a89b53e01793ef01268bf08a951f321d34e9b81d854e12b174",
+      "hash": "8bf140b0122e55e672f22ac7d14f5ea60b0eafcefe357ce6f58d43583f8496c3",
       "description": "FluxLinux release commit identity",
       "globs": [
         "fastlane/metadata/**",

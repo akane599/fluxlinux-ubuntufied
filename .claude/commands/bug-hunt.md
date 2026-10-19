@@ -25,4 +25,4 @@ Find bugs in existing code while Sidequest is active, including within an ongoin
 
 6. **Record:** a "Bug hunt" row in PROGRESS.md's audit table (date, areas, found / fixed). If a bug reveals a convention worth keeping, add it as a live-rule with `add-rule`.
 
-For adopted projects, discover the actual module, build variant and test framework first. The `:app`/`Debug`/Compose screenshot commands above are examples for the generated scaffold, not universal commands. Keep existing Paparazzi, Roborazzi, XML or device-based checks; report unavailable visual validation explicitly.
+For adopted projects, discover the actual module, build variant and test framework first. Keep existing Paparazzi, Roborazzi, XML or device-based checks; report unavailable visual validation explicitly.
