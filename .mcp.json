@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mobile-mcp": {
+      "args": [
+        "-y",
+        "@mobilenext/mobile-mcp@1.0.12"
+      ],
+      "command": "npx"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+compact-checkpoint.md
+settings.local.json
+kit/retired/
+compact-checkpoints/
+kit/backups/
+kit/incoming/
+kit/logs/
+kit/state.json
+kit/manifest.json
+kit/manifest.txt
+kit/conflicts.json

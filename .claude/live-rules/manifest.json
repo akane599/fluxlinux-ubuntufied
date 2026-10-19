@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "path": "rules/android-build.md",
+      "hash": "b792f5a08b202d1423d4e6fcb337fdddd435ece5eaf767384f5a551e0efa4306",
+      "description": "Android build, test and dependency rules",
+      "globs": [],
+      "dirs": [],
+      "prompt": [],
+      "priority": 20,
+      "enabled": true,
+      "include": []
+    },
+    {
+      "path": "rules/android-code.md",
+      "hash": "2e619c89ac637eb7e4be3aaf979785c403bef8664de3bca68ad7b4884b34b537",
+      "description": "Kotlin and Jetpack Compose conventions",
+      "globs": [],
+      "dirs": [],
+      "prompt": [],
+      "priority": 10,
+      "enabled": true,
+      "include": []
+    },
+    {
+      "path": "rules/android-orchestration.md",
+      "hash": "cd5f708988181cd0cc2af6a454e9677dedefdefd10bdf72878e4e9ce2d355123",
+      "description": "Android ticket ownership, verification and native Claude routing through Sidequest profile android-kit-claude",
+      "globs": [],
+      "dirs": [],
+      "prompt": [],
+      "priority": 15,
+      "enabled": true,
+      "include": []
+    },
+    {
+      "path": "rules/push-approval.md",
+      "hash": "dbf2aaa054a800fa470f366570c896b2ca9a18d17d6600fc1d98422d2caeaf53",
+      "description": "Outward git actions need explicit approval",
+      "globs": [],
+      "dirs": [],
+      "prompt": [],
+      "priority": 0,
+      "enabled": true,
+      "include": []
+    },
+    {
+      "path": "rules/release-commit-identity.md",
+      "hash": "a4b92cb8968efc8d35413a1402634bec6e300c612b6eac4ea276ac020a0b8080",
+      "description": "FluxLinux release commit identity",
+      "globs": [
+        "fastlane/metadata/**",
+        "docs/releases/**",
+        "com.ivarna.fluxlinux.yml"
+      ],
+      "dirs": [],
+      "prompt": [
+        "release",
+        "tag",
+        "version bump",
+        "fdroid",
+        "f-droid",
+        "changelog"
+      ],
+      "priority": 0,
+      "enabled": true,
+      "include": []
+    }
+  ]
+}

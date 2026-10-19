@@ -41,3 +41,11 @@ app/release
 .kotlin
 flux.jks
 keystore.properties
+# --- android-kit
+.remember/
+.claude-plugin-config.json
+android-qa-output/
+design/before/
+design/after/
+*.jks
+*.keystore
