@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Welcome -->
+    <string name="onboarding_welcome_tagline">Ubuntu desktop on your phone. No root needed.</string>
+    <string name="onboarding_feature_ubuntu_title">Ubuntu 26.04 with XFCE</string>
+    <string name="onboarding_feature_ubuntu_desc">Setup installs Ubuntu 26.04 with the XFCE desktop using PRoot, so it runs without root.</string>
+
+    <!-- Options -->
+    <string name="onboarding_options_distro_name">Ubuntu 26.04</string>
+    <string name="onboarding_options_distro_desc">XFCE desktop · PRoot, no root needed</string>
+    <string name="onboarding_manifest_rootfs">Ubuntu 26.04 base system</string>
+
+    <!-- Storage access -->
+    <string name="onboarding_storage_title">Access your files</string>
+    <string name="onboarding_storage_intro">Let Ubuntu open and save files on your phone. Once access is on, these folders show up in Ubuntu\'s home, under ~/storage:</string>
+    <string name="onboarding_storage_link_shared">All of your phone\'s storage</string>
+    <string name="onboarding_storage_link_downloads">Your Download folder</string>
+    <string name="onboarding_storage_link_documents">Your Documents folder</string>
+    <string name="onboarding_storage_link_dcim">Camera photos and videos</string>
+    <string name="onboarding_storage_link_pictures">Pictures and screenshots</string>
+    <string name="onboarding_storage_link_music">Music</string>
+    <string name="onboarding_storage_link_movies">Movies</string>
+    <string name="onboarding_storage_file_manager">It works the other way too: your phone\'s file manager can browse Ubuntu\'s home folder.</string>
+    <string name="onboarding_storage_settings_hint">Android opens Settings. Turn on file access for FluxLinux, then come back here.</string>
+    <string name="onboarding_storage_later">You can change this later in Settings › Shared storage.</string>
+    <string name="onboarding_storage_granted">Access granted</string>
+    <string name="onboarding_storage_grant">Grant access</string>
+    <string name="onboarding_storage_skip">Skip for now</string>
+    <string name="onboarding_continue">Continue</string>
+    <string name="onboarding_storage_icon_desc">Shared storage</string>
+
+    <!-- Done -->
+    <string name="onboarding_done_title">Ubuntu is ready</string>
+    <string name="onboarding_done_body">Ubuntu 26.04 with XFCE is installed. Start the desktop, or open a terminal.</string>
+    <string name="onboarding_done_chip">PROOT · NO ROOT</string>
+    <string name="onboarding_done_start_desktop">Start Ubuntu desktop</string>
+    <string name="onboarding_done_open_terminal">Open terminal</string>
+    <string name="onboarding_done_dashboard">Go to dashboard</string>
+    <string name="onboarding_done_icon_desc">Ubuntu installed</string>
+</resources>
