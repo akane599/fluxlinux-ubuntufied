@@ -154,9 +154,26 @@ fun HomeScreen(
             creatingLinks = creatingLinks
         )
     }
+    // Host setup or an upgrade from an older build can leave Ubuntu without its ~/storage
+    // links, and only session starts create them. ensure() is idempotent, never follows
+    // links and keeps existing entries, so Home repeats it quietly off the main thread.
+    fun ensureLinksQuietly() {
+        if (!TerminalLauncher.isProotInstalled(context, UBUNTU_DISTRO_ID)) return
+        val app = context.applicationContext
+        Thread {
+            runCatching { GuestStorageLinks.ensure(app, UBUNTU_DISTRO_ID) }
+            runCatching { UbuntuFiles.notifyRootsChanged(app) }
+            mainHandler.post { refreshKey++ }
+        }.start()
+    }
+    LaunchedEffect(installed) { if (installed) ensureLinksQuietly() }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { refreshKey++ }
+    ) {
+        refreshKey++
+        ensureLinksQuietly()
+    }
 
     var showRepairConfirm by remember { mutableStateOf(false) }
     var repairing by remember { mutableStateOf(false) }
@@ -200,6 +217,7 @@ fun HomeScreen(
         val app = context.applicationContext
         Thread {
             val result = runCatching { GuestStorageLinks.ensure(app, UBUNTU_DISTRO_ID) }
+            runCatching { UbuntuFiles.notifyRootsChanged(app) }
             mainHandler.post {
                 creatingLinks = false
                 refreshKey++
