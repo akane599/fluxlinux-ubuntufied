@@ -4,10 +4,17 @@ package com.ivarna.fluxlinux.ui.terminal
 
 import android.view.KeyEvent
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,13 +34,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -41,6 +55,9 @@ import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.ui.theme.FluxAccentMagenta
 import com.termux.view.TerminalView
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Toggle + long-press-lock modifier state (nativecode `ModifierState` parity).
@@ -209,7 +226,7 @@ fun TerminalExtraKeys(
         (LocalConfiguration.current.screenWidthDp / 8).dp
     }
 
-    fun press(key: String) {
+    fun send(key: String) {
         TerminalKeyInjector.injectKey(
             terminalView(),
             key,
@@ -217,8 +234,20 @@ fun TerminalExtraKeys(
             modState.altActive,
             modState.shiftActive
         )
+    }
+
+    fun press(key: String) {
+        send(key)
         modState.consumeModifiers()
     }
+
+    // Repeatable keys send on every fire of a hold with the latched modifiers and
+    // consume them once when the hold ends, so a hold behaves like one tap.
+    fun onFire(key: String): () -> Unit =
+        if (KeyRepeat.isRepeatable(key)) { { send(key) } } else { { press(key) } }
+
+    fun onHoldEnd(key: String): (() -> Unit)? =
+        if (KeyRepeat.isRepeatable(key)) { { modState.consumeModifiers() } } else null
 
     Column(
         modifier = modifier
@@ -233,7 +262,7 @@ fun TerminalExtraKeys(
             CoreKey("ESC", { press("ESC") }, Modifier.weight(1f))
             CoreKey("TAB", { press("TAB") }, Modifier.weight(1f))
             CoreKey("ENT", { press("ENTER") }, Modifier.weight(1f))
-            CoreKey("BKSP", { press("BKSP") }, Modifier.weight(1f))
+            CoreKey("BKSP", onFire("BKSP"), Modifier.weight(1f), onHoldEnd("BKSP"))
         }
 
         // ── Row 2: scrollable special keys ──────────────────────────────────
@@ -244,11 +273,11 @@ fun TerminalExtraKeys(
                 .padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            IconKey(painterResource(R.drawable.ic_arrow_left), "Arrow left", { press("LEFT") }, keyWidth)
-            IconKey(painterResource(R.drawable.ic_arrow_up), "Arrow up", { press("UP") }, keyWidth)
-            IconKey(painterResource(R.drawable.ic_arrow_down), "Arrow down", { press("DOWN") }, keyWidth)
-            IconKey(painterResource(R.drawable.ic_arrow_right), "Arrow right", { press("RIGHT") }, keyWidth)
-            IconKey(painterResource(R.drawable.ic_backspace), "Delete", { press("DEL") }, keyWidth)
+            IconKey(painterResource(R.drawable.ic_arrow_left), "Arrow left", onFire("LEFT"), keyWidth, onHoldEnd("LEFT"))
+            IconKey(painterResource(R.drawable.ic_arrow_up), "Arrow up", onFire("UP"), keyWidth, onHoldEnd("UP"))
+            IconKey(painterResource(R.drawable.ic_arrow_down), "Arrow down", onFire("DOWN"), keyWidth, onHoldEnd("DOWN"))
+            IconKey(painterResource(R.drawable.ic_arrow_right), "Arrow right", onFire("RIGHT"), keyWidth, onHoldEnd("RIGHT"))
+            IconKey(painterResource(R.drawable.ic_backspace), "Delete", onFire("DEL"), keyWidth, onHoldEnd("DEL"))
             TextKey("Ins", { press("INS") }, keyWidth)
             listOf("/", "|", "~", "-", "_", "\\").forEach { sym ->
                 TextKey(sym, { press(sym) }, keyWidth)
@@ -317,14 +346,85 @@ private fun ModifierKey(
     }
 }
 
+/**
+ * Click handling for a toolbar key. Without [onHoldEnd] it is a plain click.
+ * With it the key repeats while held on the [KeyRepeat] schedule: [onClick] runs
+ * once for a tap or on every fire of a hold, then [onHoldEnd] runs once when the
+ * press ends (release, cancel, or leaving composition). A swipe that the toolbar
+ * row's scroll claims before [KeyRepeat.PRESS_CONFIRM_DELAY_MS] sends nothing.
+ * Accessibility services get the same single-key action through semantics.
+ */
 @Composable
-private fun CoreKey(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun keyClickModifier(onClick: () -> Unit, onHoldEnd: (() -> Unit)?): Modifier {
+    if (onHoldEnd == null) return Modifier.combinedClickable(onClick = onClick)
+    val fire by rememberUpdatedState(onClick)
+    val end by rememberUpdatedState(onHoldEnd)
+    val interactionSource = remember { MutableInteractionSource() }
+    return Modifier
+        .indication(interactionSource, LocalIndication.current)
+        .semantics(mergeDescendants = true) {
+            role = Role.Button
+            onClick {
+                fire()
+                end()
+                true
+            }
+        }
+        .pointerInput(interactionSource) {
+            coroutineScope {
+                awaitEachGesture {
+                    val press = PressInteraction.Press(awaitFirstDown().position)
+                    var fired = false
+                    val repeater = launch {
+                        delay(KeyRepeat.PRESS_CONFIRM_DELAY_MS)
+                        interactionSource.tryEmit(press)
+                        fired = true
+                        fire()
+                        var repeat = 0
+                        while (true) {
+                            delay(KeyRepeat.delayBeforeRepeat(repeat++))
+                            fire()
+                        }
+                    }
+                    var up: PointerInputChange? = null
+                    try {
+                        up = waitForUpOrCancellation()
+                    } finally {
+                        repeater.cancel()
+                        if (up != null) {
+                            up.consume()
+                            if (!fired) {
+                                // Tap released before the hold was confirmed: one key.
+                                interactionSource.tryEmit(press)
+                                fired = true
+                                fire()
+                            }
+                        }
+                        if (fired) {
+                            end()
+                            interactionSource.tryEmit(
+                                if (up != null) PressInteraction.Release(press) else PressInteraction.Cancel(press)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+}
+
+@Composable
+private fun CoreKey(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onHoldEnd: (() -> Unit)? = null
+) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
-            .combinedClickable(onClick = onClick)
+            .then(keyClickModifier(onClick, onHoldEnd))
     ) {
         Text(
             text = label,
@@ -340,7 +440,8 @@ private fun IconKey(
     painter: Painter,
     contentDescription: String,
     onClick: () -> Unit,
-    width: Dp
+    width: Dp,
+    onHoldEnd: (() -> Unit)? = null
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -348,7 +449,7 @@ private fun IconKey(
             .width(width)
             .height(44.dp)
             .background(MaterialTheme.colorScheme.surface)
-            .combinedClickable(onClick = onClick)
+            .then(keyClickModifier(onClick, onHoldEnd))
     ) {
         Icon(
             painter = painter,
