@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.ui.components.GlassSettingCard
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
@@ -36,11 +38,12 @@ fun TroubleshootingScreen(
     val hazeState = remember { HazeState() }
     
     val issues = listOf(
-        TroubleshootingItem("Termux Connection Failed", "Run the fix command from the Home screen connection panel. Ensure 'Allow External Apps' is true in ~/.termux/termux.properties."),
-        TroubleshootingItem("GUI Not Starting", "Check if Termux:X11 is installed. Ensure you selected the correct display ID (usually 0). Try 'export DISPLAY=:0' in Termux."),
-        TroubleshootingItem("Audio Issues", "Settings → Audio shows whether host Pulse is running, can start or restart it, and has supervisor logs. Guests use PULSE_SERVER=tcp:127.0.0.1. Do not install a Pulse server inside the guest."),
-        TroubleshootingItem("Performance is Low", "Enable hardware acceleration in Settings if supported. Ensure you are not running heavy generic kernels without GPU drivers."),
-        TroubleshootingItem("Touch Input Offset", "Check screen resolution settings in Termux:X11 preferences. Matches device resolution?")
+        TroubleshootingItem(stringResource(R.string.trouble_desktop_title), stringResource(R.string.trouble_desktop_body)),
+        TroubleshootingItem(stringResource(R.string.trouble_black_title), stringResource(R.string.trouble_black_body)),
+        TroubleshootingItem(stringResource(R.string.trouble_sound_title), stringResource(R.string.trouble_sound_body)),
+        TroubleshootingItem(stringResource(R.string.trouble_links_title), stringResource(R.string.trouble_links_body)),
+        TroubleshootingItem(stringResource(R.string.trouble_phantom_title), stringResource(R.string.trouble_phantom_body)),
+        TroubleshootingItem(stringResource(R.string.trouble_reinstall_title), stringResource(R.string.trouble_reinstall_body))
     )
 
     Box(

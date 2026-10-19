@@ -76,6 +76,12 @@ import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.utils.ThemeMode
 import com.ivarna.fluxlinux.ui.components.GlassSettingCard
+import com.ivarna.fluxlinux.ui.components.FluxSwitch
+import com.ivarna.fluxlinux.core.utils.UbuntuLaunchPreferences
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 
 /**
  * Settings hub (nativecode-style): nav cards open detail pages.
@@ -158,6 +164,20 @@ fun SettingsScreen(
                 modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
             )
 
+            var autoStart by remember {
+                mutableStateOf(UbuntuLaunchPreferences.isAutoStartDesktop(context))
+            }
+            SettingsSwitchCard(
+                icon = Icons.Default.DesktopWindows,
+                title = stringResource(R.string.settings_autostart_title),
+                subtitle = stringResource(R.string.settings_autostart_sub),
+                checked = autoStart,
+                onCheckedChange = {
+                    autoStart = it
+                    UbuntuLaunchPreferences.setAutoStartDesktop(context, it)
+                }
+            )
+
             // F-Droid (ivarna) flavor only: its manifest declares the permission, Play's does not.
             if (SharedStorageAccess.declared(context)) {
                 var lifecycleKey by remember { mutableIntStateOf(0) }
@@ -212,6 +232,15 @@ fun SettingsScreen(
                 title = "Audio",
                 subtitle = "Host PulseAudio status, start, restart, logs",
                 onClick = { onNavigateToAudioSettings?.invoke() }
+            )
+
+            // Other distros' containers and the v1 Termux leftovers stay reachable here.
+            Text(
+                stringResource(R.string.settings_advanced_header),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp)
             )
             SettingsNavCard(
                 icon = Icons.Default.Storage,
@@ -525,6 +554,52 @@ private fun SettingsNavCard(
                 contentDescription = null,
                 tint = chevronColor
             )
+        }
+    }
+}
+
+@Composable
+private fun SettingsSwitchCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val iconTint = MaterialTheme.colorScheme.secondary
+    GlassSettingCard {
+        Row(
+            modifier = Modifier
+                .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+                .padding(horizontal = 18.dp, vertical = 18.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(iconTint.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    subtitle,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            FluxSwitch(checked = checked, onCheckedChange = null)
         }
     }
 }

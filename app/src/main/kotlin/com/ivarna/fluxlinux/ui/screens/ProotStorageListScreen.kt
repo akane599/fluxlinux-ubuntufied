@@ -1,5 +1,8 @@
 package com.ivarna.fluxlinux.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.ivarna.fluxlinux.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -71,7 +74,7 @@ import kotlinx.coroutines.withContext
 fun ProotStorageListScreen(
     onBack: () -> Unit,
     onSelectDistro: (distroId: String) -> Unit,
-    onNavigateToDistros: () -> Unit
+    onNavigateToHome: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -332,7 +335,7 @@ fun ProotStorageListScreen(
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "Install a userspace Linux distribution from Distros.",
+                            stringResource(R.string.storage_proot_empty_hint),
                             fontSize = 12.sp,
                             color = muted,
                             lineHeight = 16.sp,
@@ -340,14 +343,14 @@ fun ProotStorageListScreen(
                         )
                         Spacer(Modifier.height(16.dp))
                         Button(
-                            onClick = onNavigateToDistros,
+                            onClick = onNavigateToHome,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = accent,
                                 contentColor = MaterialTheme.colorScheme.onSecondary
                             ),
                             modifier = Modifier.fillMaxWidth().height(44.dp)
                         ) {
-                            Text("Install from Distros", fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.storage_go_home), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
