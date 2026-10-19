@@ -7,6 +7,7 @@ import android.util.Log
 import com.ivarna.fluxlinux.core.gpu.GpuDriverInstaller
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.service.BaseInstallService
+import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.terminal.GpuAccelDetector
 import com.ivarna.fluxlinux.core.terminal.HostCommandBuilder
 import com.ivarna.fluxlinux.core.terminal.ShellCommandRunner
@@ -318,6 +319,8 @@ class OnboardingInstallRunner(private val ctx: Context) {
         completePhase(phases, customIdx, onProgress, "Customization done")
 
         if (abortIfCancelled(gen, phases, onProgress)) return
+        // Termux-style ~/storage links exist right after setup.
+        runCatching { GuestStorageLinks.ensure(appCtx, distroId) }
         StateManager.setDistroInstalled(appCtx, distroId, true)
         StateManager.setComponentInstalled(appCtx, distroId, "xfce4_desktop", true)
         if (hwOk) {
