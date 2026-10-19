@@ -33,6 +33,32 @@
 
 ---
 
+## 🟠 Ubuntu edition (this fork)
+
+This fork ([akane599/fluxlinux-ubuntufied](https://github.com/akane599/fluxlinux-ubuntufied)) of [abhay-byte/fluxlinux](https://github.com/abhay-byte/fluxlinux) (v2.1.0) is an **Ubuntu 26.04 PRoot-first** build. Onboarding installs Ubuntu directly (no distro or method pick, plus a storage-access step), and the main screen is an Ubuntu dashboard.
+
+- **Direct start:** after first-run setup, opening the app starts the Ubuntu XFCE desktop automatically (a short "Starting Ubuntu…" screen with Cancel). Turn it off in **Settings**. A crash-loop guard stops auto-start after repeated failed launches and shows recovery controls instead (terminal, root shell, stop session, repair, storage/file access).
+- **Android file managers:** Ubuntu's home (`/home/flux`) and the whole filesystem (`/`) show up as **Ubuntu** and **Ubuntu filesystem** roots in the system Files app and any SAF picker. Symlinks resolve inside the Ubuntu filesystem. The app's **Open in Files** button opens them.
+- **Termux-style `~/storage` links** in the Ubuntu home (and `/root`):
+
+  | Link | Target |
+  |------|--------|
+  | `~/storage/shared` | `/storage/emulated/0` |
+  | `~/storage/downloads` | `Download` |
+  | `~/storage/documents` | `Documents` |
+  | `~/storage/dcim` | `DCIM` |
+  | `~/storage/pictures` | `Pictures` |
+  | `~/storage/music` | `Music` |
+  | `~/storage/movies` | `Movies` |
+
+  The F-Droid/GitHub (`ivarna`) build asks for "All files access" on Android 11+; Android 8-10 uses READ/WRITE_EXTERNAL_STORAGE. The Play build does not request All files access.
+- **Existing installs are preserved:** upgrading keeps installed distros and guest home files. File operations never follow symlinks, so deleting or measuring a container cannot touch shared storage through `~/storage`.
+- **Smaller APK:** about 65 MB instead of about 177 MB.
+
+**Install:** download the APK from this fork's [GitHub Releases](https://github.com/akane599/fluxlinux-ubuntufied/releases). Releases are signed with this fork's own key, so they cannot update over F-Droid or Play builds of upstream FluxLinux. Both use `com.ivarna.fluxlinux`, so uninstall an existing upstream install first (this deletes its data).
+
+---
+
 ## 📱 Screenshots
 
 <div align="center">
@@ -249,7 +275,7 @@ flowchart TB
 
 1. Get FluxLinux from [F-Droid](https://f-droid.org/packages/com.ivarna.fluxlinux), [Google Play](https://play.google.com/store/apps/details?id=com.zenithblue.fluxlinux), or [GitHub Releases](https://github.com/abhay-byte/fluxlinux/releases)
 2. Open the app and finish the first-run host setup
-3. Pick a distro and install as PRoot or Chroot — the rootfs downloads after you opt in
+3. Ubuntu installs during setup; the desktop then starts automatically
 
 <div align="center">
   <img src="assets/screenshots/setup_wizard.png" width="250" />
