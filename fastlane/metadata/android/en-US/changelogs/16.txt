@@ -1,0 +1,5 @@
+- Terminal opens Ubuntu directly; the distro selection screen is removed
+- Long-press "+" for Ubuntu root, chroot or the Termux host shell
+- Wider terminal tabs with a large close button; long-press a tab to close others
+- Extra-keys arrows, backspace and delete repeat while held, with acceleration
+- Ubuntu zsh: fzf, zoxide, fzf-tab, history-substring-search and more Oh My Zsh plugins
