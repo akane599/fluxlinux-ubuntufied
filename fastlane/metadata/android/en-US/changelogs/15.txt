@@ -1,0 +1,1 @@
+- Fix: desktop failed to start on Android 17 ("Failed to load native library"). The X server now loads its library from the app's read-only install directory.
