@@ -562,14 +562,14 @@ private fun DownloadItemBadge(
     size: String,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    // Title above size: side by side, "~80-150 MiB" got clipped at phone width.
+    Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
             .background(FluxDarkSurface.copy(alpha = 0.8f))
             .border(1.dp, FluxHairline, RoundedCornerShape(10.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Text(
             text = title,
@@ -579,8 +579,6 @@ private fun DownloadItemBadge(
         )
         Text(
             text = size,
-            maxLines = 1,
-            softWrap = false,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = FluxAccentCyan
