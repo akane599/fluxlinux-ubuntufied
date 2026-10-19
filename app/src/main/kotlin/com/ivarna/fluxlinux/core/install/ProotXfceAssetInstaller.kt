@@ -3,6 +3,7 @@ package com.ivarna.fluxlinux.core.install
 import android.content.Context
 import android.util.Log
 import com.ivarna.fluxlinux.core.root.RootShell
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import com.ivarna.fluxlinux.core.terminal.TermuxHostPaths
 import java.io.File
 import java.io.FileOutputStream
@@ -465,7 +466,7 @@ object ProotXfceAssetInstaller {
         onLog: (String) -> Unit
     ): Boolean {
         val tmp = File(zip.parentFile, "icons_unpack").also {
-            it.deleteRecursively()
+            SafeFiles.deleteTree(it)
             it.mkdirs()
         }
         return try {
@@ -474,9 +475,14 @@ object ProotXfceAssetInstaller {
             val p = pb.start()
             p.inputStream.bufferedReader().readText()
             if (p.waitFor() != 0) return false
-            val tars = tmp.walkTopDown().filter {
-                it.isFile && (it.name.endsWith(".tar.gz") || it.name.endsWith(".tar.xz") || it.name.endsWith(".tgz"))
-            }.toList()
+            val tars = mutableListOf<File>()
+            SafeFiles.walkNoFollow(tmp) { f, attrs ->
+                if (attrs.isRegularFile &&
+                    (f.name.endsWith(".tar.gz") || f.name.endsWith(".tar.xz") || f.name.endsWith(".tgz"))
+                ) {
+                    tars += f
+                }
+            }
             var any = false
             for (t in tars) {
                 val ok = hostTarExtract(
@@ -496,7 +502,7 @@ object ProotXfceAssetInstaller {
             onLog("unzip icons failed: ${e.message}")
             false
         } finally {
-            tmp.deleteRecursively()
+            SafeFiles.deleteTree(tmp)
         }
     }
 }
