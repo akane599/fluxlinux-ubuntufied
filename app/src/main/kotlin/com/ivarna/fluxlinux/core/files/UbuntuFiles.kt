@@ -15,7 +15,6 @@ object UbuntuFiles {
 
     private const val TAG = "UbuntuFiles"
     private const val DISTRO = "ubuntu"
-    private const val URI_GRANTS = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 
     @Suppress("UNUSED_PARAMETER")
     fun authority(ctx: Context): String = "${BuildConfig.APPLICATION_ID}.documents"
@@ -25,6 +24,8 @@ object UbuntuFiles {
     /**
      * Opens the system file manager at [rootId]. Tries the root view, then the root
      * document view, then the tree picker; returns false (no crash) when nothing handles it.
+     * No URI grant flags: DocumentsUI already holds MANAGE_DOCUMENTS, and a grant would hand
+     * the root to any other app that answers these intents.
      */
     fun open(ctx: Context, rootId: String = ROOT_HOME): Boolean {
         val auth = authority(ctx)
@@ -38,7 +39,7 @@ object UbuntuFiles {
         )
         return attempts.any { intent ->
             try {
-                ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or URI_GRANTS))
+                ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 true
             } catch (e: ActivityNotFoundException) {
                 Log.w(TAG, "No handler for ${intent.action}", e)
