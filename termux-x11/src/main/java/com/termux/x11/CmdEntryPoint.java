@@ -23,6 +23,7 @@ import android.view.Surface;
 
 import androidx.annotation.Keep;
 
+import java.io.File;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.net.URL;
@@ -173,6 +174,41 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     private static native boolean connected();
     private native void listenForConnections();
 
+    /**
+     * Android 17+ refuses System.load of a library file the process can write, so prefer
+     * the package manager's read-only nativeLibraryDir copy over the script-extracted one.
+     * Order: TERMUX_X11_LIB_PATH, dirname(TERMUX_X11_APK_PATH)/lib/abi, /data/data/pkg/lib.
+     * The first existing read-only candidate wins; else the first existing one (older Android).
+     */
+    private static String pickLibPath(String pkg) {
+        String legacy = "/data/data/" + pkg + "/lib/libXlorie.so";
+        String apk = getenv("TERMUX_X11_APK_PATH");
+        String nativeDir = apk != null ? new File(apk).getParent() : null;
+        String[] candidates = {
+                getenv("TERMUX_X11_LIB_PATH"),
+                nativeDir != null ? nativeDir + "/lib/" + abiDir(Build.SUPPORTED_ABIS[0]) + "/libXlorie.so" : null,
+                legacy,
+        };
+        String fallback = null;
+        for (String p : candidates) {
+            if (p == null || !new File(p).isFile())
+                continue;
+            if (!new File(p).canWrite())
+                return p;
+            if (fallback == null)
+                fallback = p;
+        }
+        return fallback != null ? fallback : legacy;
+    }
+
+    private static String abiDir(String abi) {
+        switch (abi) {
+            case "arm64-v8a": return "arm64";
+            case "armeabi-v7a": return "arm";
+            default: return abi; // x86_64, x86
+        }
+    }
+
     static {
         try {
             if (Looper.getMainLooper() == null)
@@ -194,14 +230,16 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
             String pkg = getenv("TERMUX_X11_OVERRIDE_PACKAGE");
             if (pkg == null)
                 pkg = "com.termux.x11";
-            libPath = "/data/data/" + pkg + "/lib/libXlorie.so";
+            libPath = pickLibPath(pkg);
+            Log.i("CmdEntryPoint", "Loading libXlorie.so from " + libPath);
         }
         if (libPath != null) {
             try {
                 System.load(libPath);
             } catch (UnsatisfiedLinkError | Exception e) {
                 Log.e("CmdEntryPoint", "Failed to dlopen " + libPath, e);
-                System.err.println("Failed to load native library. Did you install the right apk? Try the universal one.");
+                System.err.println("Failed to load native library. Did you install the right apk? Try the universal one. ("
+                        + libPath + ": " + e.getMessage() + ")");
                 System.exit(134);
             }
         } else {

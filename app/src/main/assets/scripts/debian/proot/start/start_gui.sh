@@ -101,12 +101,23 @@ fi
 export TERMUX_X11_APK_PATH
 echo "FluxLinux: APK path = $TERMUX_X11_APK_PATH"
 
-# Extract libXlorie.so from our APK to /data/data app lib dir
+# Prefer the package manager's read-only libXlorie.so (nativeLibraryDir, extractNativeLibs):
+# Android 17 refuses System.load of a writable file, so the /data/data copy fails there.
+NATIVE_LIB="$(dirname "$TERMUX_X11_APK_PATH")/lib/arm64/libXlorie.so"
+[ -f "$NATIVE_LIB" ] || NATIVE_LIB="$(dirname "$TERMUX_X11_APK_PATH")/lib/arm/libXlorie.so"
+if [ -n "$TERMUX_X11_APK_PATH" ] && [ -f "$NATIVE_LIB" ]; then
+  export TERMUX_X11_LIB_PATH="$NATIVE_LIB"
+  echo "FluxLinux: libXlorie.so = $NATIVE_LIB (read-only)"
+else
+  TERMUX_X11_LIB_PATH=""
+fi
+
+# Fallback: extract libXlorie.so from our APK to /data/data app lib dir
 # This is the only location app_process can dlopen without corrupting its linker namespace
 APP_LIB_DIR="/data/data/$PKG/lib"
 mkdir -p "$APP_LIB_DIR" 2>/dev/null
 # Re-extract when the APK is newer, else an app update keeps running the old X server.
-if { [ ! -f "$APP_LIB_DIR/libXlorie.so" ] || [ "$TERMUX_X11_APK_PATH" -nt "$APP_LIB_DIR/libXlorie.so" ]; } && [ -n "$TERMUX_X11_APK_PATH" ]; then
+if [ -z "$TERMUX_X11_LIB_PATH" ] && { [ ! -f "$APP_LIB_DIR/libXlorie.so" ] || [ "$TERMUX_X11_APK_PATH" -nt "$APP_LIB_DIR/libXlorie.so" ]; } && [ -n "$TERMUX_X11_APK_PATH" ]; then
   echo "FluxLinux: Extracting libXlorie.so from APK..."
   # Try arm64 first, then armeabi-v7a
   ( cd "$APP_LIB_DIR" && \
@@ -116,6 +127,7 @@ if { [ ! -f "$APP_LIB_DIR/libXlorie.so" ] || [ "$TERMUX_X11_APK_PATH" -nt "$APP_
     unzip -o "$TERMUX_X11_APK_PATH" 'lib/armeabi-v7a/libXlorie.so' 2>/dev/null && \
     mv -f lib/armeabi-v7a/libXlorie.so . && rm -rf lib )
   touch "$APP_LIB_DIR/libXlorie.so" 2>/dev/null # unzip keeps the 1981 entry mtime
+  chmod 0555 "$APP_LIB_DIR/libXlorie.so" 2>/dev/null || true # best effort: not writable
   ls -la "$APP_LIB_DIR/libXlorie.so" 2>/dev/null && \
     echo "FluxLinux: libXlorie.so ready in $APP_LIB_DIR" || \
     echo "FluxLinux: [WARN] libXlorie.so extraction failed"
@@ -123,10 +135,11 @@ fi
 
 # Launch the X server via app_process
 # CLEAR LD_LIBRARY_PATH — setting it to Termux libs breaks system linker (libunwindstack.so)
-# CmdEntryPoint finds libXlorie.so via ClassLoader resource lookup inside our APK
+# CmdEntryPoint loads TERMUX_X11_LIB_PATH when read-only, else nativeLibraryDir, else /data/data
 LD_LIBRARY_PATH="" LD_PRELOAD="" \
 CLASSPATH="$TERMUX_PREFIX/libexec/termux-x11/loader.apk" \
 TERMUX_X11_APK_PATH="$TERMUX_X11_APK_PATH" \
+TERMUX_X11_LIB_PATH="$TERMUX_X11_LIB_PATH" \
 TERMUX_X11_OVERRIDE_PACKAGE="$PKG" \
 LANG=en_US.UTF-8 \
 /system/bin/app_process / \
