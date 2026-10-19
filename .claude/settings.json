@@ -133,7 +133,6 @@
     "pr-review-toolkit@android-stock": false,
     "pr-review-toolkit@claude-plugins-official": false,
     "quartermaster@eigenwise-toolshed": true,
-    "remember@claude-plugins-official": false,
     "security-guidance@claude-plugins-official": true,
     "security-sweep@android-claude": false,
     "security-sweep@android-hybrid": false,
@@ -141,8 +140,7 @@
     "security-sweep@android-stock": false,
     "security-sweep@claude-plugins-official": false,
     "session-report@claude-plugins-official": true,
-    "sidequest@eigenwise-toolshed": true,
-    "superpowers@claude-plugins-official": false
+    "sidequest@eigenwise-toolshed": true
   },
   "effortLevel": "high"
 }
