@@ -25,9 +25,14 @@ class OnboardingConsentContractTest {
             "src/main/kotlin/com/ivarna/fluxlinux/ui/onboarding/OnboardingFlowScreen.kt"
         ).readText()
         assertTrue(src.contains("downloadConsent"))
-        assertTrue(src.contains("DownloadConsentRow"))
+        // 06499a1 (onboarding redesign, docs/plans/onboarding_redesign_plan.md §2.4)
+        // renamed DownloadConsentRow to FluxConsentCheckboxCard.
+        assertTrue("consent card", src.contains("FluxConsentCheckboxCard"))
         assertTrue(src.contains("enabled = downloadConsent"))
-        assertTrue(src.contains("not checked by F-Droid"))
+        assertTrue(
+            "consent must disclose bypassing F-Droid checks",
+            src.contains("not checked by F-Droid")
+        )
         assertTrue(src.contains("downloads Linux system images"))
         assertTrue(
             "consent must start unchecked",
@@ -38,6 +43,8 @@ class OnboardingConsentContractTest {
         assertTrue(src.contains("OnboardStep.HostSetup"))
         assertTrue(src.contains("fun ConsentPage"))
         assertTrue(src.contains("fun HostSetupPage"))
-        assertTrue(src.contains("HostBootstrapStep"))
+        // 06499a1 replaced the embedded HostBootstrapStep with an in-page host card
+        // (plan "Page 3") that drives the same TerminalLauncher.prepareHost path.
+        assertTrue("host setup page runs host prep", src.contains("TerminalLauncher.prepareHost"))
     }
 }

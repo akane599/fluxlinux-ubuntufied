@@ -1686,9 +1686,9 @@ private fun FluxConsentCheckboxCard(
     val context = LocalContext.current
     val downloadsHost = HostBootstrap.downloadsFromRelease(context.packageName)
     val body = if (downloadsHost) {
-        "I understand this setup downloads Linux system images (host bootstrap and distro rootfs) from GitHub Releases. Those files are not bundled in the F-Droid APK."
+        "I understand this setup downloads Linux system images (host bootstrap and distro rootfs) from GitHub Releases. Those files are not bundled in the F-Droid APK and are not checked by F-Droid."
     } else {
-        "I understand this setup downloads the selected Linux distro rootfs from GitHub Releases. That archive is not in the base APK."
+        "I understand this setup downloads the selected Linux distro rootfs from GitHub Releases. That archive is not in the base APK and is not checked by F-Droid."
     }
     val colors = MaterialTheme.colorScheme
     val borderColor = if (consented) FluxAccentMagenta else FluxHairline
