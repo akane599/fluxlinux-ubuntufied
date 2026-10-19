@@ -13,11 +13,12 @@
 - **UI:** the custom "Glass" design system in `ui/components/` (`GlassCard`, `GlassScaffold`, `GlassBottomNavigation`), with haze blur. There are many literal colors outside `ui/theme/`.
 
 ## Testing
-- JVM JUnit4 only: `app/src/test/java/com/ivarna/fluxlinux/{core/*,ui/*}`, with `unitTests.isReturnDefaultValues = true`. There is no Robolectric, mockk, instrumented tests or screenshot tests.
+- JVM JUnit4 only: `app/src/test/java/com/ivarna/fluxlinux/{core/*,ui/*}`, with `unitTests.isReturnDefaultValues = true`. There is no Robolectric, mockk or instrumented tests.
+- Screenshot tests use Compose Preview Screenshot Testing. `@PreviewTest` previews live in `app/src/screenshotTest/kotlin/com/ivarna/fluxlinux/ui/ScreenshotPreviews.kt` and are built from stateless leaf composables with fake data, because whole screens read device state. References are in `app/src/screenshotTestIvarnaDebug/reference/` (ivarna flavor only). Write them with `:app:updateIvarnaDebugScreenshotTest` and diff with `:app:validateIvarnaDebugScreenshotTest`.
 - Fakes: `core/terminal/FakeContext.kt` and `core/utils/FakePrefsContext.kt` (`InMemoryPrefs`). Production test seams such as `RootShell.seedSuInvocationForTest` exist.
 - **Contract tests** read production sources and scripts as text via a `repoFile(rel)` helper and assert patterns. Examples: `OnboardingConsentContractTest`, `KdeDesktopContractTest`, `LegacyTermux*ContractTest`, `AudioSettingsContractTest`. Renaming or restructuring code can break them without any behavior change.
 - Builder and parser tests: `ProotCommandBuilderTest`, `ChrootCommandBuilderTest`, `LinuxCommandBuilderTest`, `PulseHostTest`, `HostBootstrapTest`, `RootfsDownloaderTest`.
-- Run: `bash .claude/kit/gradle-check.sh :app:testIvarnaDebugUnitTest`. The baseline is 402 tests with 2 pre-existing failures (PROGRESS.md).
+- Run: `bash .claude/kit/gradle-check.sh :app:testIvarnaDebugUnitTest`. The baseline is 402 tests with 0 failures (PROGRESS.md).
 
 ## Style
 - One top-level `object` or file per concern, PascalCase. Tests are named `method_condition` or `*ContractTest`.

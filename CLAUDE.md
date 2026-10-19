@@ -10,7 +10,7 @@ Android, developed on Ubuntu from the CLI. **If the STACK block still has `<plac
 - JDK target 17 · Gradle 8.14 · AGP 8.7.3 · Kotlin 2.0.20 · compileSdk 36 · targetSdk 36 · minSdk 26
 - Modules: :app :termux-x11 :terminal-emulator :stub · Architecture: single-activity Compose, no DI framework · DI/DB/Net: none / none / okhttp
 - Flavors (dimension `store`): `ivarna` = com.ivarna.fluxlinux (F-Droid/GitHub, arm64-v8a only) · `zenithblue` = com.zenithblue.fluxlinux (Play) · Launcher: .MainActivity
-- Baseline: build ok (ivarnaDebug) · 402 unit tests, 2 pre-existing failures (PROGRESS.md)
+- Baseline: build ok (ivarnaDebug) · 402 unit tests, 0 failures (PROGRESS.md)
 <!-- STACK:END -->
 
 ## How work flows here
