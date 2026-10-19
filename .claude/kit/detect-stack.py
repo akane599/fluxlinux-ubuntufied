@@ -11,7 +11,7 @@ from pathlib import Path
 root = Path(sys.argv[1] if len(sys.argv) > 1 else '.').resolve()
 if not root.is_dir():
     sys.exit(f'not a directory: {root}')
-SKIP = {'.git', '.gradle', '.idea', '.claude', 'build', '.cxx', 'node_modules', 'vendor', 'android-kit', 'android-kit-claude'}
+SKIP = {'.git', '.gradle', '.idea', '.claude', 'build', '.cxx', 'node_modules', 'vendor', 'android-kit', 'android-kit-claude-max'}
 files = []
 for base, dirs, names in os.walk(root, followlinks=False):
     dirs[:] = sorted(d for d in dirs if d not in SKIP and not (Path(base)/d).is_symlink())

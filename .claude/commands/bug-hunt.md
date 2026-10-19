@@ -1,5 +1,5 @@
 ---
-description: Hunt for bugs in existing code. Read-only Sonnet/high reviews by area with the Android bug checklist, then one fix ticket per bug you pick, each starting from a test that reproduces it
+description: Hunt for bugs in existing code. Read-only Opus/high reviews by area with the Android bug checklist, then one fix ticket per bug you pick, each starting from a test that reproduces it
 argument-hint: "[scope: path, module or feature | blank = the riskiest areas from the codebase map]"
 ---
 

@@ -11,7 +11,7 @@ change plugin enablement, bypass hooks, scaffold the app, commit, push or run Gr
    instructions. List the selected pending paths. If none remain, run `/kit-refresh`
    without upgrade options and report that there is nothing to merge. Do not invent new conflicts.
 2. Locate the installed kit from `ANDROID_KIT_HOME` when set, then the recorded `kit_home` in
-   `.claude/kit/state.json`, otherwise `$HOME/.local/share/android-kit-claude`. It must contain `lib/project-files.py` with a
+   `.claude/kit/state.json`, otherwise `$HOME/.local/share/android-kit-claude-max`. It must contain `lib/project-files.py` with a
    `resolve` action and `template/`. Use absolute quoted paths. If unavailable,
    report that setup from Claude-only version 2026.10.16.1-Claude-only or newer is needed; do not edit
    manifests or clear conflict metadata as a substitute.
@@ -39,8 +39,8 @@ change plugin enablement, bypass hooks, scaffold the app, commit, push or run Gr
    installed helper. For example, with the default kit location:
 
    ```bash
-   python3 "$HOME/.local/share/android-kit-claude/lib/project-files.py" resolve \
-     "$PWD" "$HOME/.local/share/android-kit-claude/template" \
+   python3 "$HOME/.local/share/android-kit-claude-max/lib/project-files.py" resolve \
+     "$PWD" "$HOME/.local/share/android-kit-claude-max/template" \
      .claude/skills/full-repo-audit/SKILL.md
    ```
 

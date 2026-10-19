@@ -1,7 +1,132 @@
 {
+  "effortLevel": "high",
+  "enabledPlugins": {
+    "android-emulator-qa@android-claude": false,
+    "android-emulator-qa@android-claude-max": false,
+    "android-emulator-qa@android-hybrid": false,
+    "android-emulator-qa@android-local": false,
+    "android-emulator-qa@android-stock": false,
+    "android-kmp-playbook@android-claude": false,
+    "android-kmp-playbook@android-claude-max": true,
+    "android-kmp-playbook@android-hybrid": false,
+    "android-kmp-playbook@android-local": false,
+    "android-kmp-playbook@android-stock": false,
+    "claude-android-qa-plugin@android-claude": false,
+    "claude-android-qa-plugin@android-claude-max": false,
+    "claude-android-qa-plugin@android-hybrid": false,
+    "claude-android-qa-plugin@android-local": false,
+    "claude-android-qa-plugin@android-stock": false,
+    "claude-code-setup@claude-plugins-official": false,
+    "claude-md-management@claude-plugins-official": false,
+    "claude-security@android-claude": false,
+    "claude-security@android-claude-max": false,
+    "claude-security@android-hybrid": false,
+    "claude-security@android-local": false,
+    "claude-security@android-stock": false,
+    "claude-security@claude-plugins-official": false,
+    "code-review@android-claude": false,
+    "code-review@android-claude-max": false,
+    "code-review@android-hybrid": false,
+    "code-review@android-local": false,
+    "code-review@android-stock": false,
+    "code-review@claude-plugins-official": false,
+    "code-simplifier@claude-plugins-official": false,
+    "codebase-mapper@eigenwise-toolshed": true,
+    "context7@claude-plugins-official": true,
+    "design-with-claude@android-claude": false,
+    "design-with-claude@android-hybrid": false,
+    "design-with-claude@android-local": false,
+    "design-with-claude@android-stock": false,
+    "droidforge@android-claude": false,
+    "droidforge@android-claude-max": true,
+    "droidforge@android-hybrid": false,
+    "droidforge@android-local": false,
+    "droidforge@android-stock": false,
+    "feature-dev@claude-plugins-official": false,
+    "jdtls-lsp@claude-plugins-official": true,
+    "kotlin-lsp-android@android-claude": false,
+    "kotlin-lsp-android@android-claude-max": true,
+    "kotlin-lsp-android@android-hybrid": false,
+    "kotlin-lsp-android@android-local": false,
+    "kotlin-lsp-android@android-stock": false,
+    "kotlin-lsp@claude-plugins-official": false,
+    "kotlinsense@android-claude": false,
+    "kotlinsense@android-claude-max": false,
+    "kotlinsense@android-hybrid": false,
+    "kotlinsense@android-local": false,
+    "kotlinsense@android-stock": false,
+    "live-rules@eigenwise-toolshed": true,
+    "model-gateway@eigenwise-toolshed": false,
+    "observability@eigenwise-toolshed": true,
+    "pr-review-toolkit@android-claude": false,
+    "pr-review-toolkit@android-claude-max": false,
+    "pr-review-toolkit@android-hybrid": false,
+    "pr-review-toolkit@android-local": false,
+    "pr-review-toolkit@android-stock": false,
+    "pr-review-toolkit@claude-plugins-official": false,
+    "quartermaster@eigenwise-toolshed": true,
+    "security-guidance@claude-plugins-official": true,
+    "security-sweep@android-claude": false,
+    "security-sweep@android-claude-max": false,
+    "security-sweep@android-hybrid": false,
+    "security-sweep@android-local": false,
+    "security-sweep@android-stock": false,
+    "security-sweep@claude-plugins-official": false,
+    "session-report@claude-plugins-official": true,
+    "sidequest@eigenwise-toolshed": true
+  },
   "env": {
     "ANTHROPIC_BASE_URL": "https://api.anthropic.com"
   },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/kit/format-edit.py\"",
+            "timeout": 20,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write"
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/kit/compact-checkpoint.py",
+            "timeout": 20,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/kit/map-guard.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\" || true",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/kit/compact-checkpoint.py\" --restore",
+            "type": "command"
+          }
+        ],
+        "matcher": "compact"
+      }
+    ]
+  },
+  "model": "opus",
   "permissions": {
     "allow": [
       "Bash(./gradlew:*)",
@@ -29,118 +154,5 @@
       "Bash(git push --force:*)",
       "Bash(rm -rf:*)"
     ]
-  },
-  "model": "opus",
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/kit/format-edit.py\"",
-            "timeout": 20
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/kit/compact-checkpoint.py",
-            "timeout": 20
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/kit/map-guard.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\" || true",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/kit/compact-checkpoint.py\" --restore"
-          }
-        ]
-      }
-    ]
-  },
-  "enabledPlugins": {
-    "android-emulator-qa@android-hybrid": false,
-    "android-emulator-qa@android-local": false,
-    "android-emulator-qa@android-stock": false,
-    "android-kmp-playbook@android-claude": true,
-    "android-kmp-playbook@android-hybrid": false,
-    "android-kmp-playbook@android-local": false,
-    "android-kmp-playbook@android-stock": false,
-    "claude-android-qa-plugin@android-claude": false,
-    "claude-android-qa-plugin@android-hybrid": false,
-    "claude-android-qa-plugin@android-local": false,
-    "claude-android-qa-plugin@android-stock": false,
-    "claude-code-setup@claude-plugins-official": false,
-    "claude-md-management@claude-plugins-official": false,
-    "claude-security@android-claude": false,
-    "claude-security@android-hybrid": false,
-    "claude-security@android-local": false,
-    "claude-security@android-stock": false,
-    "claude-security@claude-plugins-official": false,
-    "code-review@android-claude": false,
-    "code-review@android-hybrid": false,
-    "code-review@android-local": false,
-    "code-review@android-stock": false,
-    "code-review@claude-plugins-official": false,
-    "code-simplifier@claude-plugins-official": false,
-    "codebase-mapper@eigenwise-toolshed": true,
-    "context7@claude-plugins-official": true,
-    "design-with-claude@android-hybrid": false,
-    "design-with-claude@android-local": false,
-    "design-with-claude@android-stock": false,
-    "droidforge@android-claude": true,
-    "droidforge@android-hybrid": false,
-    "droidforge@android-local": false,
-    "droidforge@android-stock": false,
-    "feature-dev@claude-plugins-official": false,
-    "jdtls-lsp@claude-plugins-official": true,
-    "kotlin-lsp-android@android-claude": true,
-    "kotlin-lsp-android@android-hybrid": false,
-    "kotlin-lsp-android@android-local": false,
-    "kotlin-lsp-android@android-stock": false,
-    "kotlin-lsp@claude-plugins-official": false,
-    "kotlinsense@android-claude": false,
-    "kotlinsense@android-hybrid": false,
-    "kotlinsense@android-local": false,
-    "kotlinsense@android-stock": false,
-    "live-rules@eigenwise-toolshed": true,
-    "model-gateway@eigenwise-toolshed": false,
-    "observability@eigenwise-toolshed": true,
-    "pr-review-toolkit@android-claude": false,
-    "pr-review-toolkit@android-hybrid": false,
-    "pr-review-toolkit@android-local": false,
-    "pr-review-toolkit@android-stock": false,
-    "pr-review-toolkit@claude-plugins-official": false,
-    "quartermaster@eigenwise-toolshed": true,
-    "security-guidance@claude-plugins-official": true,
-    "security-sweep@android-claude": false,
-    "security-sweep@android-hybrid": false,
-    "security-sweep@android-local": false,
-    "security-sweep@android-stock": false,
-    "security-sweep@claude-plugins-official": false,
-    "session-report@claude-plugins-official": true,
-    "sidequest@eigenwise-toolshed": true
-  },
-  "effortLevel": "high"
+  }
 }
