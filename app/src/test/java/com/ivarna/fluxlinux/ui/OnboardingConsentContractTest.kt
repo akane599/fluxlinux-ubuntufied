@@ -29,11 +29,13 @@ class OnboardingConsentContractTest {
         // renamed DownloadConsentRow to FluxConsentCheckboxCard.
         assertTrue("consent card", src.contains("FluxConsentCheckboxCard"))
         assertTrue(src.contains("enabled = downloadConsent"))
+        val strings = repoFile("src/main/res/values/strings_onboarding.xml").readText()
+        assertTrue(src.contains("R.string.onboarding_consent_body"))
         assertTrue(
             "consent must disclose bypassing F-Droid checks",
-            src.contains("not checked by F-Droid")
+            strings.contains("not checked by F-Droid")
         )
-        assertTrue(src.contains("downloads Linux system images"))
+        assertTrue(strings.contains("downloads the Ubuntu rootfs"))
         assertTrue(
             "consent must start unchecked",
             src.contains("var downloadConsent by remember { mutableStateOf(false) }")
