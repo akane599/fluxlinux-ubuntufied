@@ -9,6 +9,8 @@ import com.ivarna.fluxlinux.core.system.SafeFiles
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -77,12 +79,18 @@ object BootstrapInstaller {
      * **Container safety (B2):** any existing `usr/var/lib/proot-distro` tree
      * (installed Debian guest) is moved aside before the prefix is replaced and
      * restored afterwards — a re-extract NEVER wipes an installed proot guest.
+     * An aside stranded by an interrupted earlier run is recovered first
+     * ([recoverStrandedAside]); the aside itself is never deleted.
      */
     fun ensureExtracted(
         ctx: Context,
         force: Boolean = false,
         onProgress: (done: Long, total: Long, phase: String) -> Unit = { _, _, _ -> }
     ): Boolean {
+        val recovery = recoverStrandedAside(ctx.filesDir)
+        if (recovery == AsideRecovery.FAILED) {
+            Log.e(TAG, "preserve: stranded $ASIDE_NAME could not be recovered yet; kept in place")
+        }
         if (!force && isExtracted(ctx)) {
             // Happy path (proot-opt-01): the prefix is already extracted AND the
             // package rewrite / host env were applied when markExtracted() ran.
@@ -114,45 +122,11 @@ object BootstrapInstaller {
             }
             onProgress(source.totalBytes, source.totalBytes, "Finalizing host prefix")
 
-            // Preserve installed proot containers (usr/var/lib/proot-distro).
-            val preserved = preserveProotDistro(ctx)
-
-            // Promote tmp → filesDir (replace any partial/corrupt usr tree).
-            val tmpUsr = File(tmpDir, "usr")
-            val dstUsr = File(ctx.filesDir, "usr")
-            if (!File(tmpUsr, "lib/libtermux-exec.so").isFile) {
-                throw IllegalStateException("extract missing usr/lib/libtermux-exec.so")
+            promotePrefixPreservingGuests(ctx.filesDir, tmpDir) {
+                val rewritten = TermuxHostPaths.applyPackageToExtractedPrefix(ctx.filesDir, ctx)
+                markExtracted(ctx)
+                Log.i(TAG, "bootstrap extract done; rewrote $rewritten residual stock paths")
             }
-            if (preserved == null && File(dstUsr, "var/lib/proot-distro").exists()) {
-                // Preservation failed but guests are still inside usr/: never delete them.
-                throw IllegalStateException("could not preserve usr/var/lib/proot-distro; aborting re-extract")
-            }
-            SafeFiles.deleteTree(dstUsr)
-            if (!tmpUsr.renameTo(dstUsr)) {
-                // Same-FS rename should not fail; fall back to copy.
-                SafeFiles.copyTree(tmpUsr, dstUsr, overwrite = true)
-                SafeFiles.deleteTree(tmpUsr)
-            }
-            SafeFiles.deleteTree(tmpDir)
-
-            if (preserved != null) {
-                val target = File(dstUsr, "var/lib/proot-distro")
-                target.parentFile?.mkdirs()
-                if (!preserved.renameTo(target)) {
-                    Log.w(TAG, "preserve: renameTo failed, copying proot-distro back")
-                    if (SafeFiles.copyTree(preserved, target, overwrite = true)) {
-                        SafeFiles.deleteTree(preserved)
-                    } else {
-                        // Keep the only complete copy of the guests in place.
-                        Log.e(TAG, "preserve: copy back incomplete; keeping ${preserved.absolutePath}")
-                    }
-                }
-                Log.i(TAG, "preserved installed proot-distro containers across re-extract")
-            }
-
-            val rewritten = TermuxHostPaths.applyPackageToExtractedPrefix(ctx.filesDir, ctx)
-            markExtracted(ctx)
-            Log.i(TAG, "bootstrap extract done; rewrote $rewritten residual stock paths")
             true
         } catch (e: Exception) {
             Log.e(TAG, "bootstrap extract failed", e)
@@ -214,22 +188,161 @@ object BootstrapInstaller {
         return BootstrapSource(file.inputStream(), file.length())
     }
 
-    /**
-     * Move `usr/var/lib/proot-distro` aside (same-FS rename) so a re-extract can
-     * restore installed guests. Returns null when nothing to preserve, or when the
-     * copy fallback failed (the caller then refuses to delete `usr/`).
-     */
-    private fun preserveProotDistro(ctx: Context): File? {
-        val src = File(ctx.filesDir, "usr/var/lib/proot-distro")
-        if (!src.exists()) return null
-        val aside = File(ctx.filesDir, ".preserved_proot_distro")
-        SafeFiles.deleteTree(aside)
-        if (src.renameTo(aside)) return aside
-        // Rename failed (unlikely on same FS) — copy so we never lose the guest.
+    /** Where installed proot guests live inside the host prefix. */
+    private const val GUESTS_REL = "usr/var/lib/proot-distro"
+
+    /** Same-FS parking spot for [GUESTS_REL] while `usr/` is replaced. Never deleted. */
+    internal const val ASIDE_NAME = ".preserved_proot_distro"
+
+    /** Tree moves used by the preserve/restore steps; injectable so tests can force failures. */
+    internal class TreeOps(
+        val move: (src: File, dst: File) -> Boolean = { src, dst -> src.renameTo(dst) },
         // Links (guest ~/storage -> shared storage) are copied as links, never followed.
-        if (SafeFiles.copyTree(src, aside, overwrite = true)) return aside
+        val copy: (src: File, dst: File) -> Boolean = { src, dst -> SafeFiles.copyTree(src, dst, overwrite = true) },
+        val now: () -> Long = System::currentTimeMillis
+    )
+
+    internal enum class AsideRecovery { NONE, RESTORED, KEPT_AWAY, DEFERRED, FAILED }
+
+    private fun existsNoFollow(f: File): Boolean = Files.exists(f.toPath(), LinkOption.NOFOLLOW_LINKS)
+
+    /**
+     * True when anything other than an empty real directory sits at [GUESTS_REL].
+     * An empty placeholder dir is removed (a populated tree is never touched) so a
+     * restore can rename into place.
+     */
+    private fun liveGuestsPresent(filesDir: File): Boolean {
+        val live = File(filesDir, GUESTS_REL)
+        if (Files.isDirectory(live.toPath(), LinkOption.NOFOLLOW_LINKS) && live.list()?.isEmpty() == true) {
+            live.delete()
+        }
+        return existsNoFollow(live)
+    }
+
+    /**
+     * Recovers a [ASIDE_NAME] stranded by an interrupted re-extract, before anything
+     * is deleted or extracted:
+     *  - no live guest tree, prefix present → move the aside back into place;
+     *  - no prefix at all (`usr/` being re-created) → [AsideRecovery.DEFERRED]: the
+     *    aside stays put and [promotePrefixPreservingGuests] restores it after extract;
+     *  - live tree AND aside → neither is deleted; the aside is renamed to
+     *    `ASIDE_NAME.<timestamp>` so a later preserve can never clobber it.
+     */
+    internal fun recoverStrandedAside(filesDir: File, ops: TreeOps = TreeOps()): AsideRecovery {
+        if (!existsNoFollow(File(filesDir, ASIDE_NAME))) return AsideRecovery.NONE
+        if (liveGuestsPresent(filesDir)) {
+            return if (moveAsideAway(filesDir, ops) != null) AsideRecovery.KEPT_AWAY else AsideRecovery.FAILED
+        }
+        if (!Files.isDirectory(File(filesDir, "usr").toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            Log.w(TAG, "preserve: stranded $ASIDE_NAME found; restoring after the prefix is re-created")
+            return AsideRecovery.DEFERRED
+        }
+        return if (restoreAside(filesDir, ops)) {
+            Log.i(TAG, "preserve: restored stranded $ASIDE_NAME into $GUESTS_REL")
+            AsideRecovery.RESTORED
+        } else {
+            AsideRecovery.FAILED
+        }
+    }
+
+    /**
+     * Replaces `filesDir/usr` with the extracted `tmpDir/usr` while keeping installed
+     * guests: they are moved aside, the prefix is promoted, then they are moved back
+     * (also restoring a [AsideRecovery.DEFERRED] aside). [onComplete] (apply rewrite +
+     * mark extracted) runs only once the guests are fully back in place.
+     *
+     * @throws IllegalStateException when the prefix is invalid, the guests cannot be
+     * preserved, or the copy-back is incomplete — the aside is then left in place for
+     * the next run's [recoverStrandedAside] and nothing is marked.
+     */
+    internal fun promotePrefixPreservingGuests(
+        filesDir: File,
+        tmpDir: File,
+        ops: TreeOps = TreeOps(),
+        onComplete: () -> Unit
+    ) {
+        val tmpUsr = File(tmpDir, "usr")
+        val dstUsr = File(filesDir, "usr")
+        if (!File(tmpUsr, "lib/libtermux-exec.so").isFile) {
+            throw IllegalStateException("extract missing usr/lib/libtermux-exec.so")
+        }
+        val preserved = preserveProotDistro(filesDir, ops)
+        if (preserved == null && existsNoFollow(File(filesDir, GUESTS_REL))) {
+            // Preservation failed but guests are still inside usr/: never delete them.
+            throw IllegalStateException("could not preserve $GUESTS_REL; aborting re-extract")
+        }
+        SafeFiles.deleteTree(dstUsr)
+        if (!tmpUsr.renameTo(dstUsr)) {
+            // Same-FS rename should not fail; fall back to copy.
+            SafeFiles.copyTree(tmpUsr, dstUsr, overwrite = true)
+            SafeFiles.deleteTree(tmpUsr)
+        }
+        SafeFiles.deleteTree(tmpDir)
+
+        if (existsNoFollow(File(filesDir, ASIDE_NAME))) {
+            if (!restoreAside(filesDir, ops)) {
+                throw IllegalStateException("guest copy-back incomplete; kept $ASIDE_NAME for recovery")
+            }
+            Log.i(TAG, "preserved installed proot-distro containers across re-extract")
+        }
+        onComplete()
+    }
+
+    /**
+     * Move [GUESTS_REL] aside (same-FS rename) so a re-extract can restore installed
+     * guests. An existing aside is never deleted: it is renamed away first. Returns
+     * null when nothing to preserve, or when the copy fallback failed (the caller
+     * then refuses to delete `usr/`).
+     */
+    private fun preserveProotDistro(filesDir: File, ops: TreeOps): File? {
+        val src = File(filesDir, GUESTS_REL)
+        if (!existsNoFollow(src)) return null
+        val aside = File(filesDir, ASIDE_NAME)
+        if (existsNoFollow(aside) && moveAsideAway(filesDir, ops) == null) {
+            throw IllegalStateException("could not move existing $ASIDE_NAME away; aborting re-extract")
+        }
+        if (ops.move(src, aside)) return aside
+        // Rename failed (unlikely on same FS) — copy so we never lose the guest.
+        if (ops.copy(src, aside)) return aside
         Log.e(TAG, "preserve: could not copy proot-distro aside")
         return null
+    }
+
+    /**
+     * Moves [ASIDE_NAME] back to [GUESTS_REL]. Never merges over a populated live
+     * tree. Returns true only when the guests are completely back in place; on an
+     * incomplete copy the aside is kept as the only complete copy.
+     */
+    private fun restoreAside(filesDir: File, ops: TreeOps): Boolean {
+        val aside = File(filesDir, ASIDE_NAME)
+        val live = File(filesDir, GUESTS_REL)
+        if (liveGuestsPresent(filesDir)) {
+            Log.e(TAG, "preserve: $GUESTS_REL already populated; keeping ${aside.absolutePath}")
+            return false
+        }
+        live.parentFile?.mkdirs()
+        if (ops.move(aside, live)) return true
+        Log.w(TAG, "preserve: renameTo failed, copying proot-distro back")
+        if (ops.copy(aside, live)) {
+            SafeFiles.deleteTree(aside)
+            return true
+        }
+        Log.e(TAG, "preserve: copy back incomplete; keeping ${aside.absolutePath}")
+        return false
+    }
+
+    /** Renames [ASIDE_NAME] to a unique `ASIDE_NAME.<timestamp>`; null when that fails. */
+    private fun moveAsideAway(filesDir: File, ops: TreeOps): File? {
+        val stamp = ops.now()
+        var dest = File(filesDir, "$ASIDE_NAME.$stamp")
+        var n = 1
+        while (existsNoFollow(dest)) dest = File(filesDir, "$ASIDE_NAME.$stamp.${n++}")
+        if (!ops.move(File(filesDir, ASIDE_NAME), dest)) {
+            Log.e(TAG, "preserve: could not rename $ASIDE_NAME to ${dest.name}; kept in place")
+            return null
+        }
+        Log.w(TAG, "preserve: earlier $ASIDE_NAME kept as ${dest.absolutePath} (live guests also present)")
+        return dest
     }
 
     /** Streaming tar extractor (POSIX ustar). Entries rooted at usr/ or data/data/<pkg>/files/. */

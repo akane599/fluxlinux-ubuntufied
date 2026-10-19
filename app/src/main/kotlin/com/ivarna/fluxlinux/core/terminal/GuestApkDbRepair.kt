@@ -2,6 +2,7 @@ package com.ivarna.fluxlinux.core.terminal
 
 import android.content.Context
 import android.util.Log
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import java.io.File
 
 /**
@@ -103,22 +104,27 @@ object GuestApkDbRepair {
         }
     }
 
+    /**
+     * Best-effort: make dirs traversable and files group/other readable. Walks
+     * without following links (SafeFiles): a symlink is skipped, never chmod'd
+     * through, and a link cycle cannot recurse.
+     */
     private fun ensureWritableTree(dir: File) {
-        if (!dir.isDirectory) return
-        // Best-effort: make dirs traversable and files group/other readable
-        dir.setExecutable(true, false)
-        dir.setReadable(true, false)
-        if (dir.canWrite()) {
-            dir.setWritable(true, false)
-        }
-        dir.listFiles()?.forEach { child ->
-            if (child.isDirectory) {
-                ensureWritableTree(child)
-            } else if (child.canWrite() || child.parentFile?.canWrite() == true) {
-                child.setReadable(true, false)
-                // Only force write if parent allows mutation
-                if (child.parentFile?.canWrite() == true) {
-                    child.setWritable(true, false)
+        SafeFiles.walkNoFollow(dir) { f, attrs ->
+            when {
+                attrs.isSymbolicLink -> Unit
+                attrs.isDirectory -> {
+                    f.setExecutable(true, false)
+                    f.setReadable(true, false)
+                    if (f.canWrite()) f.setWritable(true, false)
+                }
+                else -> {
+                    val parentWritable = f.parentFile?.canWrite() == true
+                    if (f.canWrite() || parentWritable) {
+                        f.setReadable(true, false)
+                        // Only force write if parent allows mutation
+                        if (parentWritable) f.setWritable(true, false)
+                    }
                 }
             }
         }
