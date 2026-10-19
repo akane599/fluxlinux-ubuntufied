@@ -37,4 +37,11 @@
     <string name="onboarding_done_open_terminal">Open terminal</string>
     <string name="onboarding_done_dashboard">Go to dashboard</string>
     <string name="onboarding_done_icon_desc">Ubuntu installed</string>
+    <string name="onboarding_notice_body">The Linux host tools ship inside the app. To provide a complete Linux environment, FluxLinux downloads the Ubuntu rootfs directly from GitHub Releases upon continuation. It is not bundled in the F-Droid APK:</string>
+    <string name="onboarding_notice_chip_host">Host tools</string>
+    <string name="onboarding_notice_chip_host_size">Included</string>
+    <string name="onboarding_notice_chip_rootfs">Ubuntu Rootfs</string>
+    <string name="onboarding_notice_chip_rootfs_size">~80-150 MiB</string>
+    <string name="onboarding_host_setup_intro">Initialize the local embedded Linux prefix, PulseAudio server, and terminal toolchain before Ubuntu is installed.</string>
+    <string name="onboarding_consent_body">I understand this setup downloads the Ubuntu rootfs from GitHub Releases. That archive is not in the base APK and is not checked by F-Droid.</string>
 </resources>
