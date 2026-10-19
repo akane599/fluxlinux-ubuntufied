@@ -540,12 +540,7 @@ fun HostBootstrapStep(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        val hostHint = if (com.ivarna.fluxlinux.core.install.HostBootstrap.downloadsFromRelease(context.packageName)) {
-            "Initialize downloads the Linux host (~124 MiB) from GitHub when you tap the button. " +
-                "That archive is not in the F-Droid APK. No separate Termux APK is required."
-        } else {
-            "The Linux host environment (Termux-class prefix + proot-distro) is bundled inside this app — no separate Termux APK is required for Debian installs."
-        }
+        val hostHint = "The Linux host tools (Termux-class prefix + proot-distro) are bundled inside this app, so no separate Termux APK is required. Only the Ubuntu rootfs is downloaded from GitHub Releases."
         Text(
             text = hostHint,
             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,

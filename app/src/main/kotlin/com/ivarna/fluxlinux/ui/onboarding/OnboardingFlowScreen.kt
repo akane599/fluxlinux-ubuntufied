@@ -92,7 +92,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
-import com.ivarna.fluxlinux.core.install.HostBootstrap
 import com.ivarna.fluxlinux.core.install.OnboardingInstallRunner
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
@@ -496,7 +495,7 @@ private fun ConsentPage(onBack: () -> Unit, onNext: () -> Unit) {
                     Spacer(Modifier.height(12.dp))
 
                     Text(
-                        text = "The F-Droid APK is intentionally lightweight and does not bundle large Linux OS archives. To provide a complete Linux environment, FluxLinux downloads the required system components directly from GitHub Releases upon continuation:",
+                        text = stringResource(R.string.onboarding_notice_body),
                         color = colors.onSurface.copy(alpha = 0.75f),
                         fontSize = 13.5.sp,
                         lineHeight = 19.sp
@@ -510,13 +509,13 @@ private fun ConsentPage(onBack: () -> Unit, onNext: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         DownloadItemBadge(
-                            title = "Host Prefix",
-                            size = "~124 MiB",
+                            title = stringResource(R.string.onboarding_notice_chip_host),
+                            size = stringResource(R.string.onboarding_notice_chip_host_size),
                             modifier = Modifier.weight(1f)
                         )
                         DownloadItemBadge(
-                            title = "Ubuntu Rootfs",
-                            size = "~80-150 MiB",
+                            title = stringResource(R.string.onboarding_notice_chip_rootfs),
+                            size = stringResource(R.string.onboarding_notice_chip_rootfs_size),
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -580,6 +579,8 @@ private fun DownloadItemBadge(
         )
         Text(
             text = size,
+            maxLines = 1,
+            softWrap = false,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = FluxAccentCyan
@@ -638,7 +639,7 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = "Initialize the local embedded Linux prefix, PulseAudio server, and terminal toolchain before selecting your distribution.",
+                text = stringResource(R.string.onboarding_host_setup_intro),
                 color = colors.onBackground.copy(alpha = 0.72f),
                 fontSize = 14.sp,
                 lineHeight = 19.sp
@@ -1511,13 +1512,7 @@ private fun FluxConsentCheckboxCard(
     consented: Boolean,
     onConsentChange: (Boolean) -> Unit
 ) {
-    val context = LocalContext.current
-    val downloadsHost = HostBootstrap.downloadsFromRelease(context.packageName)
-    val body = if (downloadsHost) {
-        "I understand this setup downloads Linux system images (host bootstrap and distro rootfs) from GitHub Releases. Those files are not bundled in the F-Droid APK and are not checked by F-Droid."
-    } else {
-        "I understand this setup downloads the selected Linux distro rootfs from GitHub Releases. That archive is not in the base APK and is not checked by F-Droid."
-    }
+    val body = stringResource(R.string.onboarding_consent_body)
     val colors = MaterialTheme.colorScheme
     val borderColor = if (consented) FluxAccentMagenta else FluxHairline
 
