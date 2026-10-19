@@ -2,6 +2,7 @@ package com.ivarna.fluxlinux.core.install
 
 import android.content.Context
 import android.util.Log
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import com.ivarna.fluxlinux.core.terminal.HostCommandBuilder
 import com.ivarna.fluxlinux.core.terminal.TermuxHostPaths
 import java.io.File
@@ -12,7 +13,8 @@ import java.util.concurrent.TimeUnit
  *
  * Guest-side `rm -rf ~/.oh-my-zsh` and `curl | sh` install under proot often
  * hang for a long time (slow unlink of partial clones; unbounded network).
- * Java [File.deleteRecursively] + host `git` (PREFIX) is much more reliable.
+ * Native [SafeFiles.deleteTree] (never follows links) + host `git` (PREFIX) is
+ * much more reliable.
  */
 object ProotZshBootstrap {
 
@@ -54,7 +56,7 @@ object ProotZshBootstrap {
         // Corrupt / partial: remove natively (do NOT rm under proot — that hangs)
         if (omz.exists()) {
             onLog("Removing incomplete Oh My Zsh (native delete)…")
-            val ok = omz.deleteRecursively()
+            val ok = SafeFiles.deleteTree(omz)
             if (!ok && omz.exists()) {
                 onLog("WARN: could not fully delete ${omz.absolutePath}")
             }
@@ -72,7 +74,7 @@ object ProotZshBootstrap {
             onLog("Oh My Zsh host clone failed or incomplete")
             // Leave no half tree for guest rm to thrash on
             if (omz.exists() && !isOmzInstalled(rootfs)) {
-                omz.deleteRecursively()
+                SafeFiles.deleteTree(omz)
             }
             return false
         }
@@ -119,11 +121,11 @@ object ProotZshBootstrap {
             onLog("Plugin ${dest.name} already present — skip")
             return
         }
-        if (dest.exists()) dest.deleteRecursively()
+        if (dest.exists()) SafeFiles.deleteTree(dest)
         onLog("Host clone plugin ${dest.name}…")
         if (!hostGitClone(app, url, dest, timeoutSec = 90, onLog)) {
             onLog("Plugin ${dest.name} clone failed — skip")
-            dest.deleteRecursively()
+            SafeFiles.deleteTree(dest)
         }
     }
 
@@ -163,20 +165,20 @@ object ProotZshBootstrap {
             if (!finished) {
                 proc.destroyForcibly()
                 onLog("git clone timed out after ${timeoutSec}s: $url")
-                dest.deleteRecursively()
+                SafeFiles.deleteTree(dest)
                 return false
             }
             val code = proc.exitValue()
             if (code != 0) {
                 onLog("git clone exit $code: $url")
-                dest.deleteRecursively()
+                SafeFiles.deleteTree(dest)
                 false
             } else {
                 dest.isDirectory
             }
         } catch (e: Exception) {
             onLog("git clone error: ${e.message}")
-            dest.deleteRecursively()
+            SafeFiles.deleteTree(dest)
             false
         }
     }

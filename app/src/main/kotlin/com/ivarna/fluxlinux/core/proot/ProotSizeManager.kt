@@ -4,17 +4,22 @@ import android.content.Context
 import android.util.Log
 import com.ivarna.fluxlinux.core.chroot.GuestStorageCatalog
 import com.ivarna.fluxlinux.core.data.DistroRepository
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import com.ivarna.fluxlinux.core.terminal.SessionRegistry
 import java.io.IOException
 
 /**
- * Measures PRoot container storage using [File.walkTopDown] on the container directory.
- * No root shell is used. Guarded against active uninstall sessions.
+ * Measures PRoot container storage with [SafeFiles.walkNoFollow] on the container
+ * directory, counting only regular files (symlinks such as guest `~/storage/shared`
+ * are never followed). No root shell is used. Guarded against active uninstall sessions.
  */
 object ProotSizeManager {
 
     private const val TAG = "ProotSize"
     const val TIMEOUT_MS = 90_000L
+
+    /** Aborts [SafeFiles.walkNoFollow] once the deadline has passed. */
+    private class WalkTimeout : RuntimeException()
 
     /** Traversal hook for deterministic race testing (e.g., simulating container disappearance mid-walk). */
     @Volatile
@@ -61,19 +66,20 @@ object ProotSizeManager {
         var totalBytes = 0L
 
         return try {
-            val sequence = containerDir.walkTopDown()
-            for (file in sequence) {
-                onFileVisitForTest?.invoke(file)
-                if (System.currentTimeMillis() > deadline) {
-                    timedOut = true
-                    break
-                }
-                if (file.isFile) {
-                    val len = file.length()
-                    if (len > 0L) {
-                        totalBytes += len
+            try {
+                // Never follows links: guest homes link ~/storage/* to shared storage.
+                SafeFiles.walkNoFollow(containerDir) { file, attrs ->
+                    onFileVisitForTest?.invoke(file)
+                    if (System.currentTimeMillis() > deadline) throw WalkTimeout()
+                    if (attrs.isRegularFile) {
+                        val len = attrs.size()
+                        if (len > 0L) {
+                            totalBytes += len
+                        }
                     }
                 }
+            } catch (_: WalkTimeout) {
+                timedOut = true
             }
 
             // Post-walk validation: ensure container directory didn't vanish mid-walk

@@ -8,6 +8,7 @@ import android.util.Log
 import android.widget.Toast
 import com.ivarna.fluxlinux.core.data.terminalComponentFor
 import com.ivarna.fluxlinux.core.service.DesktopSessionService
+import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.PhantomProcessFixer
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.terminal.HostScriptDeployer
@@ -249,6 +250,10 @@ object DesktopLauncher {
                 lastError = null,
                 autoShowLogsTick = it.autoShowLogsTick + 1
             )
+        }
+
+        if (method != "chroot") {
+            runCatching { GuestStorageLinks.ensure(app, distroId) }
         }
 
         startFgs(app)
