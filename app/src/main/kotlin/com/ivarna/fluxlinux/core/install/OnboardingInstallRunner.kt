@@ -338,6 +338,9 @@ class OnboardingInstallRunner(private val ctx: Context) {
         if (customOk) {
             StateManager.setComponentInstalled(appCtx, distroId, "customization", true)
         }
+        // Persist here, not from Done-page buttons: Back, rotation or process death
+        // after a successful install must not re-run onboarding (M4).
+        StateManager.setOnboardingComplete(appCtx, true)
         StateManager.triggerRefresh()
         postSuccess(onProgress, phases)
     }
@@ -531,6 +534,9 @@ class OnboardingInstallRunner(private val ctx: Context) {
         if (customExit == 0) {
             StateManager.setComponentInstalled(appCtx, distroId, "customization", true)
         }
+        // Persist here, not from Done-page buttons: Back, rotation or process death
+        // after a successful install must not re-run onboarding (M4).
+        StateManager.setOnboardingComplete(appCtx, true)
         StateManager.triggerRefresh()
         postSuccess(onProgress, phases)
     }
