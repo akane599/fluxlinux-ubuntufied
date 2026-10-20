@@ -209,6 +209,16 @@ ensure_devpts() {
 
 ensure_mounts() {
   [ -d "$FLUX_CHROOT" ] || die "chroot missing: $FLUX_CHROOT"
+  # Never (re)bind host /dev, /sys or /sdcard into a rootfs that uninstall is
+  # deleting as root (H4), or into a tree that was never set up. Legacy installs
+  # without .flux_configured still pass when they have a guest shell.
+  [ ! -e "$FLUX_CHROOT/.flux_uninstalling" ] \
+    || die "chroot is being uninstalled: $FLUX_CHROOT"
+  if [ ! -e "$FLUX_CHROOT/.flux_configured" ] \
+    && [ ! -L "$FLUX_CHROOT/bin/sh" ] && [ ! -e "$FLUX_CHROOT/bin/sh" ] \
+    && [ ! -e "$FLUX_CHROOT/usr/bin/bash" ] && [ ! -e "$FLUX_CHROOT/usr/bin/sh" ]; then
+    die "chroot not installed: $FLUX_CHROOT"
+  fi
   mkdir -p \
     "$FLUX_CHROOT/dev" "$FLUX_CHROOT/dev/pts" "$FLUX_CHROOT/dev/shm" \
     "$FLUX_CHROOT/proc" "$FLUX_CHROOT/sys" \
