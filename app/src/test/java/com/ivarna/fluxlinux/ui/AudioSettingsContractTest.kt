@@ -166,22 +166,23 @@ class AudioSettingsContractTest {
     fun noScriptUsesLoopbackTcpPulse() {
         val scripts = File(repoFile("src/main/assets/scripts/host/start_pulse_host.sh").parentFile, "..")
             .canonicalFile
-        // Owned by parallel remediation workers at the time of writing; drop once merged.
-        val pending = listOf("chroot/", "debian/proot/start/start_gui.sh")
         val bad = listOf(
             Regex("""PULSE_SERVER=["']?(tcp:)?127\.0\.0\.1"""),
             Regex("""default-server\s*=\s*(tcp:)?127\.0\.0\.1"""),
             Regex("""(load=["']?|load-module )module-native-protocol-tcp"""),
         )
         val offenders = mutableListOf<String>()
+        var swept = 0
         SafeFiles.walkNoFollow(scripts) { f, attrs ->
             if (!attrs.isRegularFile || !f.name.endsWith(".sh")) return@walkNoFollow
+            swept++
             val rel = f.relativeTo(scripts).invariantSeparatorsPath
-            if (pending.any { rel.startsWith(it) }) return@walkNoFollow
             f.readLines().forEachIndexed { i, line ->
                 if (bad.any { it.containsMatchIn(line) }) offenders += "$rel:${i + 1}: ${line.trim()}"
             }
         }
         assertTrue(offenders.joinToString("\n"), offenders.isEmpty())
+        // The sweep covers chroot/ and the proot start script too (no exclusions).
+        assertTrue("too few scripts swept: $swept", swept > 50)
     }
 }
