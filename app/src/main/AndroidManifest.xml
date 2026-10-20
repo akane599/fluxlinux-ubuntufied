@@ -86,11 +86,6 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".core.service.InstallServerService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
         <!-- Keep-alive during base desktop / onboarding install (rootfs + XFCE). -->
         <service
             android:name=".core.service.BaseInstallService"
