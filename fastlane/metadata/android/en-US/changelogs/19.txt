@@ -1,0 +1,4 @@
+- Extra keys rows match Termux: ESC / ― HOME ↑ END PGUP and ↹ CTRL ALT ← ↓ → PGDN
+- Other keys (SHFT, BKSP, DEL, INS, ENT, symbols, Fn) moved to a scrollable third row
+- Held keys repeat at a steady Termux-like speed
+- New Settings switch "Accelerate held keys" restores the speed-up
