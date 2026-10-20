@@ -35,16 +35,46 @@ object ZshPluginSet {
         "history-substring-search",
     )
 
+    /** A git repository fetched at exactly [commit] (full SHA-1), never a moving branch. */
+    data class GitPin(val url: String, val commit: String)
+
+    /*
+     * Pinned upstream commits (default-branch HEAD, looked up 2026-10-20). The
+     * guest customization scripts carry the same values as shell variables
+     * (OMZ_SHA, ZSH_AUTOSUGGEST_SHA, …); CustomizationScriptPinsContractTest
+     * fails when they drift. Bump deliberately after reviewing the upstream diff.
+     */
+    val OMZ = GitPin(
+        "https://github.com/ohmyzsh/ohmyzsh.git",
+        "0650a250405af1e480b1ecf8c33bc960b9f333f5",
+    )
+
     /**
      * Plugins cloned into `$ZSH_CUSTOM/plugins`. fzf-tab is not bundled with
      * oh-my-zsh. Recent oh-my-zsh bundles autosuggestions / syntax-highlighting,
      * but older trees on existing installs do not, so Flux keeps cloning them.
      */
-    val EXTERNAL_PLUGIN_URLS: Map<String, String> = linkedMapOf(
-        "zsh-autosuggestions" to "https://github.com/zsh-users/zsh-autosuggestions.git",
-        "zsh-syntax-highlighting" to "https://github.com/zsh-users/zsh-syntax-highlighting.git",
-        "fzf-tab" to "https://github.com/Aloxaf/fzf-tab.git",
+    val EXTERNAL_PLUGINS: Map<String, GitPin> = linkedMapOf(
+        "zsh-autosuggestions" to GitPin(
+            "https://github.com/zsh-users/zsh-autosuggestions.git",
+            "85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5",
+        ),
+        "zsh-syntax-highlighting" to GitPin(
+            "https://github.com/zsh-users/zsh-syntax-highlighting.git",
+            "e6683f20e5c38d3e5447f45845d04ddda75d0f23",
+        ),
+        "fzf-tab" to GitPin(
+            "https://github.com/Aloxaf/fzf-tab.git",
+            "24105b15714bfec37989ed5c5b6e60f572253019",
+        ),
     )
+
+    /** agnosterzak theme: raw file at a pinned commit, accepted only on this sha256. */
+    const val AGNOSTERZAK_COMMIT = "312f93f00b199d6c2506221f8366a7f216023100"
+    const val AGNOSTERZAK_SHA256 = "b03b3de1a172097b0cf2695d705c1018b772ff4543562e624c972a9e5070dee2"
+    const val AGNOSTERZAK_URL =
+        "https://raw.githubusercontent.com/zakaziko99/agnosterzak-ohmyzsh-theme/" +
+            "$AGNOSTERZAK_COMMIT/agnosterzak.zsh-theme"
 
     /** Plugins only the Ubuntu set adds; other distros keep the legacy two. */
     private val UBUNTU_ONLY_EXTERNAL = setOf("fzf-tab")
@@ -78,11 +108,11 @@ object ZshPluginSet {
         !distroId.isNullOrBlank() && GuestZshrcRepair.resolveProotName(distroId) == "ubuntu"
 
     /** Plugins to clone for [prootName]: Ubuntu gets fzf-tab on top of the legacy pair. */
-    fun externalPluginsFor(prootName: String?): Map<String, String> =
+    fun externalPluginsFor(prootName: String?): Map<String, GitPin> =
         if (appliesTo(prootName)) {
-            EXTERNAL_PLUGIN_URLS
+            EXTERNAL_PLUGINS
         } else {
-            EXTERNAL_PLUGIN_URLS.filterKeys { it !in UBUNTU_ONLY_EXTERNAL }
+            EXTERNAL_PLUGINS.filterKeys { it !in UBUNTU_ONLY_EXTERNAL }
         }
 
     /**
@@ -93,7 +123,7 @@ object ZshPluginSet {
         customPlugins: File,
         bundledPlugins: File,
         prootName: String?,
-    ): Map<String, String> = externalPluginsFor(prootName).filterKeys { name ->
+    ): Map<String, GitPin> = externalPluginsFor(prootName).filterKeys { name ->
         val custom = File(customPlugins, name)
         val cloned = custom.isDirectory && custom.list()?.isNotEmpty() == true
         !cloned && !File(bundledPlugins, name).isDirectory
