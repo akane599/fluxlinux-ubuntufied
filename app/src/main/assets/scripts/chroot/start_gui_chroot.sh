@@ -237,11 +237,9 @@ fi
 # printed by the root guest launcher only once the desktop process is alive.
 echo "FluxLinux: host X0 socket ready (X server PID=$XSERVER_PID)"
 
-echo "FluxLinux: Opening X11 activity..."
-am start -n "$PKG/com.termux.x11.MainActivity" \
-  --activity-single-top \
-  --activity-clear-top 2>/dev/null || \
-am start -n "$PKG/com.termux.x11.MainActivity" 2>/dev/null
+# No `am start` of the X11 activity here: DesktopLauncher opens it once the guest prints
+# FLUX_DESKTOP_READY and the X11 prefs are applied. (This call used to fail silently
+# because usr/bin/sh, am's interpreter, was missing; with sh present it would open early.)
 sleep 1
 
 # Root stage: as root, copy the guest launcher + helper + resolver from app-private HOME into

@@ -182,6 +182,12 @@ object HostScriptDeployer {
     fun deployScripts(ctx: Context, force: Boolean = false): Boolean {
         // Cheap (one small file) and must run even on the warm path: app updates move nativeLibraryDir.
         runCatching { TermuxHostPaths.refreshHostEnvIfStale(ctx.filesDir, ctx) }
+        // One lstat; repairs prefixes extracted before the bootstrap shipped bin/sh.
+        when (HostShLink.ensure(File(ctx.filesDir, "usr/bin"))) {
+            HostShLink.Result.CREATED -> Log.i(TAG, "created usr/bin/sh -> bash")
+            HostShLink.Result.FAILED -> Log.w(TAG, "could not create usr/bin/sh -> bash")
+            HostShLink.Result.PRESENT, HostShLink.Result.NO_BASH -> Unit
+        }
         if (!force && isDeployed(ctx)) return true
         return try {
             val homeDir = File(ctx.filesDir, "home").also { it.mkdirs() }

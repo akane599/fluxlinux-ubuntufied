@@ -170,6 +170,22 @@ def add_loader(extract_dir: Path, target_prefix: str, loader_src: Path) -> None:
     os.chmod(dest, 0o600)
 
 
+def ensure_sh_link(extract_dir: Path, target_prefix: str) -> None:
+    """Provide usr/bin/sh -> bash when no package ships one.
+
+    Termux wrappers (am, su, getprop, logcat, termux-open, ...) use the shebang
+    $PREFIX/bin/sh, which normally comes from dash. Without it termux-exec runs
+    `linker64 $PREFIX/bin/sh` and the wrapper fails with "unable to open file".
+    The app re-creates the same link on existing installs (HostShLink.kt).
+    """
+    sh = extract_dir / target_prefix / "usr/bin/sh"
+    if sh.is_symlink() or sh.exists():
+        print(f"[*] usr/bin/sh provided by a package -> {os.readlink(sh) if sh.is_symlink() else 'file'}")
+        return
+    print("[*] Linking usr/bin/sh -> bash")
+    sh.symlink_to("bash")
+
+
 def verify_bootstrap(
     extract_dir: Path,
     target_prefix: str,
@@ -180,6 +196,8 @@ def verify_bootstrap(
     # Terminal + proot (nativecode host shell path)
     required = [
         "usr/bin/bash",
+        # exists() follows the link, so a dangling sh fails here.
+        "usr/bin/sh",
         "usr/bin/python",
         "usr/bin/proot",
         "usr/bin/proot-distro",
@@ -409,6 +427,7 @@ def main() -> None:
         sys.exit(1)
 
     assert_no_wrong_prefix(extract_dir, package_name)
+    ensure_sh_link(extract_dir, target_prefix)
     if args.mode == "full" or not args.skip_loader_check:
         add_loader(extract_dir, target_prefix, args.loader_apk.resolve())
     elif args.loader_apk.resolve().is_file():

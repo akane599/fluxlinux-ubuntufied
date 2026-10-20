@@ -190,12 +190,9 @@ fi
 # Not a readiness marker for proot: DesktopLauncher waits for the guest FLUX_DESKTOP_READY.
 echo "FluxLinux: host X0 socket ready (X server PID=$XSERVER_PID)"
 
-# Open X11 display activity in our app
-echo "FluxLinux: Launching X11 display activity..."
-am start -n "$PKG/com.termux.x11.MainActivity" \
-  --activity-single-top \
-  --activity-clear-top 2>/dev/null || \
-am start -n "$PKG/com.termux.x11.MainActivity" 2>/dev/null
+# No `am start` of the X11 activity here: DesktopLauncher opens it once the guest prints
+# FLUX_DESKTOP_READY and the X11 prefs are applied. (This call used to fail silently
+# because usr/bin/sh, am's interpreter, was missing; with sh present it would open early.)
 sleep 1
 
 # Guest GPU mode from setup_hw_accel_debian.sh (/etc/fluxlinux/gpu_mode)

@@ -51,6 +51,24 @@ for rel in "${required[@]}"; do
   fi
 done
 
+# usr/bin/sh: interpreter of every Termux wrapper (am, su, getprop, ...). A link must
+# point at a member of the same tar, or the wrapper fails in linker64 at runtime.
+sh_entry="$(tar -tvf "$TAR" usr/bin/sh 2>/dev/null || true)"
+case "$sh_entry" in
+  l*" -> "*)
+    sh_target="${sh_entry##* -> }"
+    [[ "$sh_target" == /* ]] && sh_member="${sh_target#/data/data/$PKG/files/}" || sh_member="usr/bin/$sh_target"
+    if grep -qx "$sh_member" "$tmp"; then
+      echo "  [OK] usr/bin/sh -> $sh_target"
+    else
+      echo "  [FAIL] usr/bin/sh -> $sh_target (target not in tar)"
+      fail=1
+    fi
+    ;;
+  -*) echo "  [OK] usr/bin/sh (regular file)" ;;
+  *) echo "  [MISSING] usr/bin/sh"; fail=1 ;;
+esac
+
 # Stock path strings should not appear in path names
 if grep -q 'com\.termux' "$tmp"; then
   echo "  [FAIL] tar member paths contain com.termux"
