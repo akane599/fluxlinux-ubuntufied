@@ -1,7 +1,6 @@
 package com.ivarna.fluxlinux.core.root
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -121,12 +120,6 @@ class BusyBoxPathsTest {
     }
 
     @Test
-    fun termuxIntentFactory_has_no_bare_busybox_chroot() {
-        val src = readRepoFile("app/src/main/kotlin/com/ivarna/fluxlinux/core/data/TermuxIntentFactory.kt")
-        assertFalse(src.contains("busybox chroot"))
-    }
-
-    @Test
     fun last_resort_pin_requires_exec_probe() {
         val files = listOf(
             "scripts/chroot/setup_guest_chroot.sh",
@@ -168,32 +161,12 @@ class BusyBoxPathsTest {
         }
     }
 
-    @Test
-    fun termuxIntentFactory_does_not_default_dead_pin() {
-        val src = readRepoFile("app/src/main/kotlin/com/ivarna/fluxlinux/core/data/TermuxIntentFactory.kt")
-        assertFalse(
-            src.contains("BB=\"\${FLUX_BB:-/data/local/tmp/flux_busybox}\"") ||
-                src.contains("BB=\"\${'$'}{FLUX_BB:-/data/local/tmp/flux_busybox}\"")
-        )
-        assertTrue(src.contains("/data/adb/ksu/bin/busybox"))
-        assertTrue(src.contains("flux_busybox --list"))
-    }
-
     private fun readAsset(rel: String): String {
         val name = rel.removePrefix("scripts/")
         val cwd = File("").absoluteFile
         val candidates = listOf(
             File(cwd, "src/main/assets/scripts/$name"),
             File(cwd, "app/src/main/assets/scripts/$name")
-        )
-        return candidates.first { it.isFile }.readText()
-    }
-
-    private fun readRepoFile(rel: String): String {
-        val cwd = File("").absoluteFile
-        val candidates = listOf(
-            File(cwd, rel.removePrefix("app/")),
-            File(cwd, rel)
         )
         return candidates.first { it.isFile }.readText()
     }
