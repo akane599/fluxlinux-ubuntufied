@@ -306,13 +306,37 @@ EOF
     chmod 755 /usr/local/bin/gpu-launch
 }
 
-flux_gpu_disable_xfce_compositor() {
-    echo "FluxLinux: Disabling XFCE compositor for GPU acceleration..."
-    for _userdir in /home/* /root; do
-        [ -d "$_userdir" ] || continue
-        _xfce="$_userdir/.config/xfce4/xfconf/xfce-perchannel-xml"
-        mkdir -p "$_xfce" 2>/dev/null || true
-        cat > "$_xfce/xfwm4.xml" << 'XFCEXML'
+# Set only /general/use_compositing=false in an xfwm4.xml, keeping every other
+# property (theme, fonts, ...) that customization or the user wrote. Missing or
+# empty/malformed file (no </channel>) gets the minimal channel. POSIX: sed BRE,
+# awk; no sed -i (BSD userlands). Rewrites in place via cat to keep owner/mode.
+flux_gpu_xfwm4_no_compositing() {
+    _xml=$1
+    _tmp="$_xml.flux-tmp.$$"
+    if [ -s "$_xml" ] && grep -q '</channel>' "$_xml" 2>/dev/null; then
+        if grep -q 'name="use_compositing"' "$_xml"; then
+            sed 's|\(name="use_compositing"[^>]*value="\)[^"]*"|\1false"|' "$_xml" > "$_tmp" || { rm -f "$_tmp"; return 1; }
+        elif grep -q '<property name="general" type="empty">' "$_xml"; then
+            awk '{ print }
+                !done && /<property name="general" type="empty">/ {
+                    print "    <property name=\"use_compositing\" type=\"bool\" value=\"false\"/>"
+                    done = 1
+                }' "$_xml" > "$_tmp" || { rm -f "$_tmp"; return 1; }
+        else
+            awk '!done && /<\/channel>/ {
+                    print "  <property name=\"general\" type=\"empty\">"
+                    print "    <property name=\"use_compositing\" type=\"bool\" value=\"false\"/>"
+                    print "  </property>"
+                    done = 1
+                }
+                { print }' "$_xml" > "$_tmp" || { rm -f "$_tmp"; return 1; }
+        fi
+        cat "$_tmp" > "$_xml" || { rm -f "$_tmp"; return 1; }
+        rm -f "$_tmp"
+        return 0
+    fi
+    mkdir -p "$(dirname "$_xml")" 2>/dev/null || true
+    cat > "$_xml" << 'XFCEXML'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfwm4" version="1.0">
   <property name="general" type="empty">
@@ -320,6 +344,16 @@ flux_gpu_disable_xfce_compositor() {
   </property>
 </channel>
 XFCEXML
+}
+
+flux_gpu_disable_xfce_compositor() {
+    echo "FluxLinux: Disabling XFCE compositor for GPU acceleration..."
+    for _userdir in /home/* /root; do
+        [ -d "$_userdir" ] || continue
+        _xfce="$_userdir/.config/xfce4/xfconf/xfce-perchannel-xml"
+        mkdir -p "$_xfce" 2>/dev/null || true
+        flux_gpu_xfwm4_no_compositing "$_xfce/xfwm4.xml" \
+            || echo "FluxLinux: could not update $_xfce/xfwm4.xml (compositor left as is)"
         if command -v stat >/dev/null 2>&1; then
             _own=$(stat -c '%U:%G' "$_userdir" 2>/dev/null || true)
             [ -n "$_own" ] && chown -R "$_own" "$_userdir/.config" 2>/dev/null || true

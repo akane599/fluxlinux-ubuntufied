@@ -24,9 +24,9 @@ class PulseHostTest {
 
     @Test
     fun parseStatus_stopped() {
-        val s = PulseHost.parseStatus("FLUX_PULSE_RUNNING=0\nFLUX_PULSE_TCP=0\n")
+        val s = PulseHost.parseStatus("FLUX_PULSE_RUNNING=0\nFLUX_PULSE_SOCKET=0\n")
         assertFalse(s.running)
-        assertFalse(s.tcpOk)
+        assertFalse(s.socketOk)
         assertFalse(s.healthy)
         assertEquals("Stopped", s.label)
     }
@@ -39,25 +39,39 @@ class PulseHostTest {
             Server String: /data/data/com.ivarna.fluxlinux/files/home/.pulse/native
             Default Sink: AAudio_sink
             Default Source: AAudio_sink.monitor
-            FLUX_PULSE_TCP=1
+            FLUX_PULSE_SOCKET=1
             """.trimIndent()
         )
         assertTrue(s.running)
-        assertTrue(s.tcpOk)
+        assertTrue(s.socketOk)
         assertEquals("AAudio_sink", s.sink)
         assertTrue(s.healthy)
         assertEquals("Running", s.label)
-        assertTrue(s.detail.contains("tcp=127.0.0.1:4713"))
+        assertTrue(s.detail.contains("socket=pulse-native"))
+        assertFalse(s.detail.contains("4713"))
     }
 
     @Test
     fun parseStatus_dummySink() {
         val s = PulseHost.parseStatus(
-            "FLUX_PULSE_RUNNING=1\nDefault Sink: auto_null\nFLUX_PULSE_TCP=1\n"
+            "FLUX_PULSE_RUNNING=1\nDefault Sink: auto_null\nFLUX_PULSE_SOCKET=1\n"
         )
         assertTrue(s.running)
         assertFalse(s.healthy)
         assertEquals("Running (dummy sink)", s.label)
+    }
+
+    @Test
+    fun guestServers_useHostTmpUnixSocket_neverTcp() {
+        assertEquals("/h/usr/tmp/pulse-native", PulseHost.hostSocketPath("/h/usr/tmp"))
+        assertEquals("unix:/tmp/pulse-native", PulseHost.PROOT_GUEST_SERVER)
+        assertEquals("unix:/mnt/host-tmp/pulse-native", PulseHost.CHROOT_GUEST_SERVER)
+        val line = HostScriptDeployer.pulseGuestSocketLine("/h/usr/tmp/pulse-native")
+        assertEquals(
+            "load-module module-native-protocol-unix socket=/h/usr/tmp/pulse-native auth-anonymous=1",
+            line,
+        )
+        assertFalse(line.contains("tcp"))
     }
 
     @Test
@@ -69,18 +83,18 @@ class PulseHostTest {
     fun supervisorOk_successAndFail() {
         assertTrue(
             PulseHost.supervisorOk(
-                "FluxLinux: [AUDIO] sink=AAudio_sink tcp=127.0.0.1:4713"
+                "FluxLinux: [AUDIO] sink=AAudio_sink unix=/data/data/x/files/usr/tmp/pulse-native"
             )
         )
         assertTrue(
             PulseHost.supervisorOk(
-                "FluxLinux: [AUDIO] already running sink=AAudio_sink tcp=127.0.0.1:4713"
+                "FluxLinux: [AUDIO] already running sink=AAudio_sink unix=/x/tmp/pulse-native"
             )
         )
         assertFalse(PulseHost.supervisorOk(""))
         assertFalse(
             PulseHost.supervisorOk(
-                "FluxLinux: [AUDIO] FAIL sink=AAudio_sink but tcp:127.0.0.1:4713 not reachable"
+                "FluxLinux: [AUDIO] FAIL sink=AAudio_sink but unix:/x/tmp/pulse-native not reachable"
             )
         )
         assertFalse(PulseHost.supervisorOk("daemon started"))

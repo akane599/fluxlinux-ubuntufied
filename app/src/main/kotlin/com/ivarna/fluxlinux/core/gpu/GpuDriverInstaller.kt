@@ -100,7 +100,12 @@ object GpuDriverInstaller {
         val p = plan(distroId, adreno, model, online, json)
         val prefs = prefs(ctx)
         prefs.edit().apply {
-            if (p is Plan.Offline) putString("pending", distroId) else remove("pending")
+            val current = prefs.getString("pending", null)
+            when (val next = nextPending(current, distroId, offline = p is Plan.Offline)) {
+                current -> Unit
+                null -> remove("pending")
+                else -> putString("pending", next)
+            }
             val latest = (p as? Plan.Install)?.pkgs?.firstOrNull()?.version
             if (latest != null) putString("latest", latest)
         }.apply()
@@ -115,6 +120,16 @@ object GpuDriverInstaller {
                 "FLUX_TURNIP_${i + 1}" to "${k.version} ${k.url} ${k.sha256}"
             }
         }
+    }
+
+    /**
+     * Offline-retry marker after planning for [distroId]: set it when offline, and clear it only
+     * when it belongs to [distroId] so another distro's pending retry survives.
+     */
+    internal fun nextPending(current: String?, distroId: String, offline: Boolean): String? = when {
+        offline -> distroId
+        current == distroId -> null
+        else -> current
     }
 
     fun pendingDistro(ctx: Context): String? = prefs(ctx).getString("pending", null)
