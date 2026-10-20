@@ -314,6 +314,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                 "FLUX_SKIP_THEME_ICONS=$skipAssets " +
                 "FLUX_SKIP_OMZ=$skipOmz " +
                 "FLUX_SKIP_POKEMON=0 " +
+                "FLUX_PROOT=1 " +
                 "FLUX_ASSET_DIR=/tmp/flux_xfce_assets"
         )
         if (abortIfCancelled(gen, phases, onProgress)) return

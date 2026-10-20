@@ -307,6 +307,8 @@ class MainActivity : ComponentActivity() {
         }
         val prootName = profile?.prootName?.takeIf { it.isNotBlank() }
             ?: distroId.removeSuffix("_chroot").ifBlank { "debian" }
+        // Lets the guest skip steps too slow under proot (full papirus-icon-theme unpack).
+        merged["FLUX_PROOT"] = "1"
         try {
             val themeOk = com.ivarna.fluxlinux.core.install.ProotXfceAssetInstaller.install(
                 activity, theme, prootName

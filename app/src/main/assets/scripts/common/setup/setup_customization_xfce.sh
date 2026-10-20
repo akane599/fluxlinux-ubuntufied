@@ -114,7 +114,10 @@ _flux_pkg_add() {
     elif command -v apk >/dev/null 2>&1; then
         apk add --no-cache "$@"                          # Alpine apk v2
     elif command -v apt-get >/dev/null 2>&1; then
-        DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+        # FLUX_APT_NO_RECOMMENDS=1 (set by the caller) skips Recommends.
+        # shellcheck disable=SC2086
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            ${FLUX_APT_NO_RECOMMENDS:+--no-install-recommends} "$@"
     else
         return 1
     fi
@@ -574,12 +577,36 @@ fi
 
 _flux_seed_papirus_categories
 
-# Offline extras/stub usually satisfy the gate. Only then try the huge
-# guest papirus-icon-theme package (Fedora ~100MiB).
-if ! papirus_xfce_ok; then
+# PRoot guest: FLUX_PROOT=1/0 from the host; otherwise proot's ptrace shows
+# up as a non-zero TracerPid.
+_flux_is_proot() {
+    case "${FLUX_PROOT:-}" in
+        1) return 0 ;;
+        0) return 1 ;;
+    esac
+    _tp="$(sed -n 's/^TracerPid:[[:space:]]*//p' /proc/self/status 2>/dev/null)"
+    [ -n "$_tp" ] && [ "$_tp" != 0 ]
+}
+
+# Last resort for the category gate: the huge papirus-icon-theme package
+# (100k+ files, Fedora ~100MiB). Under PRoot its unpack takes many minutes,
+# so skip it there and keep the Adwaita fallback below. Returns 1 when skipped.
+_flux_papirus_pkg_fallback() {
+    if _flux_is_proot; then
+        echo "FluxLinux: category icons still missing — skipping papirus-icon-theme under PRoot"
+        return 1
+    fi
     echo "FluxLinux: category icons still missing — trying papirus-icon-theme"
-    _flux_pkg_add papirus-icon-theme 2>/dev/null \
-        || _flux_pkg_add papirus-icon-theme-dark 2>/dev/null || true
+    (
+        FLUX_APT_NO_RECOMMENDS=1
+        _flux_pkg_add papirus-icon-theme 2>/dev/null \
+            || _flux_pkg_add papirus-icon-theme-dark 2>/dev/null
+    ) || true
+    return 0
+}
+
+# Offline extras/stub usually satisfy the gate.
+if ! papirus_xfce_ok && _flux_papirus_pkg_fallback; then
     _flux_fix_papirus_dangling
     _flux_seed_papirus_categories
 fi
