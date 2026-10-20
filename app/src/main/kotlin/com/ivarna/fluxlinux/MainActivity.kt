@@ -245,21 +245,6 @@ class MainActivity : ComponentActivity() {
         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    /**
-     * Component chain after a successful base install (M1): runs the wizard's
-     * selected components sequentially in the parent distro's terminal component.
-     * Each step only advances after the previous session exits 0 (B3 gate).
-     */
-    private fun runComponentChain(
-        distro: com.ivarna.fluxlinux.core.data.Distro,
-        components: List<com.ivarna.fluxlinux.core.data.DistroComponent>,
-        theme: String,
-        gpu: String
-    ) {
-        if (components.isEmpty()) return
-        runComponentStep(distro, components, 0, theme, gpu)
-    }
-
     private fun isCustomizationComponent(component: com.ivarna.fluxlinux.core.data.DistroComponent): Boolean =
         component.id == "customization" || component.id == "kde_customization" ||
             component.scriptName.contains("setup_customization")
@@ -349,76 +334,6 @@ class MainActivity : ComponentActivity() {
             merged["FLUX_SKIP_POKEMON"] = "0"
         }
         return merged
-    }
-
-    private fun runComponentStep(
-        distro: com.ivarna.fluxlinux.core.data.Distro,
-        components: List<com.ivarna.fluxlinux.core.data.DistroComponent>,
-        index: Int,
-        theme: String,
-        gpu: String
-    ) {
-        if (index >= components.size) return
-        val component = components[index]
-        val baseEnv = if (component.id == "hw_accel") {
-            val det = com.ivarna.fluxlinux.core.terminal.GpuAccelDetector.detect()
-            com.ivarna.fluxlinux.core.terminal.GpuAccelDetector.persist(this, det)
-            val mode = com.ivarna.fluxlinux.core.terminal.GpuAccelDetector.resolveFluxGpu(gpu)
-            mapOf("FLUX_GPU" to mode, "FLUX_GPU_VENDOR" to det.vendorHint)
-        } else {
-            mapOf("FLUX_THEME" to theme)
-        }
-        fun openWith(extraEnv: Map<String, String>) {
-            val scriptContent = try {
-                loadGuestComponentScript(this, component, extraEnv)
-            } catch (e: Exception) {
-                android.util.Log.e("FluxLinux", "Failed to load ${component.scriptName}", e)
-                null
-            }
-            if (scriptContent == null) {
-                runComponentStep(distro, components, index + 1, theme, gpu)
-                return
-            }
-            val opened = com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager.openComponentSession(
-                this,
-                distro = distro,
-                scriptContent = scriptContent,
-                title = component.name,
-                extraEnv = extraEnv,
-                isUninstall = false,
-                onFinished = {
-                    com.ivarna.fluxlinux.core.utils.StateManager.setComponentInstalled(
-                        this, distro.id, component.id, true
-                    )
-                    if (component.id == "hw_accel") refreshDriverMarker(distro)
-                    com.ivarna.fluxlinux.core.utils.StateManager.triggerRefresh()
-                    runComponentStep(distro, components, index + 1, theme, gpu)
-                }
-            )
-            if (!opened) {
-                android.widget.Toast.makeText(
-                    this, "Max tabs reached — ${component.name} skipped (retry in Distro Settings)",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-                runComponentStep(distro, components, index + 1, theme, gpu)
-            }
-        }
-        if (isCustomizationComponent(component)) {
-            Thread {
-                val env = stageCustomizationHostEnv(this, baseEnv, distro.id)
-                runOnUiThread { openWith(env) }
-            }.start()
-        } else if (component.id == "hw_accel" && baseEnv["FLUX_GPU"] in listOf("turnip", "panvk")) {
-            Thread {
-                val env = baseEnv + GpuDriverInstaller.guestEnv(this, distro.id)
-                runOnUiThread {
-                    if (GpuDriverInstaller.pendingDistro(this) != null) armDriverResume()
-                    openWith(env)
-                }
-            }.start()
-        } else {
-            openWith(baseEnv)
-        }
     }
 
     /**
