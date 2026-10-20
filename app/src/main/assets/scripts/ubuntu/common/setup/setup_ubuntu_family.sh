@@ -85,8 +85,9 @@ fi
 # Ubuntu's uutils refuses every utility (argv[0] must match the binary; uutils #10135).
 # gnu-coreutils ships one real file per utility, so later upgrades stay safe. Re-running
 # setup switches installs that broke: the app has already repointed /usr/bin to gnu*.
+# apt 3 never drops the Protected coreutils-from-uutils on its own, so name it for removal.
 _flux_log "Switching to GNU coreutils (coreutils-from-gnu)..."
-if ! apt-get install -y --allow-remove-essential coreutils-from-gnu; then
+if ! apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-; then
     _flux_log "WARNING: coreutils-from-gnu install failed — uutils may break after apt upgrade"
 fi
 

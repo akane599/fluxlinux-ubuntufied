@@ -91,7 +91,7 @@ class GuestComponentPayloadTest {
     fun ubuntuFamily_switchesToGnuCoreutilsBeforeOtherInstalls() {
         val text = repoFile("src/main/assets/scripts/ubuntu/common/setup/setup_ubuntu_family.sh")
             .readText()
-        val switch = text.indexOf("apt-get install -y --allow-remove-essential coreutils-from-gnu")
+        val switch = text.indexOf("apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-")
         assertTrue("family setup must install coreutils-from-gnu", switch > 0)
         assertTrue("needs the apt lists", text.indexOf("if ! apt-get update") in 0 until switch)
         assertEquals("switch precedes every other install", switch, text.indexOf("apt-get install"))
