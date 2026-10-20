@@ -7,15 +7,15 @@ import android.system.OsConstants
 import android.view.KeyEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,10 +34,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -45,21 +49,22 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.KeyboardHide
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -68,17 +73,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -96,26 +106,45 @@ import com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager.SessionOpen
 import com.ivarna.fluxlinux.core.terminal.TerminalShellCardUi
 import com.ivarna.fluxlinux.core.terminal.TerminalShellCatalog
 import com.ivarna.fluxlinux.core.utils.TerminalPreferences
+import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.terminal.TerminalExtraKeys
 import com.ivarna.fluxlinux.ui.terminal.TerminalModifierState
 import com.ivarna.fluxlinux.ui.terminal.TerminalSessionDefaults
+import com.ivarna.fluxlinux.ui.terminal.hideIme
 import com.ivarna.fluxlinux.ui.theme.FluxAccentMagenta
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
+import kotlin.math.abs
+import kotlinx.coroutines.launch
 
-/** One terminal tab as the tab row draws it. */
+/** One terminal session as the drawer's session list draws it. */
 data class TerminalTabUi(
     val title: String,
     @DrawableRes val iconRes: Int,
 )
 
+/** Drawer sheet width cap, so the scrim stays visible (and tappable) on a phone. */
+private val DRAWER_MAX_WIDTH = 300.dp
+private val DRAWER_ROW_HEIGHT = 56.dp
+
+/** Left-edge swipe zone over the terminal: Termux's edge width, inside Android's 200dp-per-edge exclusion cap. */
+private val EDGE_ZONE_WIDTH = 20.dp
+private val EDGE_ZONE_HEIGHT = 192.dp
+/** Lower-middle of the terminal area (centre at 75% of its height), above the extra keys. */
+private val EDGE_ZONE_ALIGNMENT = BiasAlignment(horizontalBias = -1f, verticalBias = 0.5f)
+/** A rightward drag this long in the edge zone opens the drawer if the drawer's own drag missed it. */
+private val EDGE_OPEN_DISTANCE = 48.dp
+
 /**
- * In-app terminal with multi-session tabs + full ExtraKeys toolbar (injectKey / ModifierState lock).
+ * In-app terminal with multi-session support + full ExtraKeys toolbar (injectKey / ModifierState lock).
+ *
+ * No top bar: sessions, new shells, the extra-keys toggle and Back live in a Termux-style
+ * drawer opened by a left-edge swipe or the extra keys' ☰ key.
  *
  * Ubuntu-first: there is no distro selector. Entering the screen with no sessions opens an
- * Ubuntu PRoot user shell once; "+" opens another one. Secondary shells (Ubuntu root, Ubuntu
- * chroot, Termux host) live in the "+" long-press / dropdown menu. Session values come from
- * [TerminalShellCatalog] via [TerminalSessionDefaults].
+ * Ubuntu PRoot user shell once; the drawer's "New Ubuntu session" opens another one. Secondary
+ * shells (Ubuntu root, Ubuntu chroot, Termux host) live in its long-press / dropdown menu.
+ * Session values come from [TerminalShellCatalog] via [TerminalSessionDefaults].
  */
 @Composable
 fun TerminalScreen(
@@ -140,7 +169,6 @@ fun TerminalScreen(
         mutableStateOf(TerminalPreferences.isKeyRepeatAccelerated(context))
     }
     var terminalViewRef by remember { mutableStateOf<TerminalView?>(null) }
-    var showShellMenu by remember { mutableStateOf(false) }
     // Empty-state auto-open runs once per entry; a failure leaves a retry button, never a loop.
     var autoOpenTried by rememberSaveable { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
@@ -286,265 +314,450 @@ fun TerminalScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .windowInsetsPadding(
-                WindowInsets.ime.union(WindowInsets.navigationBars)
-                    .only(WindowInsetsSides.Bottom)
-            )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (onBack != null) {
-                FilledTonalIconButton(
-                    onClick = {
-                        terminalViewRef?.let { com.ivarna.fluxlinux.ui.terminal.hideIme(it) }
-                        onBack.invoke()
-                    },
-                    modifier = Modifier.size(36.dp),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            Text(
-                text = "Terminal",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-            Spacer(Modifier.weight(1f))
-            IconButton(
-                onClick = {
-                    val next = !showExtraKeys
-                    showExtraKeys = next
-                    TerminalPreferences.setExtraKeysEnabled(context, next)
-                    terminalViewRef?.let { forceTerminalResize(it) }
-                },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = if (showExtraKeys) Icons.Default.Keyboard else Icons.Default.KeyboardHide,
-                    contentDescription = if (showExtraKeys) "Hide extra keys" else "Show extra keys",
-                    tint = if (showExtraKeys) FluxAccentMagenta
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Box {
-                NewTabButtons(
-                    onNewTab = { openUbuntu(fromEmptyState = false) },
-                    onShowMenu = { showShellMenu = true }
-                )
-                if (showShellMenu) {
-                    val choices = remember(rootAvailable) { resolveChoices() }
-                    ShellMenu(
-                        expanded = true,
-                        onDismiss = { showShellMenu = false },
-                        ubuntuRoot = choices.ubuntuRoot,
-                        ubuntuChroot = choices.ubuntuChroot,
-                        host = choices.host,
-                        onNewTab = {
-                            showShellMenu = false
-                            openUbuntu(fromEmptyState = false)
-                        },
-                        onOpen = { card ->
-                            showShellMenu = false
-                            openShell(card)
-                        }
-                    )
-                }
-            }
-        }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    fun openDrawer() {
+        scope.launch { drawerState.open() }
+    }
+    fun closeDrawer() {
+        scope.launch { drawerState.close() }
+    }
+    val drawerOpening = drawerState.isOpen || drawerState.targetValue == DrawerValue.Open
+    // The IME would cover half the drawer: hide it as soon as the drawer heads open (swipe or ☰).
+    LaunchedEffect(drawerOpening) {
+        if (drawerOpening) terminalViewRef?.let { hideIme(it) }
+    }
+    // Back closes an open drawer; when closed, MainActivity's handler runs as before.
+    BackHandler(enabled = drawerOpening) { closeDrawer() }
 
-        if (sessions.isNotEmpty()) {
-            TerminalTabRow(
-                tabs = sessions.mapIndexed { i, managed ->
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            TerminalDrawerSheet(
+                sessions = sessions.mapIndexed { i, managed ->
                     TerminalTabUi(
                         title = managed.title.ifBlank { titles.getOrElse(i) { "session" } },
                         iconRes = managed.iconRes ?: R.drawable.ic_terminal
                     )
                 },
                 selectedIndex = activeIndex,
-                onSelect = { FluxTerminalSessionManager.switchSession(it) },
+                extraKeysVisible = showExtraKeys,
+                onSelect = {
+                    FluxTerminalSessionManager.switchSession(it)
+                    closeDrawer()
+                },
                 onClose = { FluxTerminalSessionManager.closeSession(context, it) },
                 onCloseOthers = { keep ->
                     // Descending so the indices still to close stay valid.
                     for (j in sessions.indices.reversed()) {
                         if (j != keep) FluxTerminalSessionManager.closeSession(context, j)
                     }
+                },
+                onNewSession = {
+                    openUbuntu(fromEmptyState = false)
+                    closeDrawer()
+                },
+                onToggleExtraKeys = {
+                    val next = !showExtraKeys
+                    showExtraKeys = next
+                    TerminalPreferences.setExtraKeysEnabled(context, next)
+                    terminalViewRef?.let { forceTerminalResize(it) }
+                },
+                onBack = onBack?.let { back ->
+                    {
+                        terminalViewRef?.let { hideIme(it) }
+                        back()
+                    }
+                },
+                shellMenu = { onDismiss ->
+                    val choices = remember(rootAvailable) { resolveChoices() }
+                    ShellMenu(
+                        expanded = true,
+                        onDismiss = onDismiss,
+                        ubuntuRoot = choices.ubuntuRoot,
+                        ubuntuChroot = choices.ubuntuChroot,
+                        host = choices.host,
+                        onNewTab = {
+                            onDismiss()
+                            openUbuntu(fromEmptyState = false)
+                            closeDrawer()
+                        },
+                        onOpen = { card ->
+                            onDismiss()
+                            openShell(card)
+                            closeDrawer()
+                        }
+                    )
                 }
             )
         }
-
-        if (activeIndex >= 0) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                AndroidView(
-                    factory = { ctx ->
-                        TerminalView(ctx, null).apply {
-                            setTextSize(fontSize)
-                            try {
-                                val tf = Typeface.createFromAsset(ctx.assets, "fonts/font.ttf")
-                                setTypeface(tf)
-                            } catch (_: Exception) {
-                            }
-                            setTerminalViewClient(object : TerminalViewClient {
-                                override fun onScale(scale: Float): Float {
-                                    if (scale < 0.9f || scale > 1.1f) {
-                                        val next = (fontSize * scale).toInt().coerceIn(
-                                            TerminalPreferences.FONT_MIN,
-                                            TerminalPreferences.FONT_MAX
-                                        )
-                                        fontSize = next
-                                        TerminalPreferences.setFontSize(ctx, next)
-                                        setTextSize(next)
-                                        return 1.0f
-                                    }
-                                    return scale
-                                }
-
-                                // T3: tap → focus + IME (SHOW_FORCED fallback for OEMs).
-                                override fun onSingleTapUp(e: android.view.MotionEvent) {
-                                    requestFocus()
-                                    val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                                    if (!imm.showSoftInput(this@apply, InputMethodManager.SHOW_IMPLICIT)) {
-                                        imm.showSoftInput(this@apply, InputMethodManager.SHOW_FORCED)
-                                    }
-                                }
-
-                                override fun shouldBackButtonBeMappedToEscape(): Boolean = false
-                                override fun shouldEnforceCharBasedInput(): Boolean = false
-                                override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
-                                override fun isTerminalViewSelected(): Boolean = true
-                                override fun copyModeChanged(active: Boolean) {}
-                                // Let the view handle keys — never swallow (nativecode parity).
-                                override fun onKeyDown(keyCode: Int, event: KeyEvent, session: com.termux.terminal.TerminalSession): Boolean = false
-                                override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = false
-                                override fun onLongPress(e: android.view.MotionEvent): Boolean = false
-                                // Modifiers read from shared lockable state (ModifierState parity).
-                                override fun readControlKey(): Boolean = modState.readCtrl(true)
-                                override fun readAltKey(): Boolean = modState.readAlt(true)
-                                override fun readShiftKey(): Boolean = modState.readShift(true)
-                                override fun readFnKey(): Boolean = modState.readFn(true)
-                                override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: com.termux.terminal.TerminalSession): Boolean = false
-                                override fun onEmulatorSet() {}
-                                override fun logError(tag: String, message: String) {}
-                                override fun logWarn(tag: String, message: String) {}
-                                override fun logInfo(tag: String, message: String) {}
-                                override fun logDebug(tag: String, message: String) {}
-                                override fun logVerbose(tag: String, message: String) {}
-                                override fun logStackTraceWithMessage(tag: String, message: String, e: Exception) {}
-                                override fun logStackTrace(tag: String, e: Exception) {}
-                            })
-                            terminalViewRef = this
-                        }
-                    },
-                    update = { view ->
-                        terminalViewRef = view
-                        // Keep text size in sync with global prefs (settings page / pinch).
-                        view.setTextSize(fontSize)
-                        // T3: focus parity — re-attach + focus on every recompose/switch so a
-                        // freshly opened or switched session never shows a blank/dead view.
-                        view.isFocusable = true
-                        view.isFocusableInTouchMode = true
-                        // T3/proot-opt-01: only re-attach + re-focus when the session
-                        // actually changed (new tab / switched tab). Typing, font-size,
-                        // extra-keys and other recompositions must NOT re-attach the
-                        // same TerminalSession or steal focus every frame.
-                        val activeTerminalSession = FluxTerminalSessionManager.activeSession?.session
-                        if (activeTerminalSession == null || view.currentSession != activeTerminalSession) {
-                            FluxTerminalSessionManager.attachView(view)
-                            view.requestFocus()
-                        }
-                        // T5: resize + SIGWINCH only on real size/pid change.
-                        forceTerminalResize(view)
-                    },
-                    modifier = Modifier.fillMaxSize()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .windowInsetsPadding(
+                    WindowInsets.ime.union(WindowInsets.navigationBars)
+                        .only(WindowInsetsSides.Bottom)
                 )
-            }
-            DisposableEffect(Unit) {
-                onDispose {
-                    terminalViewRef?.let { com.ivarna.fluxlinux.ui.terminal.hideIme(it) }
-                    FluxTerminalSessionManager.detachView()
-                    terminalViewRef = null
+        ) {
+            if (activeIndex >= 0) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    AndroidView(
+                        factory = { ctx ->
+                            TerminalView(ctx, null).apply {
+                                setTextSize(fontSize)
+                                try {
+                                    val tf = Typeface.createFromAsset(ctx.assets, "fonts/font.ttf")
+                                    setTypeface(tf)
+                                } catch (_: Exception) {
+                                }
+                                setTerminalViewClient(object : TerminalViewClient {
+                                    override fun onScale(scale: Float): Float {
+                                        if (scale < 0.9f || scale > 1.1f) {
+                                            val next = (fontSize * scale).toInt().coerceIn(
+                                                TerminalPreferences.FONT_MIN,
+                                                TerminalPreferences.FONT_MAX
+                                            )
+                                            fontSize = next
+                                            TerminalPreferences.setFontSize(ctx, next)
+                                            setTextSize(next)
+                                            return 1.0f
+                                        }
+                                        return scale
+                                    }
+
+                                    override fun onSingleTapUp(e: android.view.MotionEvent) {
+                                        showTerminalIme(this@apply)
+                                    }
+
+                                    override fun shouldBackButtonBeMappedToEscape(): Boolean = false
+                                    override fun shouldEnforceCharBasedInput(): Boolean = false
+                                    override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
+                                    override fun isTerminalViewSelected(): Boolean = true
+                                    override fun copyModeChanged(active: Boolean) {}
+                                    // Let the view handle keys — never swallow (nativecode parity).
+                                    override fun onKeyDown(keyCode: Int, event: KeyEvent, session: com.termux.terminal.TerminalSession): Boolean = false
+                                    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = false
+                                    override fun onLongPress(e: android.view.MotionEvent): Boolean = false
+                                    // Modifiers read from shared lockable state (ModifierState parity).
+                                    override fun readControlKey(): Boolean = modState.readCtrl(true)
+                                    override fun readAltKey(): Boolean = modState.readAlt(true)
+                                    override fun readShiftKey(): Boolean = modState.readShift(true)
+                                    override fun readFnKey(): Boolean = modState.readFn(true)
+                                    override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: com.termux.terminal.TerminalSession): Boolean = false
+                                    override fun onEmulatorSet() {}
+                                    override fun logError(tag: String, message: String) {}
+                                    override fun logWarn(tag: String, message: String) {}
+                                    override fun logInfo(tag: String, message: String) {}
+                                    override fun logDebug(tag: String, message: String) {}
+                                    override fun logVerbose(tag: String, message: String) {}
+                                    override fun logStackTraceWithMessage(tag: String, message: String, e: Exception) {}
+                                    override fun logStackTrace(tag: String, e: Exception) {}
+                                })
+                                terminalViewRef = this
+                            }
+                        },
+                        update = { view ->
+                            terminalViewRef = view
+                            // Keep text size in sync with global prefs (settings page / pinch).
+                            view.setTextSize(fontSize)
+                            // T3: focus parity — re-attach + focus on every recompose/switch so a
+                            // freshly opened or switched session never shows a blank/dead view.
+                            view.isFocusable = true
+                            view.isFocusableInTouchMode = true
+                            // T3/proot-opt-01: only re-attach + re-focus when the session
+                            // actually changed (new tab / switched tab). Typing, font-size,
+                            // extra-keys and other recompositions must NOT re-attach the
+                            // same TerminalSession or steal focus every frame.
+                            val activeTerminalSession = FluxTerminalSessionManager.activeSession?.session
+                            if (activeTerminalSession == null || view.currentSession != activeTerminalSession) {
+                                FluxTerminalSessionManager.attachView(view)
+                                view.requestFocus()
+                            }
+                            // T5: resize + SIGWINCH only on real size/pid change.
+                            forceTerminalResize(view)
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    DrawerEdgeZone(
+                        drawerState = drawerState,
+                        onOpen = ::openDrawer,
+                        onTap = { terminalViewRef?.let { showTerminalIme(it) } },
+                        modifier = Modifier.align(EDGE_ZONE_ALIGNMENT)
+                    )
+                }
+                DisposableEffect(Unit) {
+                    onDispose {
+                        terminalViewRef?.let { hideIme(it) }
+                        FluxTerminalSessionManager.detachView()
+                        terminalViewRef = null
+                    }
+                }
+
+                // ExtraKeys toolbar: nativecode inject path (TerminalView.onKeyDown / inputCodePoint).
+                if (showExtraKeys) {
+                    TerminalExtraKeys(
+                        modState = modState,
+                        terminalView = { terminalViewRef },
+                        accelerateRepeat = accelerateKeys,
+                        onOpenDrawer = ::openDrawer,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            } else {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    TerminalEmptyState(
+                        // Before the first-frame auto-open fires, show "opening" rather than "closed".
+                        opening = opening || !autoOpenTried,
+                        errorMessage = openError,
+                        onOpen = { openUbuntu(fromEmptyState = true) },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    DrawerEdgeZone(
+                        drawerState = drawerState,
+                        onOpen = ::openDrawer,
+                        onTap = {},
+                        modifier = Modifier.align(EDGE_ZONE_ALIGNMENT)
+                    )
                 }
             }
-
-            // ExtraKeys toolbar: nativecode inject path (TerminalView.onKeyDown / inputCodePoint).
-            if (showExtraKeys) {
-                TerminalExtraKeys(
-                    modState = modState,
-                    terminalView = { terminalViewRef },
-                    accelerateRepeat = accelerateKeys,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        } else {
-            TerminalEmptyState(
-                // Before the first-frame auto-open fires, show "opening" rather than "closed".
-                opening = opening || !autoOpenTried,
-                errorMessage = openError,
-                onOpen = { openUbuntu(fromEmptyState = true) },
-                modifier = Modifier.weight(1f)
-            )
         }
     }
 }
 
-/** "+" (tap: new Ubuntu tab, long-press: shell menu) plus a small dropdown arrow for the same menu. */
+/** T3: tap → focus + IME (SHOW_FORCED fallback for OEMs). */
+private fun showTerminalIme(view: TerminalView) {
+    view.requestFocus()
+    val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+    if (!imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)) {
+        imm.showSoftInput(view, InputMethodManager.SHOW_FORCED)
+    }
+}
+
+/**
+ * Thin strip on the terminal's left edge that makes the drawer's edge swipe work over the
+ * [TerminalView]. The `AndroidView` consumes every touch, so the drawer's own drag (on its
+ * container, an ancestor) never starts there. This strip is hit before the terminal and consumes
+ * nothing, so its touches reach that ancestor drag, which follows the finger. If a rightward swipe
+ * still leaves the drawer unmoved, it opens the drawer itself; a plain tap is forwarded via [onTap]
+ * so the strip doesn't leave a dead column. [systemGestureExclusion] keeps the swipe from becoming
+ * the system Back gesture inside this bounded band.
+ */
+@Composable
+private fun DrawerEdgeZone(
+    drawerState: DrawerState,
+    onOpen: () -> Unit,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val currentOnOpen by rememberUpdatedState(onOpen)
+    val currentOnTap by rememberUpdatedState(onTap)
+    Box(
+        modifier = modifier
+            .width(EDGE_ZONE_WIDTH)
+            .height(EDGE_ZONE_HEIGHT)
+            .systemGestureExclusion()
+            .pointerInput(drawerState) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val startOffset = drawerState.currentOffset
+                    var last = down
+                    var moved = false
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                        last = change
+                        if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                            moved = true
+                        }
+                        if (!change.pressed) break
+                    }
+                    val drawerUntouched = startOffset.isNaN() || abs(drawerState.currentOffset - startOffset) < 1f
+                    when {
+                        !moved && last.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis ->
+                            currentOnTap()
+                        moved && drawerUntouched && drawerState.isClosed &&
+                            last.position.x - down.position.x > EDGE_OPEN_DISTANCE.toPx() -> currentOnOpen()
+                    }
+                }
+            }
+    )
+}
+
+/**
+ * Termux-style session drawer: the session list on top, actions at the bottom within thumb reach.
+ * Stateless (the screen owns the session manager calls) so previews can drive it with fake
+ * sessions. [shellMenu] is the "More shells" dropdown, composed only while open.
+ */
+@Composable
+fun TerminalDrawerSheet(
+    sessions: List<TerminalTabUi>,
+    selectedIndex: Int,
+    extraKeysVisible: Boolean,
+    onSelect: (Int) -> Unit,
+    onClose: (Int) -> Unit,
+    onCloseOthers: (Int) -> Unit,
+    onNewSession: () -> Unit,
+    onToggleExtraKeys: () -> Unit,
+    onBack: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    shellMenu: @Composable (onDismiss: () -> Unit) -> Unit = {},
+) {
+    val colors = MaterialTheme.colorScheme
+    ModalDrawerSheet(modifier = modifier.widthIn(max = DRAWER_MAX_WIDTH)) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(
+                text = stringResource(R.string.terminal_drawer_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.onSurface,
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .semantics { heading() }
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (sessions.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.terminal_drawer_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                sessions.forEachIndexed { i, session ->
+                    DrawerSessionRow(
+                        session = session,
+                        selected = i == selectedIndex,
+                        canCloseOthers = sessions.size > 1,
+                        onSelect = { onSelect(i) },
+                        onClose = { onClose(i) },
+                        onCloseOthers = { onCloseOthers(i) }
+                    )
+                }
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = colors.outlineVariant
+            )
+            NewSessionRow(onNewSession = onNewSession, shellMenu = shellMenu)
+            val extraKeysLabel = stringResource(R.string.terminal_extra_keys)
+            DrawerActionRow(
+                icon = Icons.Default.Keyboard,
+                label = extraKeysLabel,
+                modifier = Modifier.toggleable(
+                    value = extraKeysVisible,
+                    role = Role.Switch,
+                    onValueChange = { onToggleExtraKeys() }
+                )
+            ) {
+                FluxSwitch(
+                    checked = extraKeysVisible,
+                    onCheckedChange = null,
+                    modifier = Modifier.padding(end = 12.dp)
+                )
+            }
+            if (onBack != null) {
+                DrawerActionRow(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    label = stringResource(R.string.terminal_back_home),
+                    modifier = Modifier.clickable(role = Role.Button, onClick = onBack)
+                )
+            }
+        }
+    }
+}
+
+/** One drawer action: 56dp pill row with a leading icon; [modifier] carries the click/toggle. */
+@Composable
+private fun DrawerActionRow(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {},
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = DRAWER_ROW_HEIGHT)
+            .clip(CircleShape)
+            .then(modifier)
+            .padding(start = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(24.dp)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp, end = 8.dp)
+        )
+        trailing()
+    }
+}
+
+/** Tap: new Ubuntu session; long-press or ▾: the shell menu (root, chroot, host). */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NewTabButtons(
-    onNewTab: () -> Unit,
-    onShowMenu: () -> Unit,
+private fun NewSessionRow(
+    onNewSession: () -> Unit,
+    shellMenu: @Composable (onDismiss: () -> Unit) -> Unit,
 ) {
-    val newTabLabel = stringResource(R.string.terminal_new_tab)
+    var menuOpen by remember { mutableStateOf(false) }
+    val newLabel = stringResource(R.string.terminal_new_session)
     val moreLabel = stringResource(R.string.terminal_more_shells)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
+    Box {
+        Row(
             modifier = Modifier
-                .minimumInteractiveComponentSize()
-                .size(40.dp)
+                .fillMaxWidth()
+                .heightIn(min = DRAWER_ROW_HEIGHT)
                 .clip(CircleShape)
                 .combinedClickable(
                     role = Role.Button,
-                    onClickLabel = newTabLabel,
+                    onClickLabel = newLabel,
                     onLongClickLabel = moreLabel,
-                    onLongClick = onShowMenu,
-                    onClick = onNewTab
-                ),
-            contentAlignment = Alignment.Center
+                    onLongClick = { menuOpen = true },
+                    onClick = onNewSession
+                )
+                .padding(start = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
-                contentDescription = newTabLabel,
+                contentDescription = null,
                 tint = FluxAccentMagenta,
                 modifier = Modifier.size(24.dp)
             )
-        }
-        IconButton(onClick = onShowMenu) {
-            Icon(
-                imageVector = Icons.Default.ArrowDropDown,
-                contentDescription = moreLabel,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            Text(
+                text = newLabel,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp, end = 8.dp)
             )
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = moreLabel,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
+        if (menuOpen) shellMenu { menuOpen = false }
     }
 }
 
@@ -559,7 +772,7 @@ private fun ShellMenu(
     onOpen: (TerminalShellCardUi) -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        ShellMenuItem(stringResource(R.string.terminal_new_tab), Icons.Default.Add, onNewTab)
+        ShellMenuItem(stringResource(R.string.terminal_new_session), Icons.Default.Add, onNewTab)
         if (ubuntuRoot != null || ubuntuChroot != null || host != null) HorizontalDivider()
         ubuntuRoot?.let {
             ShellMenuItem(stringResource(R.string.terminal_shell_ubuntu_root), Icons.Default.AdminPanelSettings) {
@@ -589,43 +802,13 @@ private fun ShellMenuItem(label: String, icon: ImageVector, onClick: () -> Unit)
 }
 
 /**
- * Scrollable row of pill tabs. Every tab has its own 48dp close target; long-press opens
- * "Close" / "Close other tabs". Stateless so screenshot previews can drive it with fake tabs.
+ * One session in the drawer: tap switches, the own 48dp ✕ target closes, long-press opens
+ * "Close" / "Close other tabs". The selected session gets the accent tint.
  */
-@Composable
-fun TerminalTabRow(
-    tabs: List<TerminalTabUi>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    onClose: (Int) -> Unit,
-    onCloseOthers: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        tabs.forEachIndexed { i, tab ->
-            TerminalTab(
-                tab = tab,
-                selected = i == selectedIndex,
-                canCloseOthers = tabs.size > 1,
-                onSelect = { onSelect(i) },
-                onClose = { onClose(i) },
-                onCloseOthers = { onCloseOthers(i) }
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TerminalTab(
-    tab: TerminalTabUi,
+private fun DrawerSessionRow(
+    session: TerminalTabUi,
     selected: Boolean,
     canCloseOthers: Boolean,
     onSelect: () -> Unit,
@@ -634,22 +817,19 @@ private fun TerminalTab(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
-    val title = TerminalSessionDefaults.shortTabTitle(tab.title)
+    val title = TerminalSessionDefaults.shortTabTitle(session.title)
     val closeLabel = stringResource(R.string.terminal_tab_close_named, title)
     val switchLabel = stringResource(R.string.terminal_tab_switch, title)
     val menuLabel = stringResource(R.string.terminal_tab_menu)
     Box {
         Row(
             modifier = Modifier
-                .height(48.dp)
+                .fillMaxWidth()
+                .heightIn(min = DRAWER_ROW_HEIGHT)
                 .clip(CircleShape)
-                .background(if (selected) FluxAccentMagenta.copy(alpha = 0.22f) else colors.surfaceVariant)
-                .border(
-                    BorderStroke(
-                        if (selected) 1.5.dp else 1.dp,
-                        if (selected) FluxAccentMagenta else colors.outlineVariant.copy(alpha = 0.5f)
-                    ),
-                    CircleShape
+                .then(
+                    if (selected) Modifier.background(FluxAccentMagenta.copy(alpha = 0.22f))
+                    else Modifier
                 )
                 .combinedClickable(
                     role = Role.Tab,
@@ -659,13 +839,13 @@ private fun TerminalTab(
                     onClick = onSelect
                 )
                 .semantics { this.selected = selected }
-                .padding(start = 14.dp),
+                .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(
-                painter = painterResource(id = tab.iconRes),
+                painter = painterResource(id = session.iconRes),
                 contentDescription = null,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(24.dp)
             )
             Text(
                 text = title,
@@ -675,10 +855,10 @@ private fun TerminalTab(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
-                    .padding(start = 8.dp)
-                    .widthIn(max = 128.dp)
+                    .weight(1f)
+                    .padding(start = 12.dp, end = 8.dp)
             )
-            // Own 48dp hit area inside the pill; the tab's select target never overlaps it.
+            // Own 48dp hit area; the row's select target never overlaps it.
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -687,23 +867,12 @@ private fun TerminalTab(
                     .semantics { contentDescription = closeLabel },
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (selected) FluxAccentMagenta.copy(alpha = 0.28f)
-                            else colors.surface.copy(alpha = 0.6f)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = null,
-                        tint = if (selected) colors.onSurface else colors.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                    tint = if (selected) colors.onSurface else colors.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -29,6 +30,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -282,6 +286,8 @@ private val LocalKeyRepeatAccelerated = compositionLocalOf { false }
 private val KEY_HEIGHT = 44.dp
 private val KEY_GAP = 2.dp
 private val MIN_FULL_ROW_CELL_WIDTH = 56.dp
+/** The fixed ☰ column: one key wide, as tall as the rows it spans. */
+private val DRAWER_KEY_WIDTH = KEY_HEIGHT
 
 /**
  * Termux-style special-keys toolbar ([TerminalExtraKeysLayout]).
@@ -290,12 +296,15 @@ private val MIN_FULL_ROW_CELL_WIDTH = 56.dp
  * together, so the columns stay aligned. When the full rows don't fit, cells are
  * sized so the 7 Termux keys fill the width and the extra keys sit past the edge.
  * F1–F12 (toggled via Fn) form a third row on the same grid.
+ * A fixed ☰ key ([onOpenDrawer]) spans the rows at the left edge, outside the scroll, and the
+ * grid is sized from the width left of it.
  * Image attach is out of scope for v1 (plan §4).
  */
 @Composable
 fun TerminalExtraKeys(
     modState: TerminalModifierState,
     terminalView: () -> TerminalView?,
+    onOpenDrawer: () -> Unit,
     modifier: Modifier = Modifier,
     accelerateRepeat: Boolean = false,
 ) {
@@ -354,25 +363,33 @@ fun TerminalExtraKeys(
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
         ) {
-            fun cellWidthFor(columns: Int): Dp = (maxWidth - KEY_GAP * (columns + 1)) / columns
+            val gridWidth = maxWidth - KEY_GAP - DRAWER_KEY_WIDTH
+            fun cellWidthFor(columns: Int): Dp = (gridWidth - KEY_GAP * (columns + 1)) / columns
             val fullRowCell = cellWidthFor(TerminalExtraKeysLayout.COLUMNS)
             val cellWidth = if (fullRowCell >= MIN_FULL_ROW_CELL_WIDTH) fullRowCell
             else cellWidthFor(TerminalExtraKeysLayout.TERMUX_ROWS.first().size)
             val rowModifier = Modifier
                 .height(KEY_HEIGHT)
                 .padding(horizontal = KEY_GAP)
+            val rows = if (fnVisible) TerminalExtraKeysLayout.ROWS + listOf(TerminalExtraKeysLayout.F_KEYS)
+            else TerminalExtraKeysLayout.ROWS
 
-            Column(
-                modifier = Modifier
-                    .horizontalScroll(scroll)
-                    .padding(vertical = KEY_GAP),
-                verticalArrangement = Arrangement.spacedBy(KEY_GAP)
-            ) {
-                val rows = if (fnVisible) TerminalExtraKeysLayout.ROWS + listOf(TerminalExtraKeysLayout.F_KEYS)
-                else TerminalExtraKeysLayout.ROWS
-                rows.forEach { row ->
-                    Row(modifier = rowModifier, horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
-                        row.forEach { key -> Key(key, Modifier.width(cellWidth)) }
+            Row(modifier = Modifier.padding(vertical = KEY_GAP)) {
+                DrawerKey(
+                    onClick = onOpenDrawer,
+                    modifier = Modifier
+                        .padding(start = KEY_GAP)
+                        .width(DRAWER_KEY_WIDTH)
+                        .height(KEY_HEIGHT * rows.size + KEY_GAP * (rows.size - 1))
+                )
+                Column(
+                    modifier = Modifier.horizontalScroll(scroll),
+                    verticalArrangement = Arrangement.spacedBy(KEY_GAP)
+                ) {
+                    rows.forEach { row ->
+                        Row(modifier = rowModifier, horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
+                            row.forEach { key -> Key(key, Modifier.width(cellWidth)) }
+                        }
                     }
                 }
             }
@@ -521,6 +538,24 @@ private fun ToolbarKey(
             color = if (active) MaterialTheme.colorScheme.onPrimary
             else MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+/** ☰: opens the terminal's session drawer; never scrolls away with the key grid. */
+@Composable
+private fun DrawerKey(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(role = Role.Button, onClick = onClick)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Menu,
+            contentDescription = stringResource(R.string.terminal_open_drawer),
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(22.dp)
         )
     }
 }

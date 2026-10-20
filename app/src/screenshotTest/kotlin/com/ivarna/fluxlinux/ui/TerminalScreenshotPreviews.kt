@@ -1,8 +1,14 @@
 package com.ivarna.fluxlinux.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -11,18 +17,18 @@ import androidx.compose.ui.unit.dp
 import com.android.tools.screenshot.PreviewTest
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.utils.ThemeMode
+import com.ivarna.fluxlinux.ui.screens.TerminalDrawerSheet
 import com.ivarna.fluxlinux.ui.screens.TerminalEmptyState
 import com.ivarna.fluxlinux.ui.screens.TerminalSwitchSettingCard
-import com.ivarna.fluxlinux.ui.screens.TerminalTabRow
 import com.ivarna.fluxlinux.ui.screens.TerminalTabUi
 import com.ivarna.fluxlinux.ui.terminal.TerminalExtraKeys
 import com.ivarna.fluxlinux.ui.terminal.TerminalModifierState
 import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
 
-// Terminal tab row, empty state and extra-keys toolbar from the stateless pieces of
-// TerminalScreen (fake tabs, no TerminalView), plus a TerminalSettingsScreen switch card.
+// Session drawer, empty state and extra-keys toolbar from the stateless pieces of
+// TerminalScreen (fake sessions, no TerminalView), plus a TerminalSettingsScreen switch card.
 
-private val fakeTabs = listOf(
+private val fakeSessions = listOf(
     TerminalTabUi(title = "Ubuntu Shell", iconRes = R.drawable.distro_ubuntu),
     TerminalTabUi(title = "Ubuntu Shell Rooted", iconRes = R.drawable.distro_ubuntu),
     TerminalTabUi(title = "Host Shell", iconRes = R.drawable.distro_termux),
@@ -35,21 +41,61 @@ private fun TerminalPreviewHost(themeMode: ThemeMode = ThemeMode.DARK, content: 
     }
 }
 
-@PreviewTest
-@Preview(name = "TerminalTabs", showBackground = true, widthDp = 400, heightDp = 64)
+// Three sessions, the second selected, extra keys on, Back available. The Box stops the
+// host Surface's min-width constraint from stretching the sheet past its real width.
 @Composable
-fun TerminalTabRowPreview() {
-    TerminalPreviewHost {
-        TerminalTabRow(tabs = fakeTabs, selectedIndex = 1, onSelect = {}, onClose = {}, onCloseOthers = {})
-    }
+private fun DrawerSheetPreview() {
+    Box { DrawerSheet() }
+}
+
+@Composable
+private fun DrawerSheet() {
+    TerminalDrawerSheet(
+        sessions = fakeSessions,
+        selectedIndex = 1,
+        extraKeysVisible = true,
+        onSelect = {},
+        onClose = {},
+        onCloseOthers = {},
+        onNewSession = {},
+        onToggleExtraKeys = {},
+        onBack = {}
+    )
 }
 
 @PreviewTest
-@Preview(name = "TerminalTabsLargeFont", showBackground = true, widthDp = 360, heightDp = 72, fontScale = 1.5f)
+@Preview(name = "TerminalDrawerDark", showBackground = true, widthDp = 360, heightDp = 640)
 @Composable
-fun TerminalTabRowLargeFontPreview() {
-    TerminalPreviewHost {
-        TerminalTabRow(tabs = fakeTabs.take(2), selectedIndex = 0, onSelect = {}, onClose = {}, onCloseOthers = {})
+fun TerminalDrawerDarkPreview() {
+    TerminalPreviewHost(ThemeMode.DARK) { DrawerSheetPreview() }
+}
+
+@PreviewTest
+@Preview(name = "TerminalDrawerLight", showBackground = true, widthDp = 360, heightDp = 640)
+@Composable
+fun TerminalDrawerLightPreview() {
+    TerminalPreviewHost(ThemeMode.LIGHT) { DrawerSheetPreview() }
+}
+
+@PreviewTest
+@Preview(name = "TerminalDrawerLargeFont", showBackground = true, widthDp = 360, heightDp = 640, fontScale = 1.5f)
+@Composable
+fun TerminalDrawerLargeFontPreview() {
+    TerminalPreviewHost(ThemeMode.DARK) { DrawerSheetPreview() }
+}
+
+// Open drawer over the terminal area with its scrim, as on a tablet.
+@PreviewTest
+@Preview(name = "TerminalDrawerWide", showBackground = true, widthDp = 840, heightDp = 600)
+@Composable
+fun TerminalDrawerWidePreview() {
+    TerminalPreviewHost(ThemeMode.DARK) {
+        ModalNavigationDrawer(
+            drawerState = rememberDrawerState(DrawerValue.Open),
+            drawerContent = { DrawerSheet() }
+        ) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+        }
     }
 }
 
@@ -73,7 +119,9 @@ private fun ExtraKeysPreview(themeMode: ThemeMode) {
         toggleCtrl()
         lockAlt()
     }
-    TerminalPreviewHost(themeMode) { TerminalExtraKeys(modState = modState, terminalView = { null }) }
+    TerminalPreviewHost(themeMode) {
+        TerminalExtraKeys(modState = modState, terminalView = { null }, onOpenDrawer = {})
+    }
 }
 
 @PreviewTest
