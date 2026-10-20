@@ -24,8 +24,8 @@ android {
         applicationId = "com.ivarna.fluxlinux"
         minSdk = 26
         targetSdk = 36
-        versionCode = 19
-        versionName = "2.1.5"
+        versionCode = 20
+        versionName = "2.1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

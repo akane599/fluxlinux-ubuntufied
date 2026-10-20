@@ -1,0 +1,4 @@
+- Terminal top bar and tabs replaced by a Termux-style session drawer
+- Open it with the new ☰ key or by swiping in from the left edge
+- Drawer: sessions, new session and other shells, extra-keys switch, back to home
+- Extra keys are two rows again; swipe sideways for BKSP, SHFT, DEL, INS, ENT, symbols and Fn
