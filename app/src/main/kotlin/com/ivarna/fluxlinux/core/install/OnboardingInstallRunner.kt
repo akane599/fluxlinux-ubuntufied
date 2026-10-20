@@ -61,9 +61,11 @@ class OnboardingInstallRunner(private val ctx: Context) {
 
     fun cancel() {
         cancelled.set(true)
+        // Kills the job's whole process group (ShellCommandRunner / GroupKillingProcess).
         activeProcess.getAndSet(null)?.destroyForcibly()
-        // Drop keep-alive when user aborts (also safe if FGS was never started)
-        BaseInstallService.stop(appCtx)
+        // Keep the FGS until the job's finally has run (it stops it); only drop it
+        // here when nothing is running (also safe if the FGS was never started).
+        if (!busy.get()) BaseInstallService.stop(appCtx)
     }
 
     fun isBusy(): Boolean = busy.get()
@@ -478,7 +480,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
         if (abortIfCancelled(gen, phases, onProgress)) return
         val familyPayload = BaseDesktopInstallPlan.familySetupPayload(appCtx, theme, distroId)
         val familyExit = runChrootGuestBlocking(
-            familyPayload, user = "root", phases, xfceIdx, onProgress, chrootPath
+            familyPayload, user = "root", phases, xfceIdx, onProgress, gen, chrootPath
         )
         if (abortIfCancelled(gen, phases, onProgress)) return
         if (familyExit != 0) {
@@ -511,7 +513,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
         }
         val customPayload = BaseDesktopInstallPlan.customizationPayload(appCtx, theme, distroId)
         val customExit = runChrootGuestBlocking(
-            customPayload, user = "root", phases, customIdx, onProgress, chrootPath
+            customPayload, user = "root", phases, customIdx, onProgress, gen, chrootPath
         )
         if (abortIfCancelled(gen, phases, onProgress)) return
         if (customExit != 0) {
@@ -571,7 +573,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
                 val payload = BaseDesktopInstallPlan.hwAccelPayload(
                     appCtx, profile.distroId, gpu.mode, gpu.vendorHint, driverEnv
                 )
-                runChrootGuestBlocking(payload, user = "root", phases, phaseIndex, onProgress, path) == 0
+                runChrootGuestBlocking(payload, user = "root", phases, phaseIndex, onProgress, gen, path) == 0
             } else {
                 stageFluxGpuCommon()
                 runProotGuestScript(
@@ -674,6 +676,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
         phases: List<BaseDesktopInstallPlan.Phase>,
         phaseIndex: Int,
         onProgress: (Progress) -> Unit,
+        gen: Int,
         chrootPath: String = com.ivarna.fluxlinux.core.root.ChrootPaths.CHROOT_PATH
     ): Int {
         // captureInChroot already base64-wraps once via fluxlinux_chroot b64.
@@ -687,7 +690,8 @@ class OnboardingInstallRunner(private val ctx: Context) {
             chrootPath = chrootPath,
             timeoutMs = 0L,
             onLine = { line ->
-                if (line.isNotBlank()) log(phases, phaseIndex, onProgress, line)
+                // A cancelled/retried run's root job must not leak lines into the new run.
+                if (!isStale(gen) && line.isNotBlank()) log(phases, phaseIndex, onProgress, line)
             },
             processHolder = activeProcess
         )
