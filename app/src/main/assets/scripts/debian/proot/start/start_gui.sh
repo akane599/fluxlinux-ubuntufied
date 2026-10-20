@@ -330,13 +330,16 @@ else
     # Real bubblewrap needs user namespaces (missing under proot) and
     # "chmod a-x bwrap" becomes "Could not spawn bwrap: Permission denied"
     # which aborts xfce4-panel. Install Alpine-style shim instead.
-    if [ ! -f /usr/bin/bwrap ] || ! grep -q "FluxLinux proot" /usr/bin/bwrap 2>/dev/null; then
-      if [ -x /usr/bin/bwrap ] && [ ! -e /usr/bin/bwrap.real ]; then
+    # Every FluxLinux shim (this heredoc, the setup scripts, the compiled
+    # bwrap-proot-shim) contains "bwrap-shim", so an installed one is left alone;
+    # real bubblewrap is saved once as bwrap.real.
+    if ! grep -q "bwrap-shim" /usr/bin/bwrap 2>/dev/null; then
+      if [ -x /usr/bin/bwrap ] && [ ! -x /usr/bin/bwrap.real ]; then
         mv /usr/bin/bwrap /usr/bin/bwrap.real 2>/dev/null || true
       fi
       cat > /usr/bin/bwrap << "BWRAP_EOF"
 #!/bin/sh
-# FluxLinux: exec the real glycin loader, not an earlier --ro-bind source.
+# FluxLinux proot bwrap-shim: exec the real glycin loader, not an earlier --ro-bind source.
 while [ $# -gt 0 ]; do
   case "$1" in
     /usr/libexec/glycin-loaders/*|/usr/lib/glycin-loaders/*|/usr/bin/true|/bin/true)

@@ -72,6 +72,20 @@ class ProotStartGuiContractTest {
     }
 
     @Test
+    fun guest_bwrapShimCarriesMarker_andGuardMatchesIt() {
+        val heredoc = guest.substringAfter("<< \"BWRAP_EOF\"").substringBefore("BWRAP_EOF\n")
+        assertTrue("setup scripts grep this marker", heredoc.contains("FluxLinux proot"))
+        assertTrue("guard below greps this", heredoc.contains("bwrap-shim"))
+        assertTrue(guest.contains("if ! grep -q \"bwrap-shim\" /usr/bin/bwrap"))
+        assertTrue(guest.contains("[ ! -x /usr/bin/bwrap.real ]"))
+        // The compiled shim the guard must recognise also contains the marker.
+        assertTrue(
+            repoFile("src/main/assets/scripts/common/setup/bwrap-proot-shim.c").readText()
+                .contains("bwrap-shim: no command"),
+        )
+    }
+
+    @Test
     fun scripts_parseUnderBashAndSh() {
         val bash = File("/bin/bash")
         assumeTrue(bash.canExecute())
