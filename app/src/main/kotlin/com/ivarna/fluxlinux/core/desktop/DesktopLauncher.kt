@@ -193,7 +193,9 @@ object DesktopLauncher {
                 Thread {
                     RootShell.ensureBusyBoxResolver(app)
                     RootShell.resolveBusyBox()
-                    val installed = TerminalLauncher.isChrootInstalled(path)
+                    // H4: never start (and re-mount) a rootfs being uninstalled.
+                    val installed = !com.ivarna.fluxlinux.core.terminal.UninstallSessionFactory
+                        .isChrootUninstalling(path) && TerminalLauncher.isChrootInstalled(path)
                     main.post {
                         if (!installed) {
                             startInFlight = false

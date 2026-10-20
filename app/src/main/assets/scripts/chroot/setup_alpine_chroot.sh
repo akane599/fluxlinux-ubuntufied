@@ -197,49 +197,23 @@ configure_alpine_chroot() {
 
     # XFCE is installed by setup_alpine_family.sh in onboarding (cleaner single owner)
     touch "$ALPINEPATH/.flux_configured"
+    # A failed earlier uninstall may have left this; the tree is valid again.
+    rm -f "$ALPINEPATH/.flux_uninstalling" 2>/dev/null || true
     success "Alpine Environment Configured (rootfs + user; XFCE via family phase)!"
 
-    # Stage SSOT helper
-    HELPER="/data/local/tmp/fluxlinux_chroot.sh"
-    progress "Installing chroot SSOT helper at $HELPER..."
-    HELPER_SRC=""
-    for cand in \
-        "/data/data/${PKG}/files/home/fluxlinux_chroot.sh" \
-        "/data/data/${PKG}/files/staged_scripts/fluxlinux_chroot.sh" \
-        "$(dirname "$0")/fluxlinux_chroot.sh"
-    do
-        if [ -f "$cand" ]; then
-            HELPER_SRC="$cand"
-            break
-        fi
-    done
-    if [ -n "$HELPER_SRC" ]; then
-        cp -f "$HELPER_SRC" "$HELPER"
-        chmod 755 "$HELPER"
-        success "SSOT helper installed from $HELPER_SRC"
-    else
-        error "fluxlinux_chroot.sh not found — app will stage on first session"
-    fi
+    # M14: the app stages fluxlinux_chroot.sh, resolve_bb.sh and the GUI scripts into
+    # the root-only, SHA-256-verified stage (/data/adb/fluxlinux/<pkg>). Nothing that
+    # root later executes is copied to shell-writable /data/local/tmp any more.
 
-    # Stage Alpine GUI scripts if present in app home
-    for s in start_alpine_gui.sh stop_alpine_gui.sh; do
-        src="/data/data/${PKG}/files/home/$s"
-        if [ -f "$src" ]; then
-            cp -f "$src" "/data/local/tmp/$s"
-            chmod +x "/data/local/tmp/$s"
-            success "Staged $s"
-        fi
-    done
-
-    # Thin CLI launcher
+    # Thin CLI launcher (runs the verified helper from the root-only stage)
     CLI_SCRIPT="/data/local/tmp/enter_alpine.sh"
-    cat > "$CLI_SCRIPT" <<'EOF'
+    cat > "$CLI_SCRIPT" <<EOF
 #!/system/bin/sh
-HELPER=/data/local/tmp/fluxlinux_chroot.sh
-[ -f "$HELPER" ] || { echo "fluxlinux_chroot.sh missing" >&2; exit 127; }
-export FLUX_CHROOT="${FLUX_CHROOT:-/data/local/tmp/chrootAlpine}"
+HELPER=/data/adb/fluxlinux/${PKG}/fluxlinux_chroot.sh
+[ -f "\$HELPER" ] || { echo "fluxlinux_chroot.sh missing" >&2; exit 127; }
+export FLUX_CHROOT="\${FLUX_CHROOT:-/data/local/tmp/chrootAlpine}"
 echo "Entering Alpine Chroot (CLI)..."
-exec sh "$HELPER" login --user flux --shell zsh
+exec sh "\$HELPER" login --user flux --shell zsh
 EOF
     chmod 755 "$CLI_SCRIPT"
 
@@ -264,9 +238,10 @@ main() {
 _rr=""
 for _c in \
   "${FLUX_RESOLVE_BB:-}" \
-  "$(dirname "$0")/resolve_bb.sh" \
-  /data/local/tmp/fluxlinux_resolve_bb.sh
+  "$(dirname "$0")/resolve_bb.sh"
 do
+  # M14: never source anything from shell-writable /data/local/tmp.
+  case "$_c" in /data/local/tmp/*) continue ;; esac
   [ -n "$_c" ] && [ -f "$_c" ] && _rr="$_c" && break
 done
 if [ -n "$_rr" ]; then
@@ -277,10 +252,8 @@ fi
 if [ -z "${BB:-}" ]; then
   # sidecar missing (desktop/uninstall/staged setup) — same B1 walk as resolve_bb
   if [ -n "${FLUX_BB:-}" ] && [ -x "$FLUX_BB" ] &&
-     "$FLUX_BB" --list >/dev/null 2>&1; then BB="$FLUX_BB"; fi
-  if [ -z "${BB:-}" ] && [ -x /data/local/tmp/flux_busybox ] &&
-     /data/local/tmp/flux_busybox --list >/dev/null 2>&1; then
-    BB=/data/local/tmp/flux_busybox
+     "$FLUX_BB" --list >/dev/null 2>&1; then
+    case "$FLUX_BB" in /data/local/tmp/*) ;; *) BB="$FLUX_BB" ;; esac
   fi
   if [ -z "${BB:-}" ]; then
     for path in \

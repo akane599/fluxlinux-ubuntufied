@@ -5,7 +5,9 @@ import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.data.terminalComponentFor
 import com.ivarna.fluxlinux.core.install.DistroInstallProfile
 import com.ivarna.fluxlinux.core.root.BusyBoxPaths
+import com.ivarna.fluxlinux.core.root.ChrootPaths
 import com.ivarna.fluxlinux.core.root.RootShell
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Distro uninstall sessions.
@@ -14,9 +16,27 @@ import com.ivarna.fluxlinux.core.root.RootShell
  */
 object UninstallSessionFactory {
 
+    /**
+     * Chroot paths whose uninstall session is open (H4). The desktop and chroot
+     * terminal must not start (and re-mount) a rootfs that is being deleted.
+     */
+    private val uninstallingChroots: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    fun isChrootUninstalling(path: String): Boolean = path in uninstallingChroots
+
+    /**
+     * Opens the uninstall session. [onOpened] runs on the main thread with whether
+     * the terminal tab was added. Chroot su discovery, BusyBox resolution and asset
+     * staging block for seconds, so they run on [TerminalLauncher.executor] (M15)
+     * and only the session add is posted back to main.
+     *
+     * @return false when nothing was opened or dispatched (callers should rely on
+     *   [onOpened] for the outcome; for chroot `true` only means "dispatched").
+     */
     fun openUninstallSession(
         ctx: Context,
-        distro: Distro
+        distro: Distro,
+        onOpened: (Boolean) -> Unit = {},
     ): Boolean {
         val method = terminalComponentFor(distro.id).method
         val profile = DistroInstallProfile.forId(distro.id)
@@ -26,44 +46,46 @@ object UninstallSessionFactory {
         }
         return when (method) {
             "chroot" -> {
-                val asset = profile?.chrootUninstallAsset
-                    ?: "scripts/chroot/uninstall_debian13_chroot.sh"
-                val name = asset.substringAfterLast('/')
-                RootShell.ensureBusyBoxResolver(ctx)
-                val resolvedBb = RootShell.resolveBusyBox()
-                val staged = RootShell.stageAsset(ctx, asset)
-                    ?: TermuxHostPaths.hostScript(ctx, name).absolutePath
-                val resolverStaged = RootShell.stageAsset(ctx, BusyBoxPaths.RESOLVER_ASSET)
-                    ?: TermuxHostPaths.hostScript(ctx, "resolve_bb.sh").absolutePath
                 val chrootPath = profile?.chrootPath.orEmpty()
-                val tmpPath = "/data/local/tmp/$name"
-                val stagedQ = staged.replace("'", "'\\''")
-                val resolverQ = resolverStaged.replace("'", "'\\''")
-                val chrootQ = chrootPath.replace("'", "'\\''")
-                val bbExport = if (!resolvedBb.isNullOrEmpty()) "FLUX_BB='$resolvedBb' " else ""
-                // Copy out of app-private storage (su often cannot read it),
-                // then run with FLUX_CHROOT on the su command (su drops env).
-                val inner =
-                    "cp -f '$stagedQ' '$tmpPath' && chmod 755 '$tmpPath' && " +
-                        "{ cp -f '$resolverQ' '${BusyBoxPaths.RESOLVER_ON_DEVICE}' && " +
-                        "chmod 755 '${BusyBoxPaths.RESOLVER_ON_DEVICE}' || true; } && " +
-                        "${bbExport}FLUX_RESOLVE_BB='${BusyBoxPaths.RESOLVER_ON_DEVICE}' " +
-                        "FLUX_CHROOT='$chrootQ' FLUX_DISTRO_ID='${distro.id}' " +
-                        "sh '$tmpPath'"
-                InstallSessionFactory.openRootInnerSession(
-                    ctx,
-                    inner,
-                    title = "Uninstall ${distro.name}",
-                    rootfsFileName = profile?.rootfsFileName
-                        ?: DistroInstallProfile.DEBIAN_ROOTFS_NAME,
-                    extraEnv = mapOf(
-                        "FLUX_CHROOT" to chrootPath,
-                        "FLUX_DISTRO_ID" to distro.id
-                    ),
-                    wrapWinch = false,
-                    // uninstall_debian13_chroot.sh removes the shared helper.
-                    onClosed = { RootShell.invalidateChrootHelper(); onClosed(it) }
-                )
+                if (chrootPath.isNotEmpty() && !uninstallingChroots.add(chrootPath)) {
+                    // An uninstall of this rootfs is already running.
+                    onOpened(false)
+                    return false
+                }
+                val release: () -> Unit = {
+                    if (chrootPath.isNotEmpty()) uninstallingChroots.remove(chrootPath)
+                }
+                TerminalLauncher.executor.execute {
+                    val inner = try {
+                        chrootUninstallCommand(appCtx, distro, profile, chrootPath)
+                    } catch (e: Exception) {
+                        android.util.Log.w("UninstallSession", "staging failed: ${e.message}")
+                        null
+                    }
+                    TerminalLauncher.mainHandler.post {
+                        val opened = inner != null && InstallSessionFactory.openRootInnerSession(
+                            appCtx,
+                            inner,
+                            title = "Uninstall ${distro.name}",
+                            rootfsFileName = profile?.rootfsFileName
+                                ?: DistroInstallProfile.DEBIAN_ROOTFS_NAME,
+                            extraEnv = mapOf(
+                                "FLUX_CHROOT" to chrootPath,
+                                "FLUX_DISTRO_ID" to distro.id,
+                            ),
+                            wrapWinch = false,
+                            // uninstall_debian13_chroot.sh removes legacy helper copies.
+                            onClosed = {
+                                release()
+                                RootShell.invalidateChrootHelper()
+                                onClosed(it)
+                            },
+                        )
+                        if (!opened) release()
+                        onOpened(opened)
+                    }
+                }
+                true
             }
             else -> {
                 val removeName = profile?.prootName ?: distro.id
@@ -83,10 +105,79 @@ object UninstallSessionFactory {
                     append("if [ ! -e \"\$DIR\" ]; then RC=0; fi; ")
                     append("if [ \$RC -eq 0 ]; then $callback; fi; exit \$RC")
                 }
-                InstallSessionFactory.openHostCommandSession(
+                val opened = InstallSessionFactory.openHostCommandSession(
                     ctx, cmd, title = "Uninstall ${distro.name}", onClosed = onClosed
                 )
+                onOpened(opened)
+                opened
             }
         }
+    }
+
+    /**
+     * Blocking (su probe, BusyBox resolve, staging): background thread only.
+     * Null when the script or its resolver sidecar could not be staged and verified in the
+     * root-only stage (fail closed, M14).
+     */
+    private fun chrootUninstallCommand(
+        ctx: Context,
+        distro: Distro,
+        profile: DistroInstallProfile?,
+        chrootPath: String,
+    ): String? {
+        val asset = profile?.chrootUninstallAsset
+            ?: "scripts/chroot/uninstall_debian13_chroot.sh"
+        val scriptName = asset.substringAfterLast('/')
+        // The script sources $(dirname "$0")/resolve_bb.sh: stage + verify it next to it.
+        if (!RootShell.ensureBusyBoxResolver(ctx)) {
+            android.util.Log.w("UninstallSession", "resolver stage/verify failed; not running $asset")
+            return null
+        }
+        if (!RootShell.stageVerified(ctx, asset, "${ChrootPaths.ROOT_STAGE_DIR}/$scriptName")) {
+            android.util.Log.w("UninstallSession", "stage/verify failed; not running $asset")
+            return null
+        }
+        return buildChrootUninstallCommand(
+            scriptName = scriptName,
+            scriptSha256 = assetSha(ctx, asset),
+            resolverSha256 = assetSha(ctx, BusyBoxPaths.RESOLVER_ASSET),
+            resolvedBb = RootShell.resolveBusyBox(),
+            chrootPath = chrootPath,
+            distroId = distro.id,
+        )
+    }
+
+    private fun assetSha(ctx: Context, asset: String): String =
+        RootShell.sha256Hex(ctx.assets.open(asset).use { it.readBytes() })
+
+    /**
+     * Root command for the uninstall session (M14). The script and its resolver sidecar were
+     * staged by [RootShell.stageVerified] into the root-only [ChrootPaths.ROOT_STAGE_DIR];
+     * both are re-verified against the APK hashes right before `sh '<dest>'`, else exit 127.
+     * Nothing is copied to or executed from shell-writable `/data/local/tmp`.
+     */
+    internal fun buildChrootUninstallCommand(
+        scriptName: String,
+        scriptSha256: String,
+        resolverSha256: String,
+        resolvedBb: String?,
+        chrootPath: String,
+        distroId: String,
+    ): String {
+        val dest = "${ChrootPaths.ROOT_STAGE_DIR}/$scriptName"
+        val resolver = BusyBoxPaths.RESOLVER_ON_DEVICE
+        val chrootQ = chrootPath.replace("'", "'\\''")
+        val bbExport = if (!resolvedBb.isNullOrEmpty() && !resolvedBb.startsWith("/data/local/tmp/")) {
+            "FLUX_BB='$resolvedBb' "
+        } else {
+            ""
+        }
+        return "${RootShell.SHA_FN}; " +
+            "if ${RootShell.shaMatches(dest, scriptSha256)} && " +
+            "${RootShell.shaMatches(resolver, resolverSha256)}; then " +
+            "${bbExport}FLUX_RESOLVE_BB='$resolver' FLUX_CHROOT='$chrootQ' FLUX_DISTRO_ID='$distroId' " +
+            "sh '$dest'; " +
+            "else echo '[FluxLinux] $scriptName or its resolver in " +
+            "${ChrootPaths.ROOT_STAGE_DIR} failed SHA-256 verification; uninstall not run' >&2; exit 127; fi"
     }
 }

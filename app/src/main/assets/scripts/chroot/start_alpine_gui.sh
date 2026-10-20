@@ -26,9 +26,10 @@ echo "========================================"
 _rr=""
 for _c in \
   "${FLUX_RESOLVE_BB:-}" \
-  "$(dirname "$0")/resolve_bb.sh" \
-  /data/local/tmp/fluxlinux_resolve_bb.sh
+  "$(dirname "$0")/resolve_bb.sh"
 do
+  # M14: never source anything from shell-writable /data/local/tmp.
+  case "$_c" in /data/local/tmp/*) continue ;; esac
   [ -n "$_c" ] && [ -f "$_c" ] && _rr="$_c" && break
 done
 if [ -n "$_rr" ]; then
@@ -39,10 +40,8 @@ fi
 if [ -z "${BB:-}" ]; then
   # sidecar missing (desktop/uninstall/staged setup) — same B1 walk as resolve_bb
   if [ -n "${FLUX_BB:-}" ] && [ -x "$FLUX_BB" ] &&
-     "$FLUX_BB" --list >/dev/null 2>&1; then BB="$FLUX_BB"; fi
-  if [ -z "${BB:-}" ] && [ -x /data/local/tmp/flux_busybox ] &&
-     /data/local/tmp/flux_busybox --list >/dev/null 2>&1; then
-    BB=/data/local/tmp/flux_busybox
+     "$FLUX_BB" --list >/dev/null 2>&1; then
+    case "$FLUX_BB" in /data/local/tmp/*) ;; *) BB="$FLUX_BB" ;; esac
   fi
   if [ -z "${BB:-}" ]; then
     for path in \
@@ -76,13 +75,14 @@ if [ ! -x "$CHROOT_ROOT/usr/bin/startxfce4" ] && [ ! -f "$CHROOT_ROOT/usr/bin/st
   exit 1
 fi
 
-# Soft SELinux (HyperOS / enforcing) — flux pattern; fail soft
+# SELinux mode is never changed here (M13): switching the whole device to
+# permissive would drop every app's confinement until reboot. Log only.
 if command -v getenforce >/dev/null 2>&1; then
   SELINUX_STATUS=$(getenforce 2>/dev/null || true)
   echo "FluxLinux: SELinux=$SELINUX_STATUS"
   if [ "$SELINUX_STATUS" = "Enforcing" ]; then
-    setenforce 0 2>/dev/null && echo "FluxLinux: SELinux → Permissive (until reboot)" \
-      || echo "FluxLinux: [WARN] setenforce 0 failed"
+    echo "FluxLinux: SELinux is Enforcing (left unchanged). If the desktop fails," \
+      "check 'dmesg | grep avc' / 'logcat | grep avc' for denials."
   fi
 fi
 # PREFIX/tmp must stay app_data_file. Labeling it tmpfs:s0 makes termux-x11
@@ -95,7 +95,8 @@ if command -v chcon >/dev/null 2>&1; then
 fi
 restorecon -RF "$TARGET_PREFIX/tmp" 2>/dev/null || true
 
-HELPER="${HELPER:-/data/local/tmp/fluxlinux_chroot.sh}"
+# M14: the verified helper sits next to this script in the root-only stage.
+HELPER="${HELPER:-$(dirname "$0")/fluxlinux_chroot.sh}"
 echo "[1/5] Mounts (SSOT if available)..."
 # Wait for host Loader to create X0 before --x11 bind
 mkdir -p "$TARGET_PREFIX/tmp/.X11-unix" 2>/dev/null || true
@@ -194,7 +195,7 @@ fi
 su -s \"\$FLUX_SU_SHELL\" - $USERNAME -c '
   unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID DBUS_SESSION_BUS_WINDOWID
   export DISPLAY=:0
-  export PULSE_SERVER=tcp:127.0.0.1
+  export PULSE_SERVER=unix:/mnt/host-tmp/pulse-native
   export XDG_CONFIG_DIRS=/etc/xdg
   export XDG_DATA_DIRS=/usr/local/share:/usr/share
   export HOME=/home/$USERNAME

@@ -23,9 +23,10 @@ echo "========================================"
 _rr=""
 for _c in \
   "${FLUX_RESOLVE_BB:-}" \
-  "$(dirname "$0")/resolve_bb.sh" \
-  /data/local/tmp/fluxlinux_resolve_bb.sh
+  "$(dirname "$0")/resolve_bb.sh"
 do
+  # M14: never source anything from shell-writable /data/local/tmp.
+  case "$_c" in /data/local/tmp/*) continue ;; esac
   [ -n "$_c" ] && [ -f "$_c" ] && _rr="$_c" && break
 done
 if [ -n "$_rr" ]; then
@@ -36,10 +37,8 @@ fi
 if [ -z "${BB:-}" ]; then
   # sidecar missing (desktop/uninstall/staged setup) — same B1 walk as resolve_bb
   if [ -n "${FLUX_BB:-}" ] && [ -x "$FLUX_BB" ] &&
-     "$FLUX_BB" --list >/dev/null 2>&1; then BB="$FLUX_BB"; fi
-  if [ -z "${BB:-}" ] && [ -x /data/local/tmp/flux_busybox ] &&
-     /data/local/tmp/flux_busybox --list >/dev/null 2>&1; then
-    BB=/data/local/tmp/flux_busybox
+     "$FLUX_BB" --list >/dev/null 2>&1; then
+    case "$FLUX_BB" in /data/local/tmp/*) ;; *) BB="$FLUX_BB" ;; esac
   fi
   if [ -z "${BB:-}" ]; then
     for path in \
@@ -79,10 +78,31 @@ pkill -9 -f "app_process.*termux-x11" 2>/dev/null || true
 killall -9 Xwayland 2>/dev/null || true
 rm -rf "$TARGET_PREFIX/tmp/.X11-unix" "$TARGET_PREFIX/tmp/.X0-lock" "$TARGET_PREFIX/tmp/.X1-lock" 2>/dev/null || true
 
+# True while any host process is still rooted at the chroot (a terminal tab,
+# apt, a component run...). Single pass over /proc/*/root symlinks.
+chroot_in_use() {
+  ls -l /proc/[0-9]*/root 2>/dev/null \
+    | awk -v p="$DEBIANPATH" '$(NF-1) == "->" && $NF == p { f = 1 } END { exit !f }'
+}
+
 echo "[3/4] Unmount chroot binds (best-effort)..."
 if [ -n "$BB" ] && [ -d "$DEBIANPATH" ]; then
+  # The X11 bind belongs to the desktop only.
+  $BB umount "$DEBIANPATH/tmp/.X11-unix" 2>/dev/null \
+    || $BB umount -l "$DEBIANPATH/tmp/.X11-unix" 2>/dev/null || true
+  # Give the killed XFCE processes a moment to exit before deciding.
+  _w=0
+  while chroot_in_use && [ "$_w" -lt 10 ]; do
+    sleep 0.2 2>/dev/null || sleep 1
+    _w=$((_w + 1))
+  done
+fi
+if [ -n "$BB" ] && [ -d "$DEBIANPATH" ] && chroot_in_use; then
+  # M16: lazy unmount would pull /proc, /dev, /sys and /sdcard out from under
+  # open chroot sessions (broken ptys, /dev/null turning into a regular file).
+  echo "FluxLinux: chroot still in use by other sessions — keeping its mounts"
+elif [ -n "$BB" ] && [ -d "$DEBIANPATH" ]; then
   for m in \
-    "$DEBIANPATH/tmp/.X11-unix" \
     "$DEBIANPATH/mnt/host-tmp" \
     "$DEBIANPATH/sdcard" \
     "$DEBIANPATH/dev/shm" \
