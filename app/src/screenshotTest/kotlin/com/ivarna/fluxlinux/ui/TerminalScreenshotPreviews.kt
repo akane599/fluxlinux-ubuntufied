@@ -77,21 +77,21 @@ private fun ExtraKeysPreview(themeMode: ThemeMode) {
 }
 
 @PreviewTest
-@Preview(name = "TerminalExtraKeysDark", showBackground = true, widthDp = 360, heightDp = 140)
+@Preview(name = "TerminalExtraKeysDark", showBackground = true, widthDp = 360, heightDp = 96)
 @Composable
 fun TerminalExtraKeysDarkPreview() {
     ExtraKeysPreview(ThemeMode.DARK)
 }
 
 @PreviewTest
-@Preview(name = "TerminalExtraKeysLight", showBackground = true, widthDp = 360, heightDp = 140)
+@Preview(name = "TerminalExtraKeysLight", showBackground = true, widthDp = 360, heightDp = 96)
 @Composable
 fun TerminalExtraKeysLightPreview() {
     ExtraKeysPreview(ThemeMode.LIGHT)
 }
 
 @PreviewTest
-@Preview(name = "TerminalExtraKeysWide", showBackground = true, widthDp = 840, heightDp = 140)
+@Preview(name = "TerminalExtraKeysWide", showBackground = true, widthDp = 840, heightDp = 96)
 @Composable
 fun TerminalExtraKeysWidePreview() {
     ExtraKeysPreview(ThemeMode.DARK)

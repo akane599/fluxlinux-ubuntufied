@@ -10,8 +10,7 @@ import org.junit.Test
 
 class TerminalExtraKeysLayoutTest {
 
-    private val allKeys = TerminalExtraKeysLayout.TERMUX_ROWS.flatten() +
-        TerminalExtraKeysLayout.EXTRA_ROW + TerminalExtraKeysLayout.F_KEYS
+    private val allKeys = TerminalExtraKeysLayout.ROWS.flatten() + TerminalExtraKeysLayout.F_KEYS
 
     @Test
     fun termuxRows_matchTermuxDefaultExtraKeys() {
@@ -22,6 +21,16 @@ class TerminalExtraKeysLayoutTest {
             ),
             TerminalExtraKeysLayout.TERMUX_ROWS,
         )
+    }
+
+    @Test
+    fun rows_areTwoFullGridRowsStartingWithTermuxKeys() {
+        assertEquals(2, TerminalExtraKeysLayout.ROWS.size)
+        TerminalExtraKeysLayout.ROWS.forEachIndexed { i, row ->
+            assertEquals(TerminalExtraKeysLayout.COLUMNS, row.size)
+            assertEquals(TerminalExtraKeysLayout.TERMUX_ROWS[i], row.take(TerminalExtraKeysLayout.TERMUX_ROWS[i].size))
+        }
+        assertEquals(TerminalExtraKeysLayout.COLUMNS, TerminalExtraKeysLayout.F_KEYS.size)
     }
 
     @Test

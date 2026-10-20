@@ -209,10 +209,12 @@ object TerminalKeyInjector {
 
 
 /**
- * Toolbar key layout. Rows 1–2 are Termux's default `extra-keys` property
+ * Toolbar key layout: two rows of [COLUMNS] keys. Each row starts with Termux's
+ * default `extra-keys` property
  * (`[['ESC','/','-','HOME','UP','END','PGUP'],['TAB','CTRL','ALT','LEFT','DOWN','RIGHT','PGDN']]`),
- * so ↑ sits directly above ↓ with ← and → beside it. [EXTRA_ROW] keeps every
- * other key the old FluxLinux toolbar had; [FN] toggles the [F_KEYS] row.
+ * so ↑ sits directly above ↓ with ← and → beside it, and continues with
+ * [EXTRA_KEYS], every other key the old FluxLinux toolbar had, reached by
+ * scrolling right. [FN] toggles the [F_KEYS] row.
  * Key names are [TerminalKeyCodes] names, printable symbols, or the modifiers.
  */
 object TerminalExtraKeysLayout {
@@ -226,9 +228,16 @@ object TerminalExtraKeysLayout {
         listOf("TAB", CTRL, ALT, "LEFT", "DOWN", "RIGHT", "PGDN"),
     )
 
-    val EXTRA_ROW: List<String> = listOf(SHIFT, "BKSP", "DEL", "INS", "ENTER", "|", "~", "_", "\\", FN)
+    val EXTRA_KEYS: List<List<String>> = listOf(
+        listOf("|", "~", "_", "\\", "BKSP"),
+        listOf(SHIFT, FN, "INS", "DEL", "ENTER"),
+    )
 
-    val F_KEYS: List<String> = (1..12).map { "F$it" }
+    val ROWS: List<List<String>> = TERMUX_ROWS.zip(EXTRA_KEYS) { termux, extra -> termux + extra }
+
+    const val COLUMNS = 12
+
+    val F_KEYS: List<String> = (1..COLUMNS).map { "F$it" }
 
     // Termux DEFAULT_CHAR_DISPLAY (classic arrows, ↹ tab, ― minus); other keys show their name.
     private val LABELS: Map<String, String> = mapOf(
@@ -272,13 +281,15 @@ private val LocalKeyRepeatAccelerated = compositionLocalOf { false }
 
 private val KEY_HEIGHT = 44.dp
 private val KEY_GAP = 2.dp
+private val MIN_FULL_ROW_CELL_WIDTH = 56.dp
 
 /**
  * Termux-style special-keys toolbar ([TerminalExtraKeysLayout]).
  *
- * Rows 1–2: Termux default keys, 7 equal-width cells across the full width.
- * Row 3: horizontal scroll — SHFT, BKSP, DEL, INS, ENT, `|~_\`, Fn toggle, in
- * cells as wide as the grid above. Row 4: F1–F12 (toggled via Fn).
+ * Two rows of [TerminalExtraKeysLayout.COLUMNS] equal cells that scroll right
+ * together, so the columns stay aligned. When the full rows don't fit, cells are
+ * sized so the 7 Termux keys fill the width and the extra keys sit past the edge.
+ * F1–F12 (toggled via Fn) form a third row on the same grid.
  * Image attach is out of scope for v1 (plan §4).
  */
 @Composable
@@ -288,8 +299,7 @@ fun TerminalExtraKeys(
     modifier: Modifier = Modifier,
     accelerateRepeat: Boolean = false,
 ) {
-    val extraRowScroll = rememberScrollState()
-    val fRowScroll = rememberScrollState()
+    val scroll = rememberScrollState()
     var fnVisible by remember { mutableStateOf(false) }
 
     fun send(key: String) {
@@ -344,40 +354,25 @@ fun TerminalExtraKeys(
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
         ) {
-            val columns = TerminalExtraKeysLayout.TERMUX_ROWS.first().size
-            // Scroll-row cells match the grid columns so the three rows line up.
-            val cellWidth: Dp = (maxWidth - KEY_GAP * (columns + 1)) / columns
+            fun cellWidthFor(columns: Int): Dp = (maxWidth - KEY_GAP * (columns + 1)) / columns
+            val fullRowCell = cellWidthFor(TerminalExtraKeysLayout.COLUMNS)
+            val cellWidth = if (fullRowCell >= MIN_FULL_ROW_CELL_WIDTH) fullRowCell
+            else cellWidthFor(TerminalExtraKeysLayout.TERMUX_ROWS.first().size)
             val rowModifier = Modifier
-                .fillMaxWidth()
                 .height(KEY_HEIGHT)
                 .padding(horizontal = KEY_GAP)
 
             Column(
-                modifier = Modifier.padding(vertical = KEY_GAP),
+                modifier = Modifier
+                    .horizontalScroll(scroll)
+                    .padding(vertical = KEY_GAP),
                 verticalArrangement = Arrangement.spacedBy(KEY_GAP)
             ) {
-                // ── Rows 1–2: Termux default keys (equal width, full width) ─────
-                TerminalExtraKeysLayout.TERMUX_ROWS.forEach { row ->
+                val rows = if (fnVisible) TerminalExtraKeysLayout.ROWS + listOf(TerminalExtraKeysLayout.F_KEYS)
+                else TerminalExtraKeysLayout.ROWS
+                rows.forEach { row ->
                     Row(modifier = rowModifier, horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
-                        row.forEach { key -> Key(key, Modifier.weight(1f)) }
-                    }
-                }
-
-                // ── Row 3: remaining keys, horizontal scroll ────────────────────
-                Row(
-                    modifier = rowModifier.horizontalScroll(extraRowScroll),
-                    horizontalArrangement = Arrangement.spacedBy(KEY_GAP)
-                ) {
-                    TerminalExtraKeysLayout.EXTRA_ROW.forEach { key -> Key(key, Modifier.width(cellWidth)) }
-                }
-
-                // ── Row 4: F-keys (toggle via Fn) ───────────────────────────────
-                if (fnVisible) {
-                    Row(
-                        modifier = rowModifier.horizontalScroll(fRowScroll),
-                        horizontalArrangement = Arrangement.spacedBy(KEY_GAP)
-                    ) {
-                        TerminalExtraKeysLayout.F_KEYS.forEach { key -> Key(key, Modifier.width(cellWidth)) }
+                        row.forEach { key -> Key(key, Modifier.width(cellWidth)) }
                     }
                 }
             }
