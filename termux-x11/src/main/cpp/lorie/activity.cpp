@@ -206,7 +206,7 @@ int LorieViewResources::xcallback(int fd, int events) {
                     memset(clipboard, 0, e.clipboardSend.count + 1);
                     read(connFd, clipboard, sizeof(clipboard));
                     clipboard[e.clipboardSend.count] = 0;
-                    log(DEBUG, "Clipboard content (%zu symbols) is %s", strlen(clipboard), clipboard);
+                    log(DEBUG, "Received clipboard content (%zu bytes)", strlen(clipboard));
                     jmethodID id = env->GetMethodID(env->GetObjectClass(thiz), "setClipboardText","(Ljava/lang/String;)V");
                     jobject bb = env->NewDirectByteBuffer(clipboard, strlen(clipboard));
                     jobject charset = env->CallStaticObjectMethod(Charset.self, Charset.forName, env->NewStringUTF("UTF-8"));
@@ -319,7 +319,7 @@ static void sendTextEvent(JNIEnv *env, __unused jobject thiz, jlong ptr, jbyteAr
         if (!length)
             return;
 
-        log(DEBUG, "Parsing text: %.*s", length, str);
+        log(DEBUG, "Sending text (%d bytes)", length);
 
         while (*p) {
             wchar_t wc;
@@ -333,7 +333,6 @@ static void sendTextEvent(JNIEnv *env, __unused jobject thiz, jlong ptr, jbyteAr
             if (len == 0)
                 break;
 
-            log(DEBUG, "Sending unicode event: %lc (U+%X)", wc, wc);
             lorieEvent e = { .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) wc } };
             write(r->connFd, &e, sizeof(e));
             p += len;

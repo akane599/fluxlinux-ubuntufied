@@ -56,6 +56,7 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.math.MathUtils;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -213,11 +214,15 @@ public class MainActivity extends AppCompatActivity {
         lorieView.setCallback((screenWidth, screenHeight, inputTransform) ->
                 mInputHandler.handleInputTransformChanged(screenWidth, screenHeight, inputTransform));
 
-        registerReceiver(receiver, new IntentFilter(ACTION_START) {{
+        // Not exported: every legitimate sender is this app's UID (the embedded/app_process X server,
+        // DesktopLauncher, TermuxX11Preferences, `am broadcast` from our own shell) or root (chroot
+        // X server), and both pass the not-exported check. Exporting it let any app hand us a binder
+        // and stream our logcat or hijack the X connection.
+        ContextCompat.registerReceiver(this, receiver, new IntentFilter(ACTION_START) {{
             addAction(ACTION_PREFERENCES_CHANGED);
             addAction(ACTION_STOP);
             addAction(ACTION_CUSTOM);
-        }}, SDK_INT >= VERSION_CODES.TIRAMISU ? RECEIVER_EXPORTED : 0);
+        }}, ContextCompat.RECEIVER_NOT_EXPORTED);
 
         inputMethodManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
 
@@ -510,6 +515,13 @@ public class MainActivity extends AppCompatActivity {
         if (ibinder == null)
             return;
 
+        // Keep the X server we are already talking to: a different binder while the current one is
+        // alive is either a stale duplicate or an impostor trying to take over the connection.
+        if (service != null && service.asBinder() != ibinder && service.asBinder().isBinderAlive()) {
+            Log.w("MainActivity", "Ignoring a second X server binder while the current one is alive");
+            return;
+        }
+
         service = ICmdEntryInterface.Stub.asInterface(ibinder);
         try {
             service.asBinder().linkToDeath(() -> {
@@ -522,10 +534,13 @@ public class MainActivity extends AppCompatActivity {
 
         try {
             if (service != null && service.asBinder().isBinderAlive()) {
-                Log.v("LorieBroadcastReceiver", "Extracting logcat fd.");
-                ParcelFileDescriptor logcatOutput = service.getLogcatOutput();
-                if (logcatOutput != null)
-                    getLorieView().startLogcat(logcatOutput.detachFd());
+                // Streaming our logcat into a peer-supplied fd is a debugging aid only.
+                if (BuildConfig.DEBUG) {
+                    Log.v("LorieBroadcastReceiver", "Extracting logcat fd.");
+                    ParcelFileDescriptor logcatOutput = service.getLogcatOutput();
+                    if (logcatOutput != null)
+                        getLorieView().startLogcat(logcatOutput.detachFd());
+                }
 
                 tryConnect();
 

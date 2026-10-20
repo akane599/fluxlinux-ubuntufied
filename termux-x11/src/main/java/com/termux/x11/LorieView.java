@@ -612,8 +612,7 @@ public class LorieView extends SurfaceView implements InputStub {
         // A requesting X11 client blocks on a SelectionNotify, so this must always answer, even
         // with an empty string, or the request is left unresolved.
         sendClipboardEvent(mNativeContext, text.getBytes(UTF_8));
-        if (!text.isEmpty())
-            Log.d("CLIP", "sending clipboard contents: " + text);
+        Log.d("CLIP", "sending clipboard contents (" + text.length() + " chars)");
     }
 
     public void handleClipboardChange() {
