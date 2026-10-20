@@ -82,6 +82,12 @@ class OnboardingInstallRunner(private val ctx: Context) {
     ) {
         // Invalidate any in-flight job before resetting cancel flag
         val gen = generation.incrementAndGet()
+        // Every callback of this run is dropped once a newer run starts, so a stale
+        // job's "Install cancelled" can never overwrite (or Retry-cancel) the new run.
+        val guarded = guardGeneration(generation, gen) { p: Progress ->
+            onProgress(p)
+            updateInstallNotification(p)
+        }
         cancelled.set(true)
         activeProcess.getAndSet(null)?.destroyForcibly()
         cancelled.set(false)
@@ -93,7 +99,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
         if (profile == null) {
             busy.set(false)
             main.post {
-                onProgress(
+                guarded(
                     Progress(
                         phaseId = "ERR",
                         phaseLabel = "Failed",
@@ -128,20 +134,20 @@ class OnboardingInstallRunner(private val ctx: Context) {
         executor.execute {
             try {
                 if (isStale(gen)) {
-                    postCancelled(onProgress, phases)
+                    postCancelled(guarded, phases)
                     return@execute
                 }
                 if (method == "chroot") {
-                    runChroot(distroId, theme, phases, onProgress, gen)
+                    runChroot(distroId, theme, phases, guarded, gen)
                 } else {
-                    runProot(distroId, theme, phases, onProgress, gen)
+                    runProot(distroId, theme, phases, guarded, gen)
                 }
             } catch (e: Exception) {
                 if (!isStale(gen)) {
                     Log.e(TAG, "install failed", e)
-                    postFail(onProgress, phases, e.message ?: "Unknown error")
+                    postFail(guarded, phases, e.message ?: "Unknown error")
                 } else {
-                    postCancelled(onProgress, phases)
+                    postCancelled(guarded, phases)
                 }
             } finally {
                 if (generation.get() == gen) {
@@ -839,11 +845,9 @@ class OnboardingInstallRunner(private val ctx: Context) {
         return ((done * 100) / total).coerceIn(0, 100)
     }
 
+    /** [onProgress] is the generation-guarded sink built in [start]; it also updates the FGS. */
     private fun post(onProgress: (Progress) -> Unit, progress: Progress) {
-        main.post {
-            onProgress(progress)
-            updateInstallNotification(progress)
-        }
+        main.post { onProgress(progress) }
     }
 
     private fun updateInstallNotification(progress: Progress) {
@@ -885,5 +889,15 @@ class OnboardingInstallRunner(private val ctx: Context) {
 
     companion object {
         private const val TAG = "OnboardingInstall"
+
+        /**
+         * Wraps [sink] so it only fires while [gen] is still the current [generation].
+         * Checked at delivery time (main thread), after any newer [start] bumped it.
+         */
+        internal fun <T> guardGeneration(
+            generation: AtomicInteger,
+            gen: Int,
+            sink: (T) -> Unit,
+        ): (T) -> Unit = { value -> if (generation.get() == gen) sink(value) }
     }
 }
