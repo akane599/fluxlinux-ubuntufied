@@ -39,14 +39,20 @@ class ChrootLifecycleContractTest {
     fun ensureMounts_refusesUninstallingOrUnconfiguredTreeBeforeAnyMount() {
         val src = chrootScript("fluxlinux_chroot.sh")
         val body = src.substringAfter("ensure_mounts() {").substringBefore("\n}\n")
+        val lock = body.indexOf("mount_lock \"\$FLUX_CHROOT\"")
         val guard = body.indexOf(".flux_uninstalling")
         val configured = body.indexOf(".flux_configured")
         val firstMkdir = body.indexOf("mkdir -p")
-        val firstMount = body.indexOf("mount")
+        val firstMount = body.indexOf("bind_if_missing")
         assertTrue("uninstalling guard missing", guard >= 0)
         assertTrue("configured guard missing", configured >= 0)
+        assertTrue("M16: guards run under the mount lock", lock in 0 until guard)
         assertTrue("guards must precede mkdir/mount", guard < firstMkdir && configured < firstMkdir)
         assertTrue(guard < firstMount)
+        // M16: the session is registered before the lock is released.
+        val register = body.indexOf(".flux_sessions/\$\$")
+        val unlock = body.lastIndexOf("mount_unlock \"\$FLUX_CHROOT\"")
+        assertTrue(register in firstMount until unlock)
     }
 
     @Test
@@ -140,12 +146,16 @@ class ChrootLifecycleContractTest {
     fun stopScripts_keepMountsWhileChrootInUse() {
         for (name in listOf("stop_guest_gui.sh", "stop_debian13_gui.sh", "stop_alpine_gui.sh")) {
             val src = chrootScript(name)
-            val guard = src.indexOf("&& chroot_in_use; then")
+            val lock = src.indexOf("if ! mount_lock ")
+            val guard = src.indexOf("elif chroot_in_use; then")
             val procUmount = src.indexOf("/proc\" \\")
             assertTrue("$name: in-use guard missing", guard >= 0)
+            assertTrue("$name: M16 check + unmount run under the mount lock", lock in 0 until guard)
             assertTrue("$name: guard must precede the /proc unmount", guard < procUmount)
             assertTrue(src.contains("keeping its mounts"))
+            assertTrue("$name: same lock dir as ensure_mounts", src.contains("/.flux_mount.lock\""))
         }
+        assertTrue(chrootScript("fluxlinux_chroot.sh").contains("_lk=\"\$1/.flux_mount.lock\""))
     }
 
     @Test

@@ -201,16 +201,40 @@ ensure_devpts() {
   unset _pts _perm
 }
 
+# Shared with stop_*_gui.sh and uninstall_*_chroot.sh (M16): a mkdir lock inside
+# the (root-owned) rootfs serialises mounting + session registration against the
+# stop scripts' in-use check + unmount. A dead holder's lock is broken.
+mount_lock() {
+  _lk="$1/.flux_mount.lock"
+  _lw=0
+  while ! mkdir "$_lk" 2>/dev/null; do
+    [ "$_lw" -ge 60 ] && return 1
+    _lo=$(cat "$_lk/pid" 2>/dev/null)
+    if { [ -n "$_lo" ] || [ "$_lw" -ge 50 ]; } && ! kill -0 "$_lo" 2>/dev/null; then
+      rm -rf "$_lk" 2>/dev/null
+    else
+      sleep 0.2 2>/dev/null || sleep 1
+    fi
+    _lw=$((_lw + 1))
+  done
+  echo "$$" > "$_lk/pid"
+}
+mount_unlock() { rm -rf "$1/.flux_mount.lock" 2>/dev/null; }
+
 ensure_mounts() {
   [ -d "$FLUX_CHROOT" ] || die "chroot missing: $FLUX_CHROOT"
+  mount_lock "$FLUX_CHROOT" || die "chroot mount lock busy: $FLUX_CHROOT"
   # Never (re)bind host /dev, /sys or /sdcard into a rootfs that uninstall is
   # deleting as root (H4), or into a tree that was never set up. Legacy installs
   # without .flux_configured still pass when they have a guest shell.
-  [ ! -e "$FLUX_CHROOT/.flux_uninstalling" ] \
-    || die "chroot is being uninstalled: $FLUX_CHROOT"
+  if [ -e "$FLUX_CHROOT/.flux_uninstalling" ]; then
+    mount_unlock "$FLUX_CHROOT"
+    die "chroot is being uninstalled: $FLUX_CHROOT"
+  fi
   if [ ! -e "$FLUX_CHROOT/.flux_configured" ] \
     && [ ! -L "$FLUX_CHROOT/bin/sh" ] && [ ! -e "$FLUX_CHROOT/bin/sh" ] \
     && [ ! -e "$FLUX_CHROOT/usr/bin/bash" ] && [ ! -e "$FLUX_CHROOT/usr/bin/sh" ]; then
+    mount_unlock "$FLUX_CHROOT"
     die "chroot not installed: $FLUX_CHROOT"
   fi
   mkdir -p \
@@ -259,6 +283,14 @@ ensure_mounts() {
     $BB mount --bind "$FLUX_PREFIX/tmp/.X11-unix" "$FLUX_CHROOT/tmp/.X11-unix" 2>/dev/null \
       || mount --bind "$FLUX_PREFIX/tmp/.X11-unix" "$FLUX_CHROOT/tmp/.X11-unix" 2>/dev/null || true
   fi
+
+  # Register this session ($$ execs into the chroot) so a stop that runs before
+  # the chroot is entered still sees it as in use (M16).
+  if [ "$MODE" != mount ]; then
+    mkdir -p "$FLUX_CHROOT/.flux_sessions" 2>/dev/null \
+      && : > "$FLUX_CHROOT/.flux_sessions/$$" 2>/dev/null || true
+  fi
+  mount_unlock "$FLUX_CHROOT"
 }
 
 # Single-quote escape for embedding into su -c '…'

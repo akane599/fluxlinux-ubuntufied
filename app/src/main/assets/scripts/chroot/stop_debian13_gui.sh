@@ -78,12 +78,74 @@ pkill -9 -f "app_process.*termux-x11" 2>/dev/null || true
 killall -9 Xwayland 2>/dev/null || true
 rm -rf "$TARGET_PREFIX/tmp/.X11-unix" "$TARGET_PREFIX/tmp/.X0-lock" "$TARGET_PREFIX/tmp/.X1-lock" 2>/dev/null || true
 
-# True while any host process is still rooted at the chroot (a terminal tab,
-# apt, a component run...). Single pass over /proc/*/root symlinks.
-chroot_in_use() {
-  ls -l /proc/[0-9]*/root 2>/dev/null \
-    | awk -v p="$DEBIANPATH" '$(NF-1) == "->" && $NF == p { f = 1 } END { exit !f }'
+# awk from PATH, else the root BusyBox applet. Non-zero when neither works.
+AWK=""
+pick_awk() {
+  [ -n "$AWK" ] && return 0
+  for _a in awk "${BB:+$BB awk}"; do
+    [ -n "$_a" ] || continue
+    # shellcheck disable=SC2086
+    if [ "$(echo ok | $_a '{ print $1 }' 2>/dev/null)" = ok ]; then
+      AWK="$_a"
+      return 0
+    fi
+  done
+  return 1
 }
+
+# 0 while any host process is rooted at the chroot (a terminal tab, apt, a
+# component run...) or a fluxlinux_chroot.sh session registered by ensure_mounts
+# has not entered it yet. Also 0 when usage cannot be determined (fail closed:
+# the caller then keeps the mounts).
+chroot_in_use() {
+  _rl=readlink
+  command -v readlink >/dev/null 2>&1 || _rl="$BB readlink"
+  if pick_awk; then
+    # shellcheck disable=SC2086
+    ls -l /proc/[0-9]*/root 2>/dev/null | $AWK -v p="$DEBIANPATH" '
+      $(NF-1) == "->" && $NF == p { f = 1 }
+      END { if (NR == 0) exit 2; exit f ? 0 : 1 }'
+    case $? in 1) ;; *) return 0 ;; esac
+  else
+    # shellcheck disable=SC2086
+    [ -n "$($_rl /proc/self/root 2>/dev/null)" ] || return 0
+    for _r in /proc/[0-9]*/root; do
+      # shellcheck disable=SC2086
+      [ "$($_rl "$_r" 2>/dev/null)" = "$DEBIANPATH" ] && return 0
+    done
+  fi
+  for _s in "$DEBIANPATH"/.flux_sessions/*; do
+    [ -f "$_s" ] || continue
+    _p=${_s##*/}
+    if [ -d "/proc/$_p" ] && grep -q fluxlinux_chroot "/proc/$_p/cmdline" 2>/dev/null; then
+      return 0
+    fi
+    # shellcheck disable=SC2086
+    [ "$($_rl "/proc/$_p/root" 2>/dev/null)" = "$DEBIANPATH" ] && return 0
+    rm -f "$_s" 2>/dev/null
+  done
+  return 1
+}
+
+# Shared with fluxlinux_chroot.sh ensure_mounts: a mkdir lock inside the
+# (root-owned) rootfs, so no session can mount/register between the in-use check
+# and the unmounts below. A dead holder's lock is broken.
+mount_lock() {
+  _lk="$1/.flux_mount.lock"
+  _lw=0
+  while ! mkdir "$_lk" 2>/dev/null; do
+    [ "$_lw" -ge 60 ] && return 1
+    _lo=$(cat "$_lk/pid" 2>/dev/null)
+    if { [ -n "$_lo" ] || [ "$_lw" -ge 50 ]; } && ! kill -0 "$_lo" 2>/dev/null; then
+      rm -rf "$_lk" 2>/dev/null
+    else
+      sleep 0.2 2>/dev/null || sleep 1
+    fi
+    _lw=$((_lw + 1))
+  done
+  echo "$$" > "$_lk/pid"
+}
+mount_unlock() { rm -rf "$1/.flux_mount.lock" 2>/dev/null; }
 
 echo "[3/4] Unmount chroot binds (best-effort)..."
 if [ -n "$BB" ] && [ -d "$DEBIANPATH" ]; then
@@ -96,23 +158,28 @@ if [ -n "$BB" ] && [ -d "$DEBIANPATH" ]; then
     sleep 0.2 2>/dev/null || sleep 1
     _w=$((_w + 1))
   done
-fi
-if [ -n "$BB" ] && [ -d "$DEBIANPATH" ] && chroot_in_use; then
   # M16: lazy unmount would pull /proc, /dev, /sys and /sdcard out from under
   # open chroot sessions (broken ptys, /dev/null turning into a regular file).
-  echo "FluxLinux: chroot still in use by other sessions — keeping its mounts"
-elif [ -n "$BB" ] && [ -d "$DEBIANPATH" ]; then
-  for m in \
-    "$DEBIANPATH/mnt/host-tmp" \
-    "$DEBIANPATH/sdcard" \
-    "$DEBIANPATH/dev/shm" \
-    "$DEBIANPATH/dev/pts" \
-    "$DEBIANPATH/proc" \
-    "$DEBIANPATH/sys" \
-    "$DEBIANPATH/dev"
-  do
-    $BB umount "$m" 2>/dev/null || $BB umount -l "$m" 2>/dev/null || true
-  done
+  # Decide and unmount under the mount lock so a session can't start in between.
+  if ! mount_lock "$DEBIANPATH"; then
+    echo "FluxLinux: chroot mount lock busy — keeping its mounts"
+  elif chroot_in_use; then
+    mount_unlock "$DEBIANPATH"
+    echo "FluxLinux: chroot still in use (or usage unknown) — keeping its mounts"
+  else
+    for m in \
+      "$DEBIANPATH/mnt/host-tmp" \
+      "$DEBIANPATH/sdcard" \
+      "$DEBIANPATH/dev/shm" \
+      "$DEBIANPATH/dev/pts" \
+      "$DEBIANPATH/proc" \
+      "$DEBIANPATH/sys" \
+      "$DEBIANPATH/dev"
+    do
+      $BB umount "$m" 2>/dev/null || $BB umount -l "$m" 2>/dev/null || true
+    done
+    mount_unlock "$DEBIANPATH"
+  fi
 fi
 
 echo "[4/4] Done (PulseAudio stopped from app-uid wrapper if used)"
