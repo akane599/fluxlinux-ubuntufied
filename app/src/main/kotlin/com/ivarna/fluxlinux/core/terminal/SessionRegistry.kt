@@ -122,11 +122,24 @@ object SessionRegistry {
         killIfStarted(managed)
         sessionsList.removeAt(index)
         _revision.value++
-        if (_activeIndex.value == index) {
-            val next = if (sessionsList.isEmpty()) -1 else minOf(index, sessionsList.size - 1)
-            switchSession(next)
-        }
+        val active = _activeIndex.value
+        val next = activeIndexAfterClose(active, index, sessionsList.size)
+        // Re-attach when the active tab closed, and also when a lower tab closed:
+        // the same shell moved down one slot (M7).
+        if (active == index || next != active) switchSession(next)
         updateService(ctx)
+    }
+
+    /**
+     * Active tab index after tab [closed] is removed, leaving [sizeAfter] tabs.
+     * Closing the active tab focuses the tab that took its slot (or the new
+     * last); closing a lower tab shifts the active index down by one.
+     */
+    internal fun activeIndexAfterClose(active: Int, closed: Int, sizeAfter: Int): Int = when {
+        sizeAfter <= 0 || active < 0 -> -1
+        active == closed -> minOf(closed, sizeAfter - 1)
+        active > closed -> active - 1
+        else -> active
     }
 
     fun closeAll(ctx: Context) {
