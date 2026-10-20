@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import com.ivarna.fluxlinux.core.utils.RootUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import rikka.shizuku.Shizuku
@@ -15,6 +16,8 @@ import rikka.shizuku.Shizuku
 object PhantomProcessFixer {
 
     enum class State { ENABLED, DISABLED, UNKNOWN }
+
+    private const val TAG = "PhantomProcessFixer"
 
     private const val KEY = "settings_enable_monitor_phantom_procs"
     private const val PREFS = "fluxlinux_state"
@@ -86,16 +89,39 @@ object PhantomProcessFixer {
         runCatching { Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED }.getOrDefault(false)
 
     /** Asks the Shizuku manager for permission; result arrives on [onResult] (main thread). */
-    fun requestShizuku(onResult: (Boolean) -> Unit) {
+    fun requestShizuku(onResult: (Boolean) -> Unit) = requestShizukuWith(
+        add = { Shizuku.addRequestPermissionResultListener(it) },
+        remove = { Shizuku.removeRequestPermissionResultListener(it) },
+        request = { Shizuku.requestPermission(it) },
+        onResult = onResult,
+    )
+
+    /**
+     * [requestShizuku] with injectable Shizuku calls (unit-test seam). The binder can die
+     * between [shizukuRunning] and the request, so a throwing request removes the listener
+     * and reports a denial instead of crashing the click handler.
+     */
+    internal fun requestShizukuWith(
+        add: (Shizuku.OnRequestPermissionResultListener) -> Unit,
+        remove: (Shizuku.OnRequestPermissionResultListener) -> Unit,
+        request: (Int) -> Unit,
+        onResult: (Boolean) -> Unit,
+    ) {
         val l = object : Shizuku.OnRequestPermissionResultListener {
             override fun onRequestPermissionResult(requestCode: Int, grantResult: Int) {
                 if (requestCode != SHIZUKU_REQUEST_CODE) return
-                Shizuku.removeRequestPermissionResultListener(this)
+                runCatching { remove(this) }
                 onResult(grantResult == PackageManager.PERMISSION_GRANTED)
             }
         }
-        Shizuku.addRequestPermissionResultListener(l)
-        Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
+        try {
+            add(l)
+            request(SHIZUKU_REQUEST_CODE)
+        } catch (e: Exception) {
+            Log.w(TAG, "Shizuku permission request failed: ${e.message}")
+            runCatching { remove(l) }
+            onResult(false)
+        }
     }
 
     /**
