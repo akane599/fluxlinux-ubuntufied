@@ -32,7 +32,7 @@ import kotlinx.coroutines.flow.update
  *
  * Long-lived start uses [ShellCommandRunner.runStreamedCancelable] so other
  * install/script runners are never blocked. X11 opens only after a readiness
- * marker (e.g. `X server PID=`), not decorative banners. Desktop stdout is
+ * marker ([isDesktopReadyLine]), not decorative banners. Desktop stdout is
  * captured to [GuiDesktopLog] for VIEW LOGS.
  *
  * Start/stop ordering lives in [DesktopRunState]: callbacks from a superseded start or
@@ -62,6 +62,9 @@ object DesktopLauncher {
 
     private val _ui = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _ui.asStateFlow()
+
+    /** Guest-side readiness line printed by start_gui.sh once the DE is running. */
+    internal const val GUEST_READY_MARKER = "FLUX_DESKTOP_READY"
 
     private val runState = DesktopRunState()
 
@@ -323,7 +326,7 @@ object DesktopLauncher {
             onLine = { line ->
                 GuiDesktopLog.append(app, line)
                 appendLive(line)
-                if (runState.isCurrent(gen) && isDesktopReadyLine(line)) {
+                if (runState.isCurrent(gen) && isDesktopReadyLine(line, method)) {
                     onHealthyLine(gen, app, distroId, onResult)
                 }
             },
@@ -469,16 +472,18 @@ object DesktopLauncher {
     // ── private ────────────────────────────────────────────────────────────
 
     /**
-     * True only for host/script readiness markers — not banner / early progress lines.
-     * Matches `start_gui.sh` / `start_gui_chroot.sh` / chroot guest stage.
+     * True only for readiness markers, not banners or progress lines.
+     *
+     * PRoot keys off the guest-side [GUEST_READY_MARKER] that start_gui.sh prints once the DE
+     * has been exec'd as flux and is still alive (M12): the host X socket line comes before the
+     * DE is even checked. The chroot scripts still announce only the host X socket, so their
+     * legacy markers stay accepted for chroot until they print the guest marker too.
      */
-    internal fun isDesktopReadyLine(line: String): Boolean {
+    internal fun isDesktopReadyLine(line: String, method: String): Boolean {
         val t = line.trim()
-        if (t.isEmpty()) return false
-        return t.contains("X server PID=") ||
-            t.contains("host X0 socket ready") ||
-            t.contains("FLUX_DESKTOP_READY") ||
-            t.contains("FLUXLINUX_DESKTOP_READY")
+        if (t == GUEST_READY_MARKER || t == "FLUXLINUX_DESKTOP_READY") return true
+        if (method != "chroot") return false
+        return t.contains("X server PID=") || t.contains("host X0 socket ready")
     }
 
     private fun deliverStartResult(onResult: ((Boolean) -> Unit)?, ok: Boolean) {

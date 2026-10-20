@@ -29,6 +29,37 @@ export XKB_CONFIG_ROOT="$TERMUX_PREFIX/share/X11/xkb"
 export PULSE_RUNTIME_PATH="${HOME}/.pulse"
 mkdir -p "$PULSE_RUNTIME_PATH" 2>/dev/null
 
+# Verify guest setup before touching X/VirGL, so a missing desktop never leaves a
+# server running (M12). -L too: an absolute guest symlink does not resolve on the host.
+ROOTFS="$TERMUX_PREFIX/var/lib/proot-distro/containers/$DISTRO/rootfs"
+# FLUX_DESKTOP (env from DesktopLauncher): xfce4 (default) | kde
+FLUX_DESKTOP="${FLUX_DESKTOP:-xfce4}"
+case "$FLUX_DESKTOP" in
+  kde) DE_CMD=startplasma-x11 ;;
+  *) FLUX_DESKTOP=xfce4; DE_CMD=startxfce4 ;;
+esac
+if [ ! -e "$ROOTFS/usr/bin/$DE_CMD" ] && [ ! -L "$ROOTFS/usr/bin/$DE_CMD" ] && \
+   [ ! -e "$ROOTFS/usr/sbin/$DE_CMD" ] && [ ! -L "$ROOTFS/usr/sbin/$DE_CMD" ]; then
+  echo "FluxLinux: $FLUX_DESKTOP setup incomplete ($DE_CMD missing). Re-run environment setup."
+  exit 1
+fi
+echo "FluxLinux: $DE_CMD found in guest"
+
+# Whatever ends this script (early failure, guest failure, session end) also stops the
+# X server and VirGL it started. The guest runs as a child (no final exec), so the trap
+# stays armed for the whole session; stop_gui.sh covers a killed script.
+XSERVER_PID=""
+VIRGL_PID=""
+_flux_cleanup() {
+  [ -n "$XSERVER_PID" ] && kill "$XSERVER_PID" 2>/dev/null
+  [ -n "$VIRGL_PID" ] && kill "$VIRGL_PID" 2>/dev/null
+  return 0
+}
+trap _flux_cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 # Kill stale host graphics services only — NEVER am force-stop own package
 # (that would kill FluxLinux itself if the package name matches).
 # Pulse is a host service: do not pkill it here (CLI audio stays up).
@@ -67,6 +98,7 @@ fi
 if command -v virgl_test_server_android >/dev/null; then
   echo "FluxLinux: Starting VirGL server..."
   virgl_test_server_android --socket-path "$TERMUX_PREFIX/tmp/.virgl_test" >/dev/null 2>&1 &
+  VIRGL_PID=$!
   sleep 2
   test -S "${TMPDIR}/.virgl_test" && echo "FluxLinux: VirGL socket ready" || \
     echo "FluxLinux: [WARN] VirGL socket not found"
@@ -155,6 +187,7 @@ if [ ! -S "$TMPDIR/.X11-unix/X0" ] || ! kill -0 "$XSERVER_PID" 2>/dev/null; then
   echo "FluxLinux: [ERROR] X server did not create $TMPDIR/.X11-unix/X0 within 15s (or exited)."
   exit 1
 fi
+# Not a readiness marker for proot: DesktopLauncher waits for the guest FLUX_DESKTOP_READY.
 echo "FluxLinux: host X0 socket ready (X server PID=$XSERVER_PID)"
 
 # Open X11 display activity in our app
@@ -164,21 +197,6 @@ am start -n "$PKG/com.termux.x11.MainActivity" \
   --activity-clear-top 2>/dev/null || \
 am start -n "$PKG/com.termux.x11.MainActivity" 2>/dev/null
 sleep 1
-
-# Verify guest setup
-ROOTFS="$TERMUX_PREFIX/var/lib/proot-distro/containers/$DISTRO/rootfs"
-# FLUX_DESKTOP (env from DesktopLauncher): xfce4 (default) | kde
-FLUX_DESKTOP="${FLUX_DESKTOP:-xfce4}"
-case "$FLUX_DESKTOP" in
-  kde) DE_CMD=startplasma-x11 ;;
-  *) FLUX_DESKTOP=xfce4; DE_CMD=startxfce4 ;;
-esac
-if [ ! -e "$ROOTFS/usr/bin/$DE_CMD" ] && [ ! -e "$ROOTFS/usr/sbin/$DE_CMD" ]; then
-  echo "FluxLinux: $FLUX_DESKTOP setup incomplete ($DE_CMD missing). Re-run environment setup."
-  exit 1
-fi
-
-echo "FluxLinux: $DE_CMD=READY"
 
 # Guest GPU mode from setup_hw_accel_debian.sh (/etc/fluxlinux/gpu_mode)
 # turnip → Adreno/Zink; virgl → host virgl_test_server; else softpipe
@@ -430,10 +448,20 @@ KDE_EOF
         export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe GPU_MODE=software
       fi
       $FLUX_KDE_ENV
+      if ! command -v $FLUX_DE_CMD >/dev/null 2>&1; then
+        echo \"FluxLinux(guest): [ERROR] $FLUX_DE_CMD not found for flux\"
+        exit 127
+      fi
+      # Readiness for the app: printed only if the DE (same pid after exec) is still
+      # alive 2s after launch, so a desktop that dies at once never flips to Running.
+      ( sleep 2; kill -0 \$\$ 2>/dev/null && echo FLUX_DESKTOP_READY ) &
       if command -v dbus-run-session >/dev/null 2>&1; then
         exec dbus-run-session -- $FLUX_DE_CMD
-      else
+      elif command -v dbus-launch >/dev/null 2>&1; then
         exec dbus-launch --exit-with-session $FLUX_DE_CMD
+      else
+        echo \"FluxLinux(guest): [ERROR] neither dbus-run-session nor dbus-launch found\"
+        exit 127
       fi
     "
   '
