@@ -127,8 +127,10 @@ object RootShell {
             val pb = ProcessBuilder(args).redirectErrorStream(true).start()
             try { pb.outputStream.close() } catch (_: Exception) {}
             val rootPid = AtomicReference<RootPid?>(null)
-            liveRootJobs[pb] = rootPid
-            processHolder?.set(pb)
+            // The holder gets a Process whose destroyForcibly() kills the root tree first, so
+            // owners that only ever call destroyForcibly() on the holder still stop the job.
+            val job = RootJobProcess(pb, rootPid)
+            processHolder?.set(job)
             try {
                 val sb = StringBuilder()
                 val readerThread = Thread {
@@ -163,7 +165,7 @@ object RootShell {
                 var cancelled = false
                 var timedOut = false
                 while (!pb.waitFor(POLL_MS, TimeUnit.MILLISECONDS)) {
-                    if (processHolder != null && processHolder.get() !== pb) {
+                    if (processHolder != null && processHolder.get() !== job) {
                         cancelled = true
                         break
                     }
@@ -172,13 +174,12 @@ object RootShell {
                         break
                     }
                 }
-                if (!cancelled && processHolder != null && processHolder.get() !== pb) {
+                if (!cancelled && processHolder != null && processHolder.get() !== job) {
                     // Owner destroyed the su client: the root side may still be running.
                     cancelled = true
                 }
                 if (timedOut || cancelled) {
-                    killRootTree(rootPid.get())
-                    pb.destroyForcibly()
+                    job.killTreeThenDestroy()
                     try {
                         pb.waitFor(2, TimeUnit.SECONDS)
                         readerThread.join(1_000)
@@ -204,8 +205,7 @@ object RootShell {
                 }
                 CaptureResult(code, synchronized(sb) { sb.toString() })
             } finally {
-                liveRootJobs.remove(pb)
-                processHolder?.compareAndSet(pb, null)
+                processHolder?.compareAndSet(job, null)
             }
         } catch (e: Exception) {
             Log.w(TAG, "capture failed: ${e.message}")
@@ -214,23 +214,61 @@ object RootShell {
     }
 
     /**
-     * Cancel a root job started by [captureResult] / [execute]: kill its whole root process
-     * tree via a fresh su, then the su client. Safe on any Process (non-root ones are just
-     * destroyed). Blocking (one short su call): background thread only.
+     * Cancel a root job whose Process came from a [captureResult] holder: kill its whole root
+     * process tree via a fresh su, then the su client. Safe on any Process (others are just
+     * destroyed). Blocking (one short su call): background thread only. Plain
+     * `holder.getAndSet(null)?.destroyForcibly()` does the same asynchronously.
      */
     fun cancelRootJob(process: Process?) {
-        if (process == null) return
-        killRootTree(liveRootJobs[process]?.get())
-        process.destroyForcibly()
+        when (process) {
+            null -> Unit
+            is RootJobProcess -> process.killTreeThenDestroy()
+            else -> process.destroyForcibly()
+        }
+    }
+
+    /**
+     * su client wrapper handed out through `processHolder`. [destroyForcibly] / [destroy]
+     * never block the caller (may be the main thread): the root tree kill runs on [executor]
+     * and the su client is destroyed right after it, so children cannot be orphaned first.
+     */
+    private class RootJobProcess(
+        private val delegate: Process,
+        private val rootPid: AtomicReference<RootPid?>,
+    ) : Process() {
+        private val killed = AtomicBoolean(false)
+
+        fun killTreeThenDestroy() {
+            if (killed.compareAndSet(false, true)) killRootTree(rootPid.get())
+            delegate.destroyForcibly()
+        }
+
+        override fun destroyForcibly(): Process {
+            try {
+                executor.execute { killTreeThenDestroy() }
+            } catch (_: Exception) {
+                delegate.destroyForcibly()
+            }
+            return this
+        }
+
+        override fun destroy() {
+            destroyForcibly()
+        }
+
+        override fun getOutputStream(): java.io.OutputStream = delegate.outputStream
+        override fun getInputStream(): java.io.InputStream = delegate.inputStream
+        override fun getErrorStream(): java.io.InputStream = delegate.errorStream
+        override fun waitFor(): Int = delegate.waitFor()
+        override fun waitFor(timeout: Long, unit: TimeUnit): Boolean = delegate.waitFor(timeout, unit)
+        override fun exitValue(): Int = delegate.exitValue()
+        override fun isAlive(): Boolean = delegate.isAlive
     }
 
     // ── H3: root process-tree tracking ──────────────────────────────────────
 
     private const val POLL_MS = 200L
     internal const val ROOT_PID_MARKER = "__FLUX_ROOT_PID__"
-
-    /** Live root jobs: su client Process -> root shell pid (filled from the marker line). */
-    private val liveRootJobs = java.util.concurrent.ConcurrentHashMap<Process, AtomicReference<RootPid?>>()
 
     /** Root shell identity: pid plus `/proc/pid/stat` starttime (guards against pid reuse). */
     internal data class RootPid(val pid: Int, val startTime: String)
@@ -773,7 +811,6 @@ object RootShell {
             try { pb.outputStream.close() } catch (_: Exception) {}
 
             val rootPid = AtomicReference<RootPid?>(null)
-            if (tracked) liveRootJobs[pb] = rootPid
             val reader = Thread {
                 try {
                     BufferedReader(InputStreamReader(pb.inputStream)).use { r ->
@@ -808,12 +845,10 @@ object RootShell {
             if (!finished) {
                 if (tracked) killRootTree(rootPid.get())
                 pb.destroyForcibly()
-                liveRootJobs.remove(pb)
                 reader.join(500)
                 Log.w(TAG, "runCommand timeout after ${timeoutMs}ms")
                 return -2
             }
-            liveRootJobs.remove(pb)
             // Grandchildren may keep the pipe open; bound the drain.
             reader.join(5_000)
             val code = pb.exitValue()

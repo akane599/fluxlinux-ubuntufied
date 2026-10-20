@@ -158,4 +158,18 @@ class RootShellTreeKillTest {
             p.destroyForcibly()
         }
     }
+
+    @Test
+    fun holderDestroyForcibly_killsWholeTree() {
+        // Owners (install runner) only call destroyForcibly() on whatever sits in the holder.
+        seedHostShell()
+        val holder = AtomicReference<Process?>(null)
+        val t = Thread { RootShell.captureResult(treeCmd(), processHolder = holder) }
+        t.start()
+        awaitPids(3)
+        holder.getAndSet(null)?.destroyForcibly()
+        t.join(10_000)
+        assertFalse(t.isAlive)
+        assertAllDead(pids())
+    }
 }
