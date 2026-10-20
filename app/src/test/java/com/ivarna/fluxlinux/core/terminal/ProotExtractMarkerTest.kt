@@ -60,6 +60,54 @@ class ProotExtractMarkerTest {
         assertTrue(TerminalLauncher.isProotInstalled(ctx, name))
     }
 
+    private fun stageDebianUserland(dpkgStatus: String = "Package: bash\nStatus: install ok installed\n") {
+        File(rootfs, "etc").mkdirs()
+        File(rootfs, "etc/os-release").writeText("ID=ubuntu\nVERSION_ID=\"26.04\"\n")
+        File(rootfs, "var/lib/dpkg").mkdirs()
+        File(rootfs, "var/lib/dpkg/status").writeText(dpkgStatus)
+    }
+
+    @Test
+    fun legacyExtractedButSetupFailed_completeUserland_isInstalled() {
+        // Extraction finished, family setup failed: no XFCE, no post-install marker.
+        stageDebianUserland()
+        assertTrue(TerminalLauncher.isProotInstalled(ctx, name))
+    }
+
+    @Test
+    fun legacyRpmUserland_isInstalled() {
+        File(rootfs, "usr/lib").mkdirs()
+        File(rootfs, "usr/lib/os-release").writeText("ID=fedora\n")
+        File(rootfs, "usr/lib/sysimage/rpm").mkdirs()
+        File(rootfs, "usr/lib/sysimage/rpm/rpmdb.sqlite").writeText("db")
+        assertTrue(TerminalLauncher.isProotInstalled(ctx, name))
+    }
+
+    @Test
+    fun partialUserland_emptyPackageDbOrNoOsRelease_isNotInstalled() {
+        stageDebianUserland(dpkgStatus = "")
+        assertFalse(TerminalLauncher.isProotInstalled(ctx, name))
+        File(rootfs, "var/lib/dpkg/status").writeText("Package: bash\n")
+        File(rootfs, "etc/os-release").delete()
+        assertFalse(TerminalLauncher.isProotInstalled(ctx, name))
+    }
+
+    @Test
+    fun script_legacyCompleteUserland_isAdoptedNotWiped() {
+        stageDebianUserland()
+        val (exit, out) = runScriptFns("rootfs_extract_complete $name")
+        assertEquals(out, 0, exit)
+        assertTrue(File(container, ".flux_extract_ok").isFile)
+    }
+
+    @Test
+    fun script_partialUserland_isIncomplete() {
+        stageDebianUserland(dpkgStatus = "")
+        val (exit, _) = runScriptFns("rootfs_extract_complete $name")
+        assertEquals(1, exit)
+        assertFalse(File(container, ".flux_extract_ok").exists())
+    }
+
     @Test
     fun markerWithoutShell_isNotInstalled() {
         SafeFiles.deleteTree(rootfs)

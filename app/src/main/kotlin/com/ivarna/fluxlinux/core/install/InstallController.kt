@@ -99,6 +99,14 @@ class InstallController internal constructor(private val engine: InstallEngine) 
     companion object {
         private const val LOG_LIMIT = 12_000
 
+        /**
+         * "Repair host" deletes and re-extracts `usr/` (the proot-distro tree the
+         * install runs in). Never while an install runs — it outlives its screen (H2),
+         * so Home can be reached mid-install — nor during another extraction (M1).
+         */
+        fun hostRepairAllowed(install: State, extracting: Boolean): Boolean =
+            !install.isRunning && !extracting
+
         @Volatile private var instance: InstallController? = null
 
         /** The process-wide controller, backed by an [OnboardingInstallRunner]. */

@@ -37,9 +37,14 @@ class ShellJob(private val process: Process) {
  * job's status. Job-status chatter from `wait` goes to /dev/null.
  */
 internal object ProcessGroupLauncher {
+    // A signal that lands before the job's pid is known only sets a flag; the kill
+    // trap is installed once $pid exists, and the flag is honoured right after, so an
+    // early cancel can never run `kill -- -""` and orphan the job.
     const val WRAPPER =
-        "trap 'kill -9 -- -\"\$pid\" 2>/dev/null; exit 143' TERM HUP INT; " +
-            "set -m; \"\$@\" & pid=\$!; wait \"\$pid\" 2>/dev/null"
+        "trap 'term=1' TERM HUP INT; set -m; \"\$@\" & pid=\$!; " +
+            "trap 'kill -9 -- -\"\$pid\" 2>/dev/null; exit 143' TERM HUP INT; " +
+            "if [ -n \"\${term:-}\" ]; then kill -9 -- -\"\$pid\" 2>/dev/null; exit 143; fi; " +
+            "wait \"\$pid\" 2>/dev/null"
 
     /** `bash -c WRAPPER flux-job cmd...` — [bash] must be the host libbash (or /bin/bash in tests). */
     fun wrap(bash: String, cmd: Array<String>): Array<String> =

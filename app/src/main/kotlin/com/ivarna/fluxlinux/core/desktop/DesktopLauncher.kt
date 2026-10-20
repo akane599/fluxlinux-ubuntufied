@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.update
 object DesktopLauncher {
 
     private const val TAG = "DesktopLauncher"
+    private const val LIVE_FLUSH_MS = 200L
     private val main = Handler(Looper.getMainLooper())
 
     enum class Phase { Idle, Starting, Running }
@@ -291,7 +292,7 @@ object DesktopLauncher {
             it.copy(
                 phase = Phase.Starting,
                 distroId = distroId,
-                logText = GuiDesktopLog.read(app),
+                logText = freshLogText(app),
                 logsAvailable = true,
                 displayReady = false,
                 lastError = null,
@@ -454,7 +455,7 @@ object DesktopLauncher {
                     phase = Phase.Idle,
                     displayReady = false,
                     logsAvailable = GuiDesktopLog.hasContent(app),
-                    logText = GuiDesktopLog.read(app),
+                    logText = freshLogText(app),
                 )
             }
         }
@@ -528,17 +529,47 @@ object DesktopLauncher {
         }
     }
 
-    private fun appendLive(line: String) {
-        _ui.update { st ->
-            val next = (st.logText + line + "\n").takeLast(24_000)
-            st.copy(logText = next, logsAvailable = true)
+    /** Live lines not yet pushed to [_ui] (L18); guarded by itself (callers may be off-main). */
+    private val pendingLive = StringBuilder()
+    private var liveFlushPosted = false
+    private val flushLive = Runnable {
+        val chunk = synchronized(pendingLive) {
+            liveFlushPosted = false
+            pendingLive.toString().also { pendingLive.setLength(0) }
         }
+        if (chunk.isEmpty()) return@Runnable
+        _ui.update { st ->
+            st.copy(logText = (st.logText + chunk).takeLast(24_000), logsAvailable = true)
+        }
+    }
+
+    /**
+     * Coalesces per-line UI updates (L18): lines are batched and pushed to [_ui] at most
+     * every [LIVE_FLUSH_MS], instead of copying the 24 KB log text for every guest line.
+     */
+    private fun appendLive(line: String) {
+        val post = synchronized(pendingLive) {
+            pendingLive.append(line).append('\n')
+            val alreadyPosted = liveFlushPosted
+            liveFlushPosted = true
+            !alreadyPosted
+        }
+        if (post) main.postDelayed(flushLive, LIVE_FLUSH_MS)
+    }
+
+    /**
+     * The full file log replaces the live text: drop batched lines first (they are
+     * already in the file, so they would otherwise be shown twice).
+     */
+    private fun freshLogText(app: Context): String {
+        synchronized(pendingLive) { pendingLive.setLength(0) }
+        return GuiDesktopLog.read(app)
     }
 
     private fun pushLog(app: Context, forceShow: Boolean) {
         _ui.update {
             it.copy(
-                logText = GuiDesktopLog.read(app),
+                logText = freshLogText(app),
                 logsAvailable = GuiDesktopLog.hasContent(app),
                 autoShowLogsTick = if (forceShow) it.autoShowLogsTick + 1 else it.autoShowLogsTick
             )
@@ -589,7 +620,7 @@ object DesktopLauncher {
                 lastError = error,
                 displayReady = false,
                 logsAvailable = GuiDesktopLog.hasContent(app),
-                logText = GuiDesktopLog.read(app),
+                logText = freshLogText(app),
                 autoShowLogsTick = if (showLogs) it.autoShowLogsTick + 1 else it.autoShowLogsTick
             )
         }
