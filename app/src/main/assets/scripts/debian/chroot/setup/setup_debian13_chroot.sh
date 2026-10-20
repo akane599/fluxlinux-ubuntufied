@@ -261,7 +261,7 @@ echo "Cleaning internal XFCE4 session..."
 \$BB chroot \$DEBIANPATH /bin/su - root -c "killall -9 xfce4-session xfwm4 xfdesktop xfce4-panel dbus-launch dbus-daemon" >/dev/null 2>&1
 
 echo "Starting Debian 13 Chroot GUI ($USERNAME)..."
-\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER=tcp:127.0.0.1 && export XDG_RUNTIME_DIR=/tmp && xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; dbus-launch --exit-with-session startxfce4'
+\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native" && export XDG_RUNTIME_DIR=/tmp && xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; dbus-launch --exit-with-session startxfce4'
 EOF
     chmod +x "$LAUNCH_SCRIPT"
     success "Launch script created."
@@ -376,7 +376,7 @@ mkdir -p \$DEBIANPATH/sdcard
 
 # Launch GUI as user
 echo "Starting Debian 13 Chroot GUI ($USERNAME)..."
-\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER=tcp:127.0.0.1 && export XDG_RUNTIME_DIR=/tmp && xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; dbus-launch --exit-with-session startxfce4'
+\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native" && export XDG_RUNTIME_DIR=/tmp && xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; dbus-launch --exit-with-session startxfce4'
 EOF
         chmod +x "$LAUNCH_SCRIPT"
         success "Core launch script updated: $LAUNCH_SCRIPT"
@@ -449,7 +449,7 @@ echo "Cleaning internal XFCE4 session..."
 \$BB chroot \$DEBIANPATH /bin/su - root -c "killall -9 xfce4-session xfwm4 xfdesktop xfce4-panel dbus-launch dbus-daemon" >/dev/null 2>&1
 
 echo "Starting Debian 13 Chroot GUI ($USERNAME)..."
-\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER=tcp:127.0.0.1 && export XDG_RUNTIME_DIR=/tmp && xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; dbus-launch --exit-with-session startxfce4'
+\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native" && export XDG_RUNTIME_DIR=/tmp && xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; dbus-launch --exit-with-session startxfce4'
 EOF
         chmod +x "$LAUNCH_SCRIPT"
         success "Launch script created."

@@ -192,6 +192,10 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 mkdir -p \$DEBIANPATH/dev/shm
 \$BB mount -t tmpfs -o size=256M tmpfs \$DEBIANPATH/dev/shm
 
+# Termux tmp at /mnt/host-tmp: PulseAudio unix socket (pulse-native)
+mkdir -p \$DEBIANPATH/mnt/host-tmp
+\$BB mount --bind /data/data/com.termux/files/usr/tmp \$DEBIANPATH/mnt/host-tmp
+
 # Mount sdcard
 mkdir -p \$DEBIANPATH/sdcard
 \$BB mount --bind /sdcard \$DEBIANPATH/sdcard
@@ -199,7 +203,7 @@ mkdir -p \$DEBIANPATH/sdcard
 # Launch GUI as user
 # Guide line: busybox chroot \$DEBIANPATH /bin/su - droidmaster -c 'export DISPLAY=:0 ...'
 echo "Starting Debian Chroot GUI ($USERNAME)..."
-\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER=127.0.0.1 && dbus-launch --exit-with-session startxfce4'
+\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native" && dbus-launch --exit-with-session startxfce4'
 EOF
     chmod +x "$LAUNCH_SCRIPT"
     success "Launch script created."
@@ -313,7 +317,7 @@ mkdir -p \$DEBIANPATH/sdcard
 
 # Launch GUI as user
 echo "Starting Debian Chroot GUI ($USERNAME)..."
-\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER=127.0.0.1 && dbus-launch --exit-with-session startxfce4'
+\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native" && dbus-launch --exit-with-session startxfce4'
 EOF
         chmod +x "$LAUNCH_SCRIPT"
         success "Core launch script updated: $LAUNCH_SCRIPT"
@@ -371,6 +375,10 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 mkdir -p \$DEBIANPATH/dev/shm
 \$BB mount -t tmpfs -o size=256M tmpfs \$DEBIANPATH/dev/shm
 
+# Termux tmp at /mnt/host-tmp: PulseAudio unix socket (pulse-native)
+mkdir -p \$DEBIANPATH/mnt/host-tmp
+\$BB mount --bind /data/data/com.termux/files/usr/tmp \$DEBIANPATH/mnt/host-tmp
+
 # Mount sdcard
 mkdir -p \$DEBIANPATH/sdcard
 \$BB mount --bind /sdcard \$DEBIANPATH/sdcard
@@ -381,7 +389,7 @@ echo "Cleaning internal XFCE4 session..."
 \$BB chroot \$DEBIANPATH /bin/su - root -c "killall -9 xfce4-session xfwm4 xfdesktop xfce4-panel dbus-launch dbus-daemon" >/dev/null 2>&1
 
 echo "Starting Debian Chroot GUI ($USERNAME)..."
-\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER=127.0.0.1 && dbus-launch --exit-with-session startxfce4'
+\$BB chroot \$DEBIANPATH /bin/su - $USERNAME -c 'export DISPLAY=:0 && export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native" && dbus-launch --exit-with-session startxfce4'
 EOF
         chmod +x "$LAUNCH_SCRIPT"
         success "Launch script created."
@@ -426,8 +434,10 @@ sleep 3
 
 # 5. Start PulseAudio (AS USER)
 echo "Starting PulseAudio..."
-\$PREFIX/bin/pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
-\$PREFIX/bin/pacmd load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1
+# Unix socket in Termux tmp only (chroot: /tmp or /mnt/host-tmp). No TCP:
+# anonymous 127.0.0.1:4713 is open to every app on the device.
+\$PREFIX/bin/pulseaudio --start --load="module-native-protocol-unix socket=\$PREFIX/tmp/pulse-native auth-anonymous=1" --exit-idle-time=-1
+\$PREFIX/bin/pacmd load-module module-native-protocol-unix socket=\$PREFIX/tmp/pulse-native auth-anonymous=1 2>/dev/null
 
 # 6. Launch Chroot (Requires Root for Mounts)
 echo "Entering Chroot..."
@@ -480,4 +490,3 @@ EOF
 }
 
 main
-```

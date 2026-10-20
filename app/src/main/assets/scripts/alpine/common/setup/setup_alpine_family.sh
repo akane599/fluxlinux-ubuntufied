@@ -164,7 +164,7 @@ if id flux >/dev/null 2>&1; then
     mkdir -p /home/flux/.vnc
     cat > /home/flux/.vnc/xstartup <<'EOF'
 #!/bin/sh
-export PULSE_SERVER=tcp:127.0.0.1
+export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native"
 [ -f "$HOME/.Xresources" ] && xrdb "$HOME/.Xresources"
 exec startxfce4
 EOF
@@ -173,22 +173,23 @@ fi
 if command -v _flux_write_pulse_client >/dev/null 2>&1; then
     _flux_write_pulse_client
 else
+    # Same list as flux_guest_common.sh FLUX_PULSE_SERVERS: host Pulse is a unix
+    # socket only (proot /tmp, chroot /mnt/host-tmp). Never TCP 127.0.0.1:4713.
+    _srv="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native"
     mkdir -p /etc/profile.d /etc/pulse/client.conf.d
-    printf 'export PULSE_SERVER=tcp:127.0.0.1\n' > /etc/profile.d/flux-pulse.sh
+    printf 'export PULSE_SERVER="%s"\n' "$_srv" > /etc/profile.d/flux-pulse.sh
     chmod 644 /etc/profile.d/flux-pulse.sh 2>/dev/null || true
     if [ -f /etc/environment ]; then
         if grep -q '^PULSE_SERVER=' /etc/environment 2>/dev/null; then
-            sed -i 's|^PULSE_SERVER=.*|PULSE_SERVER=tcp:127.0.0.1|' /etc/environment
+            sed -i "s|^PULSE_SERVER=.*|PULSE_SERVER=\"$_srv\"|" /etc/environment
         else
-            printf 'PULSE_SERVER=tcp:127.0.0.1\n' >> /etc/environment
+            printf 'PULSE_SERVER="%s"\n' "$_srv" >> /etc/environment
         fi
     else
-        printf 'PULSE_SERVER=tcp:127.0.0.1\n' > /etc/environment
+        printf 'PULSE_SERVER="%s"\n' "$_srv" > /etc/environment
     fi
-    cat > /etc/pulse/client.conf.d/99-fluxlinux.conf <<'EOF'
-default-server = tcp:127.0.0.1
-autospawn = no
-EOF
+    printf 'default-server = %s\nautospawn = no\n' "$_srv" \
+        > /etc/pulse/client.conf.d/99-fluxlinux.conf
 fi
 
 # Ensure home ownership / writability.

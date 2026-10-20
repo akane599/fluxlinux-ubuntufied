@@ -7,7 +7,7 @@
 #
 # Launch sequence:
 #   1. Kill previous session
-#   2. Start PulseAudio (TCP mode)
+#   2. Start PulseAudio (unix socket in $TMPDIR)
 #   3. Start VirGL server (auto-selects VirGL or Turnip)
 #   4. Start Termux:X11 server
 #   5. Launch XFCE4 session
@@ -68,11 +68,14 @@ sleep 1
 
 # ── Step 2: PulseAudio ────────────────────────────────────
 echo "FluxLinux: Starting PulseAudio..."
+# Unix socket in Termux tmp only. No TCP: anonymous 127.0.0.1:4713 is open
+# to every app on the device.
+_pulse_sock="${TMPDIR:-$PREFIX/tmp}/pulse-native"
 pulseaudio --start \
-    --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" \
+    --load="module-native-protocol-unix socket=$_pulse_sock auth-anonymous=1" \
     --exit-idle-time=-1 2>/dev/null || \
     echo " [⚠️] PulseAudio start failed — audio may not work"
-export PULSE_SERVER=127.0.0.1
+export PULSE_SERVER="unix:$_pulse_sock"
 
 # ── Step 3: VirGL GPU server ──────────────────────────────
 echo "FluxLinux: Starting GPU acceleration server..."

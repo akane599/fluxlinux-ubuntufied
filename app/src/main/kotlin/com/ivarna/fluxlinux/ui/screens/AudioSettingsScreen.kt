@@ -52,7 +52,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * Host PulseAudio status / start / restart / logs.
- * Guests stay clients (`PULSE_SERVER=tcp:127.0.0.1`).
+ * Guests stay clients of its unix socket (`PULSE_SERVER=unix:/tmp/pulse-native`
+ * in PRoot, `unix:/mnt/host-tmp/pulse-native` in chroot). No TCP listener.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,7 +156,7 @@ fun AudioSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                "Host PulseAudio in the FluxLinux prefix. Guests connect with PULSE_SERVER=tcp:127.0.0.1. Stopping the desktop does not stop this service.",
+                "Host PulseAudio in the FluxLinux prefix. Guests connect through its private unix socket (unix:/tmp/pulse-native; chroot: /mnt/host-tmp/pulse-native), never TCP. Stopping the desktop does not stop this service.",
                 fontSize = 13.sp,
                 color = fluxMutedText()
             )
@@ -294,7 +295,7 @@ fun AudioSettingsScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Writes PULSE_SERVER=tcp:127.0.0.1 and installs pactl in already-installed PRoots. Chroots need root. Does not start a guest Pulse daemon.",
+                        "Points already-installed guests at the unix socket (moving old tcp:127.0.0.1 settings) and installs pactl. Chroots need root. Does not start a guest Pulse daemon.",
                         fontSize = 13.sp,
                         color = fluxMutedText()
                     )
