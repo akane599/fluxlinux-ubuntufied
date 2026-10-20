@@ -304,16 +304,39 @@ find_asset() {
     return 1
 }
 
+# $1 is usable: non-empty and, when its final name ($2, default $1) is a
+# .zip, `unzip -t` passes.
+_flux_archive_ok() {
+    [ -s "$1" ] || return 1
+    case "${2:-$1}" in
+        *.zip) unzip -tq "$1" >/dev/null 2>&1 ;;
+        *) return 0 ;;
+    esac
+}
+
+# /tmp persists across runs: never trust (or leave behind) a truncated file.
+# Download to <out>.partial, verify, then rename into place.
 download_if_needed() {
     _url="$1"
     _out="$2"
-    if [ -f "$_out" ] && [ -s "$_out" ]; then
+    if _flux_archive_ok "$_out"; then
         return 0
     fi
+    rm -f "$_out"
     mkdir -p "$(dirname "$_out")"
+    _part="$_out.partial"
+    rm -f "$_part"
     echo " - Downloading $(basename "$_out")..."
-    _flux_fetch "$_url" "$_out" || return 1
-    [ -s "$_out" ]
+    if ! _flux_fetch "$_url" "$_part"; then
+        rm -f "$_part"
+        return 1
+    fi
+    if ! _flux_archive_ok "$_part" "$_out"; then
+        echo "FluxLinux: WARNING: $(basename "$_out") download is incomplete or corrupt — discarded"
+        rm -f "$_part"
+        return 1
+    fi
+    mv -f "$_part" "$_out"
 }
 
 if [ -n "${FLUX_THEME:-}" ]; then
@@ -374,8 +397,12 @@ else
         TFILE="$(find_asset "$THEME_TAR" || true)"
         if [ -z "$TFILE" ]; then
             if download_if_needed "$BASE_URL/theme.zip" "/tmp/theme.zip"; then
-                unzip -q -o /tmp/theme.zip -d /tmp/flux_theme_zip
-                TFILE="$(find /tmp/flux_theme_zip -name "$THEME_TAR" 2>/dev/null | head -1)"
+                if unzip -q -o /tmp/theme.zip -d /tmp/flux_theme_zip; then
+                    TFILE="$(find /tmp/flux_theme_zip -name "$THEME_TAR" 2>/dev/null | head -1)"
+                else
+                    echo "FluxLinux: WARNING: theme.zip unzip failed — continuing"
+                    rm -f /tmp/theme.zip
+                fi
             else
                 echo "FluxLinux: WARNING: theme download failed — continuing"
             fi
@@ -390,9 +417,13 @@ else
         IFILE="$(find_asset "$ICON_TAR" || find_asset "papirus-dark-only.tar.gz" || true)"
         if [ -z "$IFILE" ]; then
             if download_if_needed "$BASE_URL/icons.zip" "/tmp/icons.zip"; then
-                unzip -q -o /tmp/icons.zip -d /tmp/flux_icons_zip
-                IFILE="$(find /tmp/flux_icons_zip -name "$ICON_TAR" 2>/dev/null | head -1)"
-                [ -n "$IFILE" ] || IFILE="$(find /tmp/flux_icons_zip -name "papirus-dark-only.tar.gz" 2>/dev/null | head -1)"
+                if unzip -q -o /tmp/icons.zip -d /tmp/flux_icons_zip; then
+                    IFILE="$(find /tmp/flux_icons_zip -name "$ICON_TAR" 2>/dev/null | head -1)"
+                    [ -n "$IFILE" ] || IFILE="$(find /tmp/flux_icons_zip -name "papirus-dark-only.tar.gz" 2>/dev/null | head -1)"
+                else
+                    echo "FluxLinux: WARNING: icons.zip unzip failed — continuing"
+                    rm -f /tmp/icons.zip
+                fi
             else
                 echo "FluxLinux: WARNING: icons download failed — continuing"
             fi
@@ -410,8 +441,12 @@ else
         CFILE="$(find_asset "$CURSOR_TAR" || true)"
         if [ -z "$CFILE" ]; then
             if download_if_needed "$BASE_URL/cursor.zip" "/tmp/cursor.zip"; then
-                unzip -q -o /tmp/cursor.zip -d /tmp/flux_cursor_zip
-                CFILE="$(find /tmp/flux_cursor_zip -name "$CURSOR_TAR" 2>/dev/null | head -1)"
+                if unzip -q -o /tmp/cursor.zip -d /tmp/flux_cursor_zip; then
+                    CFILE="$(find /tmp/flux_cursor_zip -name "$CURSOR_TAR" 2>/dev/null | head -1)"
+                else
+                    echo "FluxLinux: WARNING: cursor.zip unzip failed — continuing"
+                    rm -f /tmp/cursor.zip
+                fi
             else
                 echo "FluxLinux: WARNING: cursor download failed — continuing"
             fi
@@ -585,7 +620,10 @@ if [ ! -f "$WALLPAPER_DIR/$SEL_WALLPAPER" ]; then
     else
         TEMP_WP_ZIP="/tmp/wallpaper.zip"
         if download_if_needed "$BASE_URL/wallpaper.zip" "$TEMP_WP_ZIP"; then
-            unzip -o -j "$TEMP_WP_ZIP" -d "$WALLPAPER_DIR" 2>/dev/null || true
+            if ! unzip -o -j "$TEMP_WP_ZIP" -d "$WALLPAPER_DIR" 2>/dev/null; then
+                echo "FluxLinux: WARNING: wallpaper.zip unzip failed — continuing"
+                rm -f "$TEMP_WP_ZIP"
+            fi
             [ -f "$WALLPAPER_DIR/dark.png" ] && mv -f "$WALLPAPER_DIR/dark.png" "$WALLPAPER_DIR/fluxlinux-dark.png"
             [ -f "$WALLPAPER_DIR/light.png" ] && mv -f "$WALLPAPER_DIR/light.png" "$WALLPAPER_DIR/fluxlinux-light.png"
         fi
