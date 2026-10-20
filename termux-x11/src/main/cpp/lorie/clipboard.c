@@ -580,6 +580,27 @@ void lorieHandleClipboardData(const char* data) {
     }
 }
 
+/* Pending requests keep a raw ClientPtr: drop them once that client is closing down, so
+ * lorieHandleClipboardData never writes to a freed client. A retained client can not receive
+ * events anymore either, so its requests are dropped as well. */
+static void lorieClientStateCallback(__unused CallbackListPtr *callbacks, __unused void *data, void *args) {
+    NewClientInfoRec *info = (NewClientInfoRec *) args;
+    ClientPtr client = info->client;
+    struct LorieDataTarget **link = &lorieDataTargetHead;
+
+    if (client->clientState != ClientStateGone && client->clientState != ClientStateRetained)
+        return;
+
+    while (*link != NULL) {
+        struct LorieDataTarget *ldt = *link;
+        if (ldt->client == client) {
+            *link = ldt->next;
+            free(ldt);
+        } else
+            link = &ldt->next;
+    }
+}
+
 /* end functions related to clipboard announcing and sending */
 
 void lorieInitClipboard(void) {
@@ -598,4 +619,9 @@ void lorieInitClipboard(void) {
 
     if (!AddCallback(&SelectionCallback, lorieSelectionCallback, NULL))
         FatalError("Adding SelectionCallback failed\n");
+
+    // Callback lists are reset by dix on every server generation (DeleteCallbackManager),
+    // so registering here alongside SelectionCallback needs no explicit removal.
+    if (!AddCallback(&ClientStateCallback, lorieClientStateCallback, NULL))
+        FatalError("Adding ClientStateCallback failed\n");
 }
