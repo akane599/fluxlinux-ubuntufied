@@ -1,0 +1,3 @@
+- Fixed missing host sh: Termux helpers like am, su, getprop and logcat work again
+- Existing installs get the sh link automatically on next start
+- The X11 window is opened only by the app, once the desktop is ready
