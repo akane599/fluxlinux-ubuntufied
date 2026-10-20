@@ -115,7 +115,13 @@ class UbuntuDocumentsProvider : DocumentsProvider() {
     // ---- content -----------------------------------------------------------------------
 
     override fun openDocument(documentId: String, mode: String, signal: CancellationSignal?): ParcelFileDescriptor {
-        val file = resolve(parse(documentId))
+        val doc = parse(documentId)
+        // A file link into shared storage (or out of the container) is never opened through
+        // this provider: it would read/write outside the Ubuntu files with this app's access.
+        if (GuestDocumentPaths.finalLinkLeavesContainer(rootfs, guestPath(doc))) {
+            throw FileNotFoundException("Link outside the Ubuntu container: $documentId")
+        }
+        val file = resolve(doc)
         val attrs = try {
             Files.readAttributes(file.toPath(), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
         } catch (e: IOException) {
@@ -301,7 +307,8 @@ class UbuntuDocumentsProvider : DocumentsProvider() {
         if (target != null && !doc.isRoot) {
             flags = flags or Document.FLAG_SUPPORTS_COPY
             if (removable) flags = flags or Document.FLAG_SUPPORTS_MOVE
-            if (writableParent && !isDir && writable) flags = flags or Document.FLAG_SUPPORTS_WRITE
+            val escapingLink = attrs.isSymbolicLink && GuestDocumentPaths.finalLinkLeavesContainer(rootfs, path)
+            if (writableParent && !isDir && writable && !escapingLink) flags = flags or Document.FLAG_SUPPORTS_WRITE
         }
         if (isDir && writable) flags = flags or Document.FLAG_DIR_SUPPORTS_CREATE
 
