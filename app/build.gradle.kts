@@ -199,9 +199,28 @@ for ((flavorName, appId) in flavorAppIds) {
         workingDir = rootProject.projectDir
         commandLine("bash", "scripts/package_host_assets.sh", appId)
 
-        val bootstrapTree = fileTree(rootProject.file("native/bootstrap/$appId"))
-        inputs.files(bootstrapTree)
+        // Exactly what package_host_assets.sh reads/writes. inputs.files (not
+        // inputs.file/dir) so a missing input reaches the doFirst fail-closed
+        // message instead of Gradle's generic validation error.
+        val bootstrapDir = rootProject.file("native/bootstrap/$appId")
+        val pulseLibDir = "root/data/data/$appId/files/usr/lib"
+        inputs.files(rootProject.file("scripts/package_host_assets.sh"))
+            .withPropertyName("script")
+        inputs.files(File(bootstrapDir, "bootstrap.tar"))
+            .withPropertyName("bootstrapTar")
+        inputs.files(fileTree(File(bootstrapDir, "jniLibs")))
+            .withPropertyName("jniLibs")
+        inputs.files(
+            listOf(
+                "libsoxr.so",
+                "libsoxr-lsr.so",
+                "libandroid-execinfo.so",
+                "libFLAC.so",
+                "libmp3lame.so",
+            ).map { File(bootstrapDir, "$pulseLibDir/$it") },
+        ).withPropertyName("pulseRuntimeSources")
         outputs.file(file("src/$flavorName/assets/bootstrap.tar"))
+        outputs.dir(file("src/$flavorName/assets/pulse-runtime"))
         outputs.dir(file("src/$flavorName/jniLibs"))
 
         doFirst {

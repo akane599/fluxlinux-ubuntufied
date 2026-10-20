@@ -256,7 +256,12 @@ def create_tarball(extract_dir: Path, target_prefix: str, tar_path: Path) -> Non
     print(f"[*] Tarball created: {size_mb:.2f} MB")
 
 
-def copy_to_jni_libs(extract_dir: Path, target_prefix: str, jni_dir: Path) -> None:
+def copy_to_jni_libs(
+    extract_dir: Path,
+    target_prefix: str,
+    jni_dir: Path,
+    mode: str = "full",
+) -> None:
     jni_dir.mkdir(parents=True, exist_ok=True)
     mapping = {
         "usr/bin/proot": "libproot.so",
@@ -267,8 +272,21 @@ def copy_to_jni_libs(extract_dir: Path, target_prefix: str, jni_dir: Path) -> No
         "usr/bin/pulseaudio": "libpulseaudio.so",
         "usr/bin/pactl": "libpactl.so",
     }
-    print(f"[*] Copying critical binaries to {jni_dir}...")
+    # terminal-proot mode has no pulseaudio stack; full mode needs all six.
+    optional = set() if mode == "full" else {"usr/bin/pulseaudio", "usr/bin/pactl"}
     base = extract_dir / target_prefix
+    missing = [
+        rel for rel in mapping if rel not in optional and not (base / rel).is_file()
+    ]
+    if missing:
+        raise SystemExit(f"error: jniLibs sources missing: {', '.join(missing)}")
+    # Drop .so files from an earlier run so a stale lib cannot pass the
+    # existence-only gates downstream (package_host_assets.sh, Gradle).
+    for old in sorted(jni_dir.glob("*.so")):
+        if old.is_file() or old.is_symlink():
+            print(f"  removing previous {old.name}")
+            old.unlink()
+    print(f"[*] Copying critical binaries to {jni_dir}...")
     for src_rel, dest_name in mapping.items():
         src = base / src_rel
         dest = jni_dir / dest_name
@@ -277,7 +295,7 @@ def copy_to_jni_libs(extract_dir: Path, target_prefix: str, jni_dir: Path) -> No
             shutil.copy2(src, dest)
             os.chmod(dest, 0o755)
         else:
-            print(f"  [WARN] missing {src_rel}")
+            print(f"  [SKIP] {src_rel} (not in {mode} mode)")
 
 
 def assert_no_wrong_prefix(extract_dir: Path, package_name: str) -> None:
@@ -401,7 +419,7 @@ def main() -> None:
         require_loader=(args.mode == "full" and not args.skip_loader_check),
         mode=args.mode,
     )
-    copy_to_jni_libs(extract_dir, target_prefix, jni_dir)
+    copy_to_jni_libs(extract_dir, target_prefix, jni_dir, mode=args.mode)
     create_tarball(extract_dir, target_prefix, out_tar)
     print("[*] Bootstrap assembly completed successfully!")
 
