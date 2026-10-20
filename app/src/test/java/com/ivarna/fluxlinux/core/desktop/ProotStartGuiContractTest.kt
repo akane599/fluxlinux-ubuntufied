@@ -86,6 +86,16 @@ class ProotStartGuiContractTest {
     }
 
     @Test
+    fun guest_homePermsRunOnceBehindMarker_withoutWorldWritable() {
+        assertFalse(start.contains("chmod -R 777"))
+        assertTrue(guest.contains("chmod -R u+rwX /home/flux/.config"))
+        val gate = guest.indexOf("!= \"\$(_perm_sig)\" ]")
+        assertTrue(gate > 0)
+        assertTrue(gate < guest.indexOf("chown -R \"\$_home_uid:\$_home_gid\" /home/flux"))
+        assertTrue(guest.contains("_perm_sig >\"\$_perm_mark\""))
+    }
+
+    @Test
     fun scripts_parseUnderBashAndSh() {
         val bash = File("/bin/bash")
         assumeTrue(bash.canExecute())

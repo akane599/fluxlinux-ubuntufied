@@ -261,19 +261,25 @@ else
     # → xfconfd "Unable to create configuration directory" → failsafe session.
     # Match /home ownership (app uid). Avoid nested single quotes (this block is
     # already inside proot-distro login ... -c '...' ).
+    # The recursive walk is slow under ptrace, so it runs only when the ownership
+    # signature changed since the last pass (first start, app reinstall = new uid).
     if [ -d /home/flux ]; then
       _home_uid=$(stat -c %u /home 2>/dev/null || true)
       _home_gid=$(stat -c %g /home 2>/dev/null || true)
-      if [ -n "$_home_uid" ]; then
+      _perm_mark=/etc/fluxlinux/home_perms
+      _perm_sig() { echo "v1 $(stat -c %u:%g /home /home/flux /home/flux/.config 2>/dev/null | tr "\n" " ")"; }
+      if [ -n "$_home_uid" ] && [ "$(cat "$_perm_mark" 2>/dev/null)" != "$(_perm_sig)" ]; then
         chown -R "$_home_uid:$_home_gid" /home/flux 2>/dev/null || true
         if [ "$_home_uid" = "0" ]; then
           chown -R flux:flux /home/flux 2>/dev/null || true
         fi
+        mkdir -p /home/flux/.config /home/flux/.cache /home/flux/.local/share
+        # Proot writes as the app uid, which owns these files: owner rwX is enough.
+        chmod -R u+rwX /home/flux/.config /home/flux/.cache /home/flux/.local 2>/dev/null || true
+        mkdir -p /etc/fluxlinux 2>/dev/null && _perm_sig >"$_perm_mark" 2>/dev/null || true
       fi
       mkdir -p /home/flux/.config /home/flux/.cache /home/flux/.local/share
       chmod 755 /home/flux 2>/dev/null || true
-      # Open perms: host uid vs guest flux uid mismatch is common under proot
-      chmod -R 777 /home/flux/.config /home/flux/.cache /home/flux/.local 2>/dev/null || true
     fi
     if [ -d /home/flux/.cache/runtime ]; then
       chmod 700 /home/flux/.cache/runtime 2>/dev/null || true
