@@ -25,6 +25,7 @@ class RootStageM14Test {
     fun tearDown() {
         SafeFiles.deleteTree(tmp)
         RootShell.seedAssetShaForTest(ChrootPaths.CHROOT_HELPER_ASSET, null)
+        RootShell.seedAssetShaForTest(BusyBoxPaths.RESOLVER_ASSET, null)
     }
 
     private fun sh(script: String): Int {
@@ -175,13 +176,46 @@ class RootStageM14Test {
     fun helperCmd_verifiesBeforeRun_andIsValidShell() {
         needsHostTools()
         val sha = "a".repeat(64)
+        val rsha = "b".repeat(64)
         RootShell.seedAssetShaForTest(ChrootPaths.CHROOT_HELPER_ASSET, sha)
+        RootShell.seedAssetShaForTest(BusyBoxPaths.RESOLVER_ASSET, rsha)
         val cmd = RootShell.buildChrootHelperCmd("flux", "ZWNobw==", ChrootPaths.CHROOT_PATH)
-        val check = cmd.indexOf("if ${RootShell.shaMatches(ChrootPaths.CHROOT_HELPER, sha)}; then sh")
-        assertTrue(check >= 0)
+        val run = cmd.indexOf("sh '${ChrootPaths.CHROOT_HELPER}' b64")
+        // Both the helper and its resolver sidecar are self-healed and verified before the run.
+        val healHelper = cmd.indexOf("staged_scripts/fluxlinux_chroot.sh")
+        val healResolver = cmd.indexOf("staged_scripts/resolve_bb.sh")
+        val guardHelper = cmd.lastIndexOf(RootShell.shaMatches(ChrootPaths.CHROOT_HELPER, sha))
+        val guardResolver = cmd.lastIndexOf(RootShell.shaMatches(BusyBoxPaths.RESOLVER_ON_DEVICE, rsha))
+        for (i in listOf(healHelper, healResolver, guardHelper, guardResolver)) {
+            assertTrue(i in 0 until run)
+        }
+        assertTrue(cmd.substring(guardResolver, run).contains("exit 127"))
         assertFalse(cmd.contains("/data/local/tmp/fluxlinux_chroot.sh"))
         val p = ProcessBuilder("/bin/sh", "-n", "-c", cmd).redirectErrorStream(true).start()
         val out = String(p.inputStream.readBytes())
         assertEquals(out, 0, p.waitFor())
+    }
+
+    @Test
+    fun helperCmd_unknownResolverHash_refusesToRun() {
+        RootShell.seedAssetShaForTest(ChrootPaths.CHROOT_HELPER_ASSET, "a".repeat(64))
+        RootShell.seedAssetShaForTest(BusyBoxPaths.RESOLVER_ASSET, null)
+        val cmd = RootShell.buildChrootHelperCmd("flux", "ZWNobw==", ChrootPaths.CHROOT_PATH)
+        assertTrue(cmd.contains("exit 127"))
+        assertFalse(cmd.contains("sh '${ChrootPaths.CHROOT_HELPER}'"))
+    }
+
+    @Test
+    fun stageVerified_refusesDestOutsideRootStage() {
+        val ctx = com.ivarna.fluxlinux.core.terminal.FakeContext(tmp, tmp.absolutePath)
+        assertFalse(RootShell.stageVerified(ctx, BusyBoxPaths.RESOLVER_ASSET, "/data/local/tmp/x.sh"))
+        assertFalse(RootShell.stageVerified(ctx, BusyBoxPaths.RESOLVER_ASSET, "${ChrootPaths.ROOT_STAGE_DIR}/sub/x.sh"))
+        assertFalse(RootShell.stageVerified(ctx, BusyBoxPaths.RESOLVER_ASSET, "${ChrootPaths.ROOT_STAGE_DIR}/x'y.sh"))
+    }
+
+    @Test
+    fun startGuiWrapper_resolverStageIsFatal() {
+        val s = asset("scripts/chroot/start_gui_chroot.sh")
+        assertTrue(s.contains("_stage '\$RESOLVER_SRC' '\$RESOLVER_STAGED' || {"))
     }
 }

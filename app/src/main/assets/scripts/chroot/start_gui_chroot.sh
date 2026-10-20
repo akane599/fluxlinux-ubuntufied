@@ -249,7 +249,7 @@ fi
     mv -f \"\$2.stage.\$\$\" \"\$2\" || { rm -f \"\$2.stage.\$\$\"; return 1; }; }; \
   _stage '$ROOT_GUI_SCRIPT' '$ROOT_GUI_STAGED' || { echo 'FluxLinux: [ERROR] cannot stage $ROOT_GUI_NAME' >&2; exit 1; }; \
   _stage '$HELPER_SRC' '$HELPER_STAGED'; \
-  _stage '$RESOLVER_SRC' '$RESOLVER_STAGED'; \
+  _stage '$RESOLVER_SRC' '$RESOLVER_STAGED' || { echo 'FluxLinux: [ERROR] cannot stage resolve_bb.sh' >&2; exit 1; }; \
   rm -f '/data/local/tmp/$ROOT_GUI_NAME' /data/local/tmp/fluxlinux_chroot.sh \
     /data/local/tmp/fluxlinux_resolve_bb.sh /data/local/tmp/flux_busybox 2>/dev/null; \
   DEBIANPATH='$CHROOT_PATH' CHROOT_ROOT='$CHROOT_PATH' FLUX_CHROOT='$CHROOT_PATH' \
