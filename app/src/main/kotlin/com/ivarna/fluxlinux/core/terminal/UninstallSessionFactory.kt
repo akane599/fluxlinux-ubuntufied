@@ -115,8 +115,9 @@ object UninstallSessionFactory {
     }
 
     /**
-     * Blocking (su probe, BusyBox resolve, asset hashing): background thread only.
-     * Null when the verified resolver could not be staged (fail closed, M14).
+     * Blocking (su probe, BusyBox resolve, staging): background thread only.
+     * Null when the script or its resolver sidecar could not be staged and verified in the
+     * root-only stage (fail closed, M14).
      */
     private fun chrootUninstallCommand(
         ctx: Context,
@@ -126,47 +127,45 @@ object UninstallSessionFactory {
     ): String? {
         val asset = profile?.chrootUninstallAsset
             ?: "scripts/chroot/uninstall_debian13_chroot.sh"
+        val scriptName = asset.substringAfterLast('/')
         // The script sources $(dirname "$0")/resolve_bb.sh: stage + verify it next to it.
         if (!RootShell.ensureBusyBoxResolver(ctx)) {
             android.util.Log.w("UninstallSession", "resolver stage/verify failed; not running $asset")
             return null
         }
-        val resolvedBb = RootShell.resolveBusyBox()
-        val bytes = ctx.assets.open(asset).use { it.readBytes() }
+        if (!RootShell.stageVerified(ctx, asset, "${ChrootPaths.ROOT_STAGE_DIR}/$scriptName")) {
+            android.util.Log.w("UninstallSession", "stage/verify failed; not running $asset")
+            return null
+        }
         return buildChrootUninstallCommand(
-            scriptName = asset.substringAfterLast('/'),
-            sha256 = RootShell.sha256Hex(bytes),
-            appStagedCopy = RootShell.stageAsset(ctx, asset),
-            scriptB64 = java.util.Base64.getEncoder().encodeToString(bytes),
-            resolvedBb = resolvedBb,
+            scriptName = scriptName,
+            scriptSha256 = assetSha(ctx, asset),
+            resolverSha256 = assetSha(ctx, BusyBoxPaths.RESOLVER_ASSET),
+            resolvedBb = RootShell.resolveBusyBox(),
             chrootPath = chrootPath,
             distroId = distro.id,
         )
     }
 
+    private fun assetSha(ctx: Context, asset: String): String =
+        RootShell.sha256Hex(ctx.assets.open(asset).use { it.readBytes() })
+
     /**
-     * Root command for the uninstall session (M14): install the script into the root-only
-     * [ChrootPaths.ROOT_STAGE_DIR] (from the app-private copy, else base64), verify its
-     * SHA-256 against the APK asset, and only then run it from there. Nothing is copied to
-     * or executed from shell-writable `/data/local/tmp`.
+     * Root command for the uninstall session (M14). The script and its resolver sidecar were
+     * staged by [RootShell.stageVerified] into the root-only [ChrootPaths.ROOT_STAGE_DIR];
+     * both are re-verified against the APK hashes right before `sh '<dest>'`, else exit 127.
+     * Nothing is copied to or executed from shell-writable `/data/local/tmp`.
      */
     internal fun buildChrootUninstallCommand(
         scriptName: String,
-        sha256: String,
-        appStagedCopy: String?,
-        scriptB64: String,
+        scriptSha256: String,
+        resolverSha256: String,
         resolvedBb: String?,
         chrootPath: String,
         distroId: String,
     ): String {
         val dest = "${ChrootPaths.ROOT_STAGE_DIR}/$scriptName"
         val resolver = BusyBoxPaths.RESOLVER_ON_DEVICE
-        val install = listOfNotNull(
-            appStagedCopy?.let {
-                RootShell.installSnippet(dest, sha256, srcWord = "'${it.replace("'", "'\\''")}'")
-            },
-            RootShell.installSnippet(dest, sha256, b64 = scriptB64),
-        ).joinToString(" 2>/dev/null || ")
         val chrootQ = chrootPath.replace("'", "'\\''")
         val bbExport = if (!resolvedBb.isNullOrEmpty() && !resolvedBb.startsWith("/data/local/tmp/")) {
             "FLUX_BB='$resolvedBb' "
@@ -174,11 +173,11 @@ object UninstallSessionFactory {
             ""
         }
         return "${RootShell.SHA_FN}; " +
-            "if ${RootShell.stageDirSnippet()} && { $install; } && " +
-            "${RootShell.shaMatches(dest, sha256)} && [ -f '$resolver' ] && [ ! -L '$resolver' ]; then " +
+            "if ${RootShell.shaMatches(dest, scriptSha256)} && " +
+            "${RootShell.shaMatches(resolver, resolverSha256)}; then " +
             "${bbExport}FLUX_RESOLVE_BB='$resolver' FLUX_CHROOT='$chrootQ' FLUX_DISTRO_ID='$distroId' " +
             "sh '$dest'; " +
-            "else echo '[FluxLinux] could not stage a verified $scriptName in " +
-            "${ChrootPaths.ROOT_STAGE_DIR}; uninstall not run' >&2; exit 127; fi"
+            "else echo '[FluxLinux] $scriptName or its resolver in " +
+            "${ChrootPaths.ROOT_STAGE_DIR} failed SHA-256 verification; uninstall not run' >&2; exit 127; fi"
     }
 }
