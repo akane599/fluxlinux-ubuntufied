@@ -120,12 +120,17 @@ static const char vertexShaderSrc[] =
 static const char fragmentShaderSrc[] = FRAGMENT_SHADER();
 static const char fragmentShaderBgraSrc[] = FRAGMENT_SHADER(".bgra");
 
+// The activity end's serialised socket writer (activity.cpp, declared in conn_io.h).
+bool lorieActivitySend(volatile int* fdPtr, const void* header, size_t headerLen, const void* payload, size_t payloadLen);
+
 // Notifies activity.cpp's end of the GUI<->X server socket immediately when a GPU copy batch
 // finishes, instead of it waiting for the next vblank-tick poll.
 void Renderer::notifyGpuCopyDone() {
     if (connFdPtr && *connFdPtr != -1) {
+        // Runs on the renderer thread: go through the activity's writer lock so this event can't
+        // split a header/payload pair being written from the GUI thread.
         lorieEvent e = { .type = EVENT_GPU_COPY_DONE };
-        write(*connFdPtr, &e, sizeof(e));
+        lorieActivitySend(connFdPtr, &e, sizeof(e), nullptr, 0);
     }
 }
 
