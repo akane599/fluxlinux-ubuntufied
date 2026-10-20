@@ -23,16 +23,56 @@ progress() { printf "\033[1;36m[+] %s\033[0m\n" "$1"; }
 success()  { printf "\033[1;32m[✓] %s\033[0m\n" "$1"; }
 error()    { printf "\033[1;31m[!] %s\033[0m\n" "$1"; }
 
+PROC_MOUNTS=/proc/mounts
+
+# True if $1 is a mount point (exact match in /proc/mounts).
+is_mounted() {
+    grep -q " $1 " "$PROC_MOUNTS" 2>/dev/null
+}
+
+# Mount points at or below $1, deepest first (exact path match, no regex).
+mounts_under() {
+    awk -v p="$1" '$2 == p || index($2, p "/") == 1 { print $2 }' \
+        "$PROC_MOUNTS" 2>/dev/null | sort -r
+}
+
+# L6: never stack a second layer on a target that is already mounted.
+bind_if_missing() {
+    mkdir -p "$2" 2>/dev/null || true
+    is_mounted "$2" && return 0
+    $BB mount --bind "$1" "$2" 2>/dev/null || /system/bin/mount --bind "$1" "$2"
+}
+
+mount_type_if_missing() {
+    # $1=type $2=dst [$3=opts]
+    mkdir -p "$2" 2>/dev/null || true
+    is_mounted "$2" && return 0
+    if [ -n "${3:-}" ]; then
+        $BB mount -t "$1" -o "$3" "$1" "$2" 2>/dev/null \
+            || /system/bin/mount -t "$1" -o "$3" "$1" "$2"
+    else
+        $BB mount -t "$1" "$1" "$2" 2>/dev/null || /system/bin/mount -t "$1" "$1" "$2"
+    fi
+}
+
+# Unmount everything under the rootfs, looping while anything is still mounted
+# (stacked layers need several passes). 0 only when nothing remains (L6).
 cleanup_mounts() {
     progress "Safety Check: Unmounting filesystems..."
-    $BB umount "$GUESTPATH/sdcard" 2>/dev/null || true
-    $BB umount "$GUESTPATH/mnt/host-tmp" 2>/dev/null || true
-    $BB umount "$GUESTPATH/dev/shm" 2>/dev/null || true
-    $BB umount "$GUESTPATH/dev/pts" 2>/dev/null || true
-    $BB umount "$GUESTPATH/proc" 2>/dev/null || true
-    $BB umount "$GUESTPATH/sys" 2>/dev/null || true
-    $BB umount "$GUESTPATH/dev" 2>/dev/null || true
-    $BB umount "$GUESTPATH/tmp" 2>/dev/null || true
+    _pass=0
+    while [ "$_pass" -lt 5 ]; do
+        _mnts=$(mounts_under "$GUESTPATH")
+        [ -z "$_mnts" ] && return 0
+        for _mnt in $_mnts; do
+            $BB umount "$_mnt" 2>/dev/null || $BB umount -l "$_mnt" 2>/dev/null || true
+        done
+        _pass=$((_pass + 1))
+    done
+    if [ -n "$(mounts_under "$GUESTPATH")" ]; then
+        error "Still mounted under $GUESTPATH:"
+        mounts_under "$GUESTPATH"
+        return 1
+    fi
     return 0
 }
 
@@ -85,18 +125,36 @@ download_file() {
     goodbye
 }
 
+# M2: .flux_extract_ok is written only after tar exits 0. A tree that has a
+# shell but no marker was interrupted mid-extraction and is re-extracted over.
+# .flux_configured (written after a past full extract) grandfathers old installs.
+EXTRACT_MARKER=".flux_extract_ok"
+
+mark_extracted() {
+    printf '%s\n' "${ROOTFS_SHA256:-unknown}" > "$1/$EXTRACT_MARKER" || goodbye
+}
+
 extract_file() {
     _dest="$1"
     _archive="${2:-}"
     progress "Extracting file from $_archive ..."
+    if [ -e "$_dest/$EXTRACT_MARKER" ] || [ -e "$_dest/.flux_configured" ]; then
+        printf "\033[1;33m[!] Rootfs already extracted: %s\033[0m\n" "$_dest"
+        return 0
+    fi
     if [ -L "$_dest/bin/sh" ] || [ -e "$_dest/bin/sh" ] || \
        [ -e "$_dest/usr/bin/sh" ] || [ -e "$_dest/usr/bin/apk" ] || \
        [ -x "$_dest/usr/bin/bash" ] || [ -x "$_dest/bin/bash" ]; then
-        printf "\033[1;33m[!] Rootfs appears populated: %s\033[0m\n" "$_dest"
-        return 0
+        printf "\033[1;33m[!] Rootfs is incomplete (no %s) — re-extracting: %s\033[0m\n" \
+            "$EXTRACT_MARKER" "$_dest"
     fi
     if [ ! -f "$_archive" ] || [ ! -s "$_archive" ]; then
         error "Rootfs archive missing: $_archive"
+        goodbye
+    fi
+    # Never let tar write through a leftover bind (/dev, /sdcard) into the host.
+    if ! cleanup_mounts; then
+        error "Refusing to extract while filesystems are mounted under $_dest"
         goodbye
     fi
     mkdir -p "$_dest"
@@ -106,18 +164,21 @@ extract_file() {
     case "$_archive" in
         *.tar.xz|*.txz)
             if $_tar tar xJf "$_archive" -C "$_dest"; then
+                mark_extracted "$_dest"
                 success "Rootfs extracted successfully (xz)."
                 return 0
             fi
             ;;
         *.tar.gz|*.tgz)
             if $_tar tar xzf "$_archive" -C "$_dest"; then
+                mark_extracted "$_dest"
                 success "Rootfs extracted successfully (gzip)."
                 return 0
             fi
             ;;
     esac
     if $_tar tar xf "$_archive" -C "$_dest"; then
+        mark_extracted "$_dest"
         success "Rootfs extracted successfully."
         return 0
     fi
@@ -134,7 +195,7 @@ ensure_chroot_tmp() {
     chmod 1777 "$GUESTPATH/tmp" 2>/dev/null || true
     chmod 1777 "$GUESTPATH/var/tmp" 2>/dev/null || true
     chmod 1777 "$HOST_TMP" 2>/dev/null || true
-    $BB mount --bind "$HOST_TMP" "$GUESTPATH/mnt/host-tmp" 2>/dev/null || true
+    bind_if_missing "$HOST_TMP" "$GUESTPATH/mnt/host-tmp" 2>/dev/null || true
 }
 
 guest_sh() {
@@ -153,18 +214,15 @@ configure_guest_chroot() {
         || $BB mount -o remount,dev,suid /data 2>/dev/null \
         || $BB mount -o remount,dev,suid / 2>/dev/null || true
 
-    $BB mount --bind /dev "$GUESTPATH/dev" || /system/bin/mount --bind /dev "$GUESTPATH/dev" || goodbye
-    $BB mount --bind /sys "$GUESTPATH/sys" || /system/bin/mount --bind /sys "$GUESTPATH/sys" || goodbye
-    $BB mount -t proc proc "$GUESTPATH/proc" || /system/bin/mount -t proc proc "$GUESTPATH/proc" || goodbye
-    $BB mount -t devpts devpts "$GUESTPATH/dev/pts" || /system/bin/mount -t devpts devpts "$GUESTPATH/dev/pts" || goodbye
-
-    mkdir -p "$GUESTPATH/dev/shm"
-    $BB mount -t tmpfs -o size=512M,mode=1777 tmpfs "$GUESTPATH/dev/shm" || /system/bin/mount -t tmpfs -o size=512M,mode=1777 tmpfs "$GUESTPATH/dev/shm" || goodbye
+    bind_if_missing /dev "$GUESTPATH/dev" || goodbye
+    bind_if_missing /sys "$GUESTPATH/sys" || goodbye
+    mount_type_if_missing proc "$GUESTPATH/proc" || goodbye
+    mount_type_if_missing devpts "$GUESTPATH/dev/pts" || goodbye
+    mount_type_if_missing tmpfs "$GUESTPATH/dev/shm" "size=512M,mode=1777" || goodbye
 
     ensure_chroot_tmp
 
-    mkdir -p "$GUESTPATH/sdcard"
-    $BB mount --bind /sdcard "$GUESTPATH/sdcard" || /system/bin/mount --bind /sdcard "$GUESTPATH/sdcard" || goodbye
+    bind_if_missing /sdcard "$GUESTPATH/sdcard" || goodbye
 
     progress "Configuring Network and Android groups..."
     guest_sh '
@@ -205,6 +263,8 @@ configure_guest_chroot() {
     " || goodbye
 
     touch "$GUESTPATH/.flux_configured"
+    # A failed earlier uninstall may have left this; the tree is valid again.
+    rm -f "$GUESTPATH/.flux_uninstalling" 2>/dev/null || true
     success "$DISTRO_LABEL environment configured (rootfs + user; XFCE via family phase)!"
 
     HELPER="/data/local/tmp/fluxlinux_chroot.sh"
@@ -350,4 +410,5 @@ fi
     exit 0
 }
 
-main "$@"
+# Tests source this file with FLUX_SETUP_LIB=1 to exercise single functions.
+[ "${FLUX_SETUP_LIB:-0}" = "1" ] || main "$@"
