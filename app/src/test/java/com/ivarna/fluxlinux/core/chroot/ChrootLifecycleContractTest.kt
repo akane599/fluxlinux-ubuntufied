@@ -1,5 +1,6 @@
 package com.ivarna.fluxlinux.core.chroot
 
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -21,6 +22,19 @@ class ChrootLifecycleContractTest {
     private fun chrootScript(name: String) =
         repoFile("src/main/assets/scripts/chroot/$name").readText()
 
+    /** Every regular `*.sh` under assets/scripts, keyed by its path relative to that dir. */
+    private fun allAssetScripts(): Map<String, String> {
+        val root = repoFile("src/main/assets/scripts")
+        val out = sortedMapOf<String, String>()
+        SafeFiles.walkNoFollow(root) { f, attrs ->
+            if (attrs.isRegularFile && f.name.endsWith(".sh")) {
+                out[f.relativeTo(root).path] = f.readText()
+            }
+        }
+        assertTrue("asset script sweep found too few files", out.size > 50)
+        return out
+    }
+
     @Test
     fun ensureMounts_refusesUninstallingOrUnconfiguredTreeBeforeAnyMount() {
         val src = chrootScript("fluxlinux_chroot.sh")
@@ -41,6 +55,15 @@ class ChrootLifecycleContractTest {
             val src = chrootScript(name)
             assertFalse("$name must not call setenforce", src.contains("setenforce "))
         }
+    }
+
+    @Test
+    fun noAssetScript_switchesSelinuxToPermissive() {
+        // M13: a chroot guest shares the device kernel, so setenforce anywhere (host start
+        // script, guest family setup, legacy generated launcher) drops all of Android's MAC.
+        val call = Regex("""\bsetenforce\s+(0|[Pp]ermissive)\b""")
+        val offenders = allAssetScripts().filterValues { call.containsMatchIn(it) }.keys
+        assertTrue("setenforce 0 in: $offenders", offenders.isEmpty())
     }
 
     @Test
