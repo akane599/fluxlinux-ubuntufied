@@ -11,8 +11,16 @@ kill -9 $(pgrep -f "termux.x11") 2>/dev/null
 pkill -f "virgl_test_server" 2>/dev/null
 sleep 1
 
-# Enable PulseAudio over Network
-pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
+# PulseAudio on a unix socket in Termux tmp (proot --shared-tmp sees it as
+# /tmp/pulse-native). No TCP: anonymous 127.0.0.1:4713 is open to every app.
+_pulse_sock="${TMPDIR:-$PREFIX/tmp}/pulse-native"
+unset PULSE_SERVER
+pulseaudio --start --load="module-native-protocol-unix socket=$_pulse_sock auth-anonymous=1" --exit-idle-time=-1
+# Already running (e.g. an older TCP start): drop TCP, add the socket.
+for _m in $(pactl list short modules 2>/dev/null | awk '$2 == "module-native-protocol-tcp" {print $1}'); do
+    pactl unload-module "$_m" 2>/dev/null
+done
+[ -S "$_pulse_sock" ] || pactl load-module module-native-protocol-unix socket="$_pulse_sock" auth-anonymous=1 >/dev/null 2>&1
 
 # Start VirGL server (required for GPU acceleration inside PRoot)
 echo "FluxLinux: Starting VirGL server..."
@@ -40,17 +48,17 @@ sleep 1
 
 # Login in PRoot Environment
 if [ "$DISTRO" == "termux" ]; then
-    export PULSE_SERVER=127.0.0.1
+    export PULSE_SERVER="unix:$_pulse_sock"
     env DISPLAY=:0 startxfce4
 else
     proot-distro login $DISTRO --shared-tmp -- /bin/bash -c '
       export DISPLAY=:0
-      export PULSE_SERVER=tcp:127.0.0.1
+      export PULSE_SERVER=unix:/tmp/pulse-native
       export XDG_RUNTIME_DIR=/tmp
       export VTEST_SOCKET_NAME=/tmp/.virgl_test
       su - flux -c "
         export DISPLAY=:0
-        export PULSE_SERVER=tcp:127.0.0.1
+        export PULSE_SERVER=unix:/tmp/pulse-native
         export XDG_RUNTIME_DIR=/tmp
         export VTEST_SOCKET_NAME=/tmp/.virgl_test
         # Disable compositor to fix black screen with Turnip GPU driver

@@ -330,9 +330,10 @@ $TERMUX_PREFIX/bin/termux-x11 :0 -ac &
 
 sleep 3
 
-# Start Audio
-$TERMUX_PREFIX/bin/pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
-$TERMUX_PREFIX/bin/pacmd load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1
+# Start Audio: unix socket in the tmp bound at chroot /tmp. No TCP: anonymous
+# 127.0.0.1:4713 is open to every app on the device.
+$TERMUX_PREFIX/bin/pulseaudio --start --load="module-native-protocol-unix socket=$TERMUX_PREFIX/tmp/pulse-native auth-anonymous=1" --exit-idle-time=-1
+$TERMUX_PREFIX/bin/pacmd load-module module-native-protocol-unix socket=$TERMUX_PREFIX/tmp/pulse-native auth-anonymous=1 2>/dev/null
 
 # Start VirGL (3D Acceleration)
 echo "Starting 3D Acceleration (VirGL)..."
@@ -343,7 +344,7 @@ sleep 2
 echo "Starting KDE Plasma..."
 $BB chroot /data/local/tmp/chrootArch /bin/su - flux -c '
     export DISPLAY=:0 
-    export PULSE_SERVER=tcp:127.0.0.1
+    export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native"
     export GALLIUM_DRIVER=virpipe 
     export MESA_GL_VERSION_OVERRIDE=4.0
     

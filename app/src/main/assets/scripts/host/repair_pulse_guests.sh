@@ -2,6 +2,9 @@
 # repair_pulse_guests.sh — run setup_pulse_guest.sh inside installed guests.
 # Host Pulse stays in the app PREFIX. This only writes guest client config
 # and installs named Pulse *client* packages when pactl is missing.
+# Host Pulse serves only a unix socket in its tmp ($PREFIX/tmp/pulse-native):
+# proot guests reach it at /tmp/pulse-native (--shared-tmp), chroot guests at
+# /mnt/host-tmp/pulse-native (fluxlinux_chroot.sh bind). Never TCP 4713.
 
 PKG="${TERMUX_APP__PACKAGE_NAME:-com.ivarna.fluxlinux}"
 _HOST_ENV="${TERMUX__PREFIX:-/data/data/${PKG}/files/usr}/etc/fluxlinux-host.env"
@@ -54,7 +57,7 @@ repair_proot() {
         env -i HOME=/root USER=root LOGNAME=root \
           TERM="${TERM:-xterm-256color}" LANG=C \
           TMPDIR=/tmp XDG_RUNTIME_DIR=/tmp PATH="$_gp" \
-          PULSE_SERVER=tcp:127.0.0.1 \
+          PULSE_SERVER=unix:/tmp/pulse-native \
           /bin/sh /tmp/setup_pulse_guest.sh \
         || echo "FluxLinux: [AUDIO] WARN repair failed proot $_name"
     done
@@ -76,21 +79,81 @@ _CHROOT_PATHS="
 /data/local/tmp/chrootArch
 "
 
+# --- chroot client-config migration (runs as root on the host) ---
+# Older chroot guests were configured for tcp:127.0.0.1, which host Pulse no
+# longer serves (KDE xstartup: bare 127.0.0.1). Rewrite only those exact
+# FluxLinux-written lines to the server list the guest writer uses
+# (flux_guest_common.sh FLUX_PULSE_SERVERS); a chroot reaches the host socket
+# through its second entry, /mnt/host-tmp/pulse-native. Root on the host must
+# never follow a guest-planted link, so every path component under the rootfs
+# has to be a real directory / regular file. Idempotent.
+CHROOT_PULSE_SERVERS="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native"
+# 0 when no component of <rootfs>/<rel> (after <rootfs>) is a symlink.
+chroot_path_no_links() {
+  _cr=$1
+  _rest=$2
+  _cur=$_cr
+  while [ -n "$_rest" ]; do
+    case "$_rest" in
+      */*) _seg=${_rest%%/*}; _rest=${_rest#*/} ;;
+      *) _seg=$_rest; _rest="" ;;
+    esac
+    [ -n "$_seg" ] || continue
+    _cur="$_cur/$_seg"
+    [ -L "$_cur" ] && return 1
+  done
+  return 0
+}
+migrate_chroot_file() {
+  _cr=$1
+  _f="$_cr/$2"
+  chroot_path_no_links "$_cr" "$2" || return 0
+  [ -f "$_f" ] || return 0
+  grep -q '127\.0\.0\.1' "$_f" 2>/dev/null || return 0
+  rm -f "$_f.flux-tmp"
+  sed -e "s#^export PULSE_SERVER=tcp:127\.0\.0\.1\$#export PULSE_SERVER=\"$CHROOT_PULSE_SERVERS\"#" \
+      -e "s#^export PULSE_SERVER=127\.0\.0\.1\$#export PULSE_SERVER=\"$CHROOT_PULSE_SERVERS\"#" \
+      -e "s#^PULSE_SERVER=tcp:127\.0\.0\.1\$#PULSE_SERVER=\"$CHROOT_PULSE_SERVERS\"#" \
+      -e "s#^default-server = tcp:127\.0\.0\.1\$#default-server = $CHROOT_PULSE_SERVERS#" \
+      "$_f" > "$_f.flux-tmp" 2>/dev/null \
+    && cat "$_f.flux-tmp" > "$_f" \
+    && echo "FluxLinux: [AUDIO] migrated chroot $2 to unix socket"
+  rm -f "$_f.flux-tmp"
+}
+migrate_chroot_guest() {
+  for _rel in etc/profile.d/flux-pulse.sh etc/environment \
+              etc/pulse/client.conf etc/pulse/client.conf.d/99-fluxlinux.conf \
+              home/flux/.vnc/xstartup; do
+    migrate_chroot_file "$1" "$_rel"
+  done
+}
+# --- end chroot client-config migration ---
+
 repair_chroot_as_root() {
   _helper=/data/local/tmp/fluxlinux_chroot.sh
-  if [ ! -f "$_helper" ]; then
-    echo "FluxLinux: [AUDIO] skip chroot repair (helper missing)"
-    return 0
-  fi
   for _path in $_CHROOT_PATHS; do
     [ -d "$_path/etc" ] || continue
+    [ -L "$_path" ] && continue
+    # Host-side first: works even when the helper or the guest shell fails.
+    migrate_chroot_guest "$_path"
+    if [ ! -f "$_helper" ]; then
+      echo "FluxLinux: [AUDIO] skip chroot client install (helper missing) $_path"
+      continue
+    fi
+    # Staging dir must be the guest's own /tmp, never a link out of the rootfs.
+    chroot_path_no_links "$_path" tmp || {
+      echo "FluxLinux: [AUDIO] WARN skip chroot $_path (/tmp is a link)"
+      continue
+    }
     mkdir -p "$_path/tmp" 2>/dev/null || true
+    rm -f "$_path/tmp/flux_guest_common.sh" "$_path/tmp/setup_pulse_guest.sh"
     cp -f "$COMMON" "$_path/tmp/flux_guest_common.sh"
     cp -f "$REPAIR" "$_path/tmp/setup_pulse_guest.sh"
     chmod 755 "$_path/tmp/setup_pulse_guest.sh" 2>/dev/null || true
     echo "FluxLinux: [AUDIO] repair chroot $_path"
     FLUX_CHROOT="$_path" FLUX_PACKAGE="$PKG" \
-      /system/bin/sh "$_helper" sh --user root -- '/bin/sh /tmp/setup_pulse_guest.sh' \
+      /system/bin/sh "$_helper" sh --user root -- \
+        'PULSE_SERVER=unix:/mnt/host-tmp/pulse-native /bin/sh /tmp/setup_pulse_guest.sh' \
       || echo "FluxLinux: [AUDIO] WARN repair failed chroot $_path"
   done
 }

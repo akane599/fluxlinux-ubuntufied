@@ -129,7 +129,7 @@ echo "[6/7] Setting up KDE session launcher..."
 mkdir -p /home/flux/.vnc
 cat > /home/flux/.vnc/xstartup << 'VNCEOF'
 #!/bin/bash
-export PULSE_SERVER=127.0.0.1
+export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native"
 export DBUS_SESSION_BUS_ADDRESS=$(dbus-launch --print-address)
 xrdb $HOME/.Xresources 2>/dev/null
 exec startplasma-x11
