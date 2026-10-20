@@ -219,13 +219,17 @@ object RootShell {
         }
     }
 
+    /** Default bound for [executeSync]: staging / probe commands finish in well under this. */
+    const val SYNC_TIMEOUT_MS = 30_000L
+
     /**
      * Execute a shell command as root synchronously (blocking).
-     * Must be called from a background thread. Returns the exit code.
+     * Must be called from a background thread. Returns the exit code
+     * (-1 no su / exception, -2 when [timeoutMs] expired and the process was killed).
      */
-    fun executeSync(cmd: String): Int {
+    fun executeSync(cmd: String, timeoutMs: Long = SYNC_TIMEOUT_MS): Int {
         val inv = resolveSuInvocation() ?: return -1
-        return runCommand(buildSuArgs(inv, cmd)) {}
+        return runCommand(buildSuArgs(inv, cmd), onLine = null, timeoutMs = timeoutMs)
     }
 
     /**
@@ -644,32 +648,59 @@ object RootShell {
         }
     }
 
-    /** Streams stdout+stderr from a ProcessBuilder command, returns exit code. */
+    /**
+     * Streams stdout+stderr from a ProcessBuilder command, returns exit code.
+     * [onLine] (main thread) may be null for silent sync calls. [timeoutMs] > 0 bounds the
+     * wait: on expiry the process is destroyed and -2 is returned (M15).
+     */
     private fun runCommand(
         args: List<String>,
-        onLine: (String) -> Unit
+        onLine: ((String) -> Unit)?,
+        timeoutMs: Long = 0L,
     ): Int {
-        Log.d(TAG, "runCommand: ${args.joinToString(" ")}")
+        Log.d(TAG, "runCommand: ${args.joinToString(" ").take(200)}")
         return try {
             val pb = ProcessBuilder(args)
                 .redirectErrorStream(true)
                 .start()
             try { pb.outputStream.close() } catch (_: Exception) {}
 
-            val reader = BufferedReader(InputStreamReader(pb.inputStream))
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                val l = line ?: continue
-                Log.d(TAG, l)
-                mainHandler.post { onLine(l) }
+            val reader = Thread {
+                try {
+                    BufferedReader(InputStreamReader(pb.inputStream)).use { r ->
+                        var line: String?
+                        while (r.readLine().also { line = it } != null) {
+                            val l = line ?: continue
+                            Log.d(TAG, l)
+                            if (onLine != null) mainHandler.post { onLine(l) }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }.apply {
+                isDaemon = true
+                start()
             }
-            reader.close()
-            val code = pb.waitFor()
+            val finished = if (timeoutMs > 0L) {
+                pb.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
+            } else {
+                pb.waitFor()
+                true
+            }
+            if (!finished) {
+                pb.destroyForcibly()
+                reader.join(500)
+                Log.w(TAG, "runCommand timeout after ${timeoutMs}ms")
+                return -2
+            }
+            // Grandchildren may keep the pipe open; bound the drain.
+            reader.join(5_000)
+            val code = pb.exitValue()
             Log.d(TAG, "runCommand exit=$code")
             code
         } catch (e: Exception) {
             Log.e(TAG, "runCommand exception: ${e.message}")
-            mainHandler.post { onLine("[RootShell] Exception: ${e.message}") }
+            if (onLine != null) mainHandler.post { onLine("[RootShell] Exception: ${e.message}") }
             -1
         }
     }
