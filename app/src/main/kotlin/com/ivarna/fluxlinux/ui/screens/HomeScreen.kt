@@ -243,13 +243,16 @@ fun HomeScreen(
     }
 
     fun repairHost() {
-        if (repairing) return
+        // BootstrapInstaller.busy is process-wide (the local flag resets on recreation).
+        if (repairing || BootstrapInstaller.busy.value) return
         repairing = true
         toast(context.getString(R.string.home_repair_running))
         val app = context.applicationContext
         FluxTerminalSessionManager.closeAll(app)
         val extract = {
-            Thread {
+            // Same single-thread executor as terminal/desktop host preparation, and the
+            // extract lock inside ensureExtracted, so repair never races them (M1).
+            TerminalLauncher.executor.execute {
                 // Containers under usr/var/lib/proot-distro are moved aside and restored.
                 val ok = runCatching { BootstrapInstaller.ensureExtracted(app, force = true) }
                     .getOrDefault(false)
@@ -262,7 +265,7 @@ fun HomeScreen(
                         Toast.LENGTH_LONG
                     ).show()
                 }
-            }.start()
+            }
         }
         if (session != null || DesktopLauncher.isSessionActive()) stopDesktop { extract() } else extract()
     }

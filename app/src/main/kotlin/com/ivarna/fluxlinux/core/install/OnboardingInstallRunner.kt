@@ -30,8 +30,9 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * Cancel: generation token + destroy active process; never mutates StateManager after cancel.
  * Overlapping [start] cancels the previous run first.
+ * Owned process-wide by [InstallController] (H2) — never by a composable.
  */
-class OnboardingInstallRunner(private val ctx: Context) {
+class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
 
     data class Progress(
         val phaseId: String,
@@ -59,11 +60,13 @@ class OnboardingInstallRunner(private val ctx: Context) {
     /** Last overall percent from real phase updates (log lines must not thrash). */
     @Volatile private var lastOverallPercent: Int = 0
 
-    fun cancel() {
+    override fun cancel() {
         cancelled.set(true)
+        // Kills the job's whole process group (ShellCommandRunner / GroupKillingProcess).
         activeProcess.getAndSet(null)?.destroyForcibly()
-        // Drop keep-alive when user aborts (also safe if FGS was never started)
-        BaseInstallService.stop(appCtx)
+        // Keep the FGS until the job's finally has run (it stops it); only drop it
+        // here when nothing is running (also safe if the FGS was never started).
+        if (!busy.get()) BaseInstallService.stop(appCtx)
     }
 
     fun isBusy(): Boolean = busy.get()
@@ -75,13 +78,19 @@ class OnboardingInstallRunner(private val ctx: Context) {
      * Starts [BaseInstallService] FGS immediately so the system does not kill the
      * process during long rootfs / package work.
      */
-    fun start(
+    override fun start(
         distroId: String,
-        theme: String = "dark",
+        theme: String,
         onProgress: (Progress) -> Unit
     ) {
         // Invalidate any in-flight job before resetting cancel flag
         val gen = generation.incrementAndGet()
+        // Every callback of this run is dropped once a newer run starts, so a stale
+        // job's "Install cancelled" can never overwrite (or Retry-cancel) the new run.
+        val guarded = guardGeneration(generation, gen) { p: Progress ->
+            onProgress(p)
+            updateInstallNotification(p)
+        }
         cancelled.set(true)
         activeProcess.getAndSet(null)?.destroyForcibly()
         cancelled.set(false)
@@ -93,7 +102,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
         if (profile == null) {
             busy.set(false)
             main.post {
-                onProgress(
+                guarded(
                     Progress(
                         phaseId = "ERR",
                         phaseLabel = "Failed",
@@ -128,20 +137,20 @@ class OnboardingInstallRunner(private val ctx: Context) {
         executor.execute {
             try {
                 if (isStale(gen)) {
-                    postCancelled(onProgress, phases)
+                    postCancelled(guarded, phases)
                     return@execute
                 }
                 if (method == "chroot") {
-                    runChroot(distroId, theme, phases, onProgress, gen)
+                    runChroot(distroId, theme, phases, guarded, gen)
                 } else {
-                    runProot(distroId, theme, phases, onProgress, gen)
+                    runProot(distroId, theme, phases, guarded, gen)
                 }
             } catch (e: Exception) {
                 if (!isStale(gen)) {
                     Log.e(TAG, "install failed", e)
-                    postFail(onProgress, phases, e.message ?: "Unknown error")
+                    postFail(guarded, phases, e.message ?: "Unknown error")
                 } else {
-                    postCancelled(onProgress, phases)
+                    postCancelled(guarded, phases)
                 }
             } finally {
                 if (generation.get() == gen) {
@@ -332,6 +341,9 @@ class OnboardingInstallRunner(private val ctx: Context) {
         if (customOk) {
             StateManager.setComponentInstalled(appCtx, distroId, "customization", true)
         }
+        // Persist here, not from Done-page buttons: Back, rotation or process death
+        // after a successful install must not re-run onboarding (M4).
+        StateManager.setOnboardingComplete(appCtx, true)
         StateManager.triggerRefresh()
         postSuccess(onProgress, phases)
     }
@@ -469,7 +481,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
         if (abortIfCancelled(gen, phases, onProgress)) return
         val familyPayload = BaseDesktopInstallPlan.familySetupPayload(appCtx, theme, distroId)
         val familyExit = runChrootGuestBlocking(
-            familyPayload, user = "root", phases, xfceIdx, onProgress, chrootPath
+            familyPayload, user = "root", phases, xfceIdx, onProgress, gen, chrootPath
         )
         if (abortIfCancelled(gen, phases, onProgress)) return
         if (familyExit != 0) {
@@ -502,7 +514,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
         }
         val customPayload = BaseDesktopInstallPlan.customizationPayload(appCtx, theme, distroId)
         val customExit = runChrootGuestBlocking(
-            customPayload, user = "root", phases, customIdx, onProgress, chrootPath
+            customPayload, user = "root", phases, customIdx, onProgress, gen, chrootPath
         )
         if (abortIfCancelled(gen, phases, onProgress)) return
         if (customExit != 0) {
@@ -525,6 +537,9 @@ class OnboardingInstallRunner(private val ctx: Context) {
         if (customExit == 0) {
             StateManager.setComponentInstalled(appCtx, distroId, "customization", true)
         }
+        // Persist here, not from Done-page buttons: Back, rotation or process death
+        // after a successful install must not re-run onboarding (M4).
+        StateManager.setOnboardingComplete(appCtx, true)
         StateManager.triggerRefresh()
         postSuccess(onProgress, phases)
     }
@@ -559,7 +574,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
                 val payload = BaseDesktopInstallPlan.hwAccelPayload(
                     appCtx, profile.distroId, gpu.mode, gpu.vendorHint, driverEnv
                 )
-                runChrootGuestBlocking(payload, user = "root", phases, phaseIndex, onProgress, path) == 0
+                runChrootGuestBlocking(payload, user = "root", phases, phaseIndex, onProgress, gen, path) == 0
             } else {
                 stageFluxGpuCommon()
                 runProotGuestScript(
@@ -662,6 +677,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
         phases: List<BaseDesktopInstallPlan.Phase>,
         phaseIndex: Int,
         onProgress: (Progress) -> Unit,
+        gen: Int,
         chrootPath: String = com.ivarna.fluxlinux.core.root.ChrootPaths.CHROOT_PATH
     ): Int {
         // captureInChroot already base64-wraps once via fluxlinux_chroot b64.
@@ -675,7 +691,8 @@ class OnboardingInstallRunner(private val ctx: Context) {
             chrootPath = chrootPath,
             timeoutMs = 0L,
             onLine = { line ->
-                if (line.isNotBlank()) log(phases, phaseIndex, onProgress, line)
+                // A cancelled/retried run's root job must not leak lines into the new run.
+                if (!isStale(gen) && line.isNotBlank()) log(phases, phaseIndex, onProgress, line)
             },
             processHolder = activeProcess
         )
@@ -839,11 +856,9 @@ class OnboardingInstallRunner(private val ctx: Context) {
         return ((done * 100) / total).coerceIn(0, 100)
     }
 
+    /** [onProgress] is the generation-guarded sink built in [start]; it also updates the FGS. */
     private fun post(onProgress: (Progress) -> Unit, progress: Progress) {
-        main.post {
-            onProgress(progress)
-            updateInstallNotification(progress)
-        }
+        main.post { onProgress(progress) }
     }
 
     private fun updateInstallNotification(progress: Progress) {
@@ -885,5 +900,15 @@ class OnboardingInstallRunner(private val ctx: Context) {
 
     companion object {
         private const val TAG = "OnboardingInstall"
+
+        /**
+         * Wraps [sink] so it only fires while [gen] is still the current [generation].
+         * Checked at delivery time (main thread), after any newer [start] bumped it.
+         */
+        internal fun <T> guardGeneration(
+            generation: AtomicInteger,
+            gen: Int,
+            sink: (T) -> Unit,
+        ): (T) -> Unit = { value -> if (generation.get() == gen) sink(value) }
     }
 }

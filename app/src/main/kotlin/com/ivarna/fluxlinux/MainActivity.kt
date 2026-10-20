@@ -663,14 +663,15 @@ class MainActivity : ComponentActivity() {
                     permission = "com.termux.permission.RUN_COMMAND"
                 )
 
-                // Navigation state
-                var currentScreen by remember { 
-                    mutableStateOf(if (onboardingComplete) Screen.HOME else Screen.ONBOARDING) 
+                // Navigation state. Saveable (H2): rotation / uiMode / split-screen must not
+                // drop the user back to Welcome or Home in the middle of an install.
+                var currentScreen by rememberSaveable {
+                    mutableStateOf(if (onboardingComplete) Screen.HOME else Screen.ONBOARDING)
                 }
                 currentScreenRef = remember { kotlinx.coroutines.flow.MutableStateFlow(currentScreen) }
                 LaunchedEffect(currentScreen) { currentScreenRef?.value = currentScreen }
                 
-                var currentTab by remember { mutableStateOf(BottomTab.HOME) }
+                var currentTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
                 currentTabRef = remember { kotlinx.coroutines.flow.MutableStateFlow(currentTab) }
                 LaunchedEffect(currentTab) { currentTabRef?.value = currentTab }
                 // FGS / external intent may flip tab via currentTabRef
@@ -766,9 +767,18 @@ class MainActivity : ComponentActivity() {
                 }
                 
                 // Selected Distro for Wizard/Settings
-                var selectedDistro by remember { mutableStateOf<com.ivarna.fluxlinux.core.data.Distro?>(null) }
+                // Saved by id so a restored INSTALL_WIZARD / DISTRO_SETTINGS still has its distro.
+                var selectedDistro by rememberSaveable(
+                    stateSaver = androidx.compose.runtime.saveable.Saver<com.ivarna.fluxlinux.core.data.Distro?, String>(
+                        save = { it?.id },
+                        restore = { id ->
+                            com.ivarna.fluxlinux.core.data.DistroRepository.supportedDistros
+                                .firstOrNull { it.id == id }
+                        },
+                    ),
+                ) { mutableStateOf<com.ivarna.fluxlinux.core.data.Distro?>(null) }
                 // Selected target id for Chroot/PRoot storage detail
-                var storageTargetId by remember { mutableStateOf<String?>(null) }
+                var storageTargetId by rememberSaveable { mutableStateOf<String?>(null) }
                 
                 // Refresh key to force UI update on resume
                 // Collected from StateManager for remote triggers too
