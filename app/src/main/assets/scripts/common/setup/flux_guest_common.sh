@@ -256,10 +256,11 @@ _flux_fix_pm_writable() {
 }
 
 _flux_disable_guest_selinux() {
+    # Only the guest's own config file. Never setenforce (M13): in a chroot the guest
+    # shares the device kernel, so it would switch all of Android to permissive.
     if [ -f /etc/selinux/config ]; then
         sed -i 's/^SELINUX=.*/SELINUX=disabled/' /etc/selinux/config 2>/dev/null || true
     fi
-    setenforce 0 2>/dev/null || true
 }
 
 _flux_require_startxfce4() {

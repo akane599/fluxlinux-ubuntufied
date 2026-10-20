@@ -37,6 +37,35 @@ class ChrootDetectionTest {
     }
 
     @Test
+    fun shellWithoutMarker_isNotInstalled() {
+        // M2: an interrupted extraction already has a shell.
+        val dir = tmp.newFolder("partial")
+        File(dir, "bin").mkdirs()
+        File(dir, "bin/sh").writeText("#!")
+        val snap = ChrootDetection.probe(forceRoot = false, path = dir.absolutePath)
+        assertFalse(snap.installed)
+        assertTrue(snap.dirExists)
+    }
+
+    @Test
+    fun extractMarker_isInstalled() {
+        val dir = tmp.newFolder("extracted")
+        File(dir, "bin").mkdirs()
+        File(dir, "bin/sh").writeText("#!")
+        File(dir, ChrootDetection.EXTRACT_MARKER).writeText("sha")
+        assertTrue(ChrootDetection.probe(forceRoot = false, path = dir.absolutePath).installed)
+        assertTrue(ChrootDetection.isInstalled(dir.absolutePath))
+    }
+
+    @Test
+    fun legacyConfiguredOrDesktop_isInstalled() {
+        val dir = tmp.newFolder("legacy-desktop")
+        File(dir, "usr/bin").mkdirs()
+        File(dir, "usr/bin/startxfce4").writeText("#!")
+        assertTrue(ChrootDetection.probe(forceRoot = false, path = dir.absolutePath).installed)
+    }
+
+    @Test
     fun staleCache_trueUntilMarkUninstalled() {
         val path = ChrootPaths.FEDORA_CHROOT_PATH
         ChrootDetection.putCacheForTest(path, true)

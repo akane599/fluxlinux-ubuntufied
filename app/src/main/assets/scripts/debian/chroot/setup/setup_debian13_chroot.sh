@@ -478,15 +478,10 @@ BB="\$BB"
 SELINUX_STATUS=\$(getenforce)
 echo "[INFO] SELinux Status: \$SELINUX_STATUS"
 
+# SELinux mode is never changed (M13): permissive would drop every app's confinement.
 if [ "\$SELINUX_STATUS" = "Enforcing" ]; then
-    echo "[FIX] Setting SELinux to Permissive for X11..."
-    setenforce 0
-    if [ "\$(getenforce)" = "Permissive" ]; then
-        echo "[OK] SELinux set to Permissive"
-        echo "[NOTE] Will reset to Enforcing on reboot"
-    else
-        echo "[WARN] SELinux change failed - continuing anyway"
-    fi
+    echo "[INFO] SELinux is Enforcing (left unchanged). If the desktop fails,"
+    echo "       check 'dmesg | grep avc' / 'logcat | grep avc' for denials."
 fi
 
 # 1. Kill old X11 processes

@@ -16,6 +16,13 @@ import java.util.concurrent.ConcurrentHashMap
  * 1. Direct file probe (when policy allows)
  * 2. Root `test -e` probe (SSOT for install/settings)
  * 3. Short TTL cache per path for UI
+ *
+ * "Installed" needs a completion marker (M2), mirroring
+ * [com.ivarna.fluxlinux.core.terminal.TerminalLauncher.prootExtractComplete]: an interrupted
+ * extraction already has a shell, so a shell alone is not an install. Accepted:
+ * `.flux_configured` (setup finished; every legacy install has it), [EXTRACT_MARKER]
+ * (setup_guest_chroot.sh, written only after tar exits 0) or a desktop already installed in
+ * the guest (`startxfce4`, which only apt can put there, so extraction had finished).
  */
 object ChrootDetection {
 
@@ -25,6 +32,9 @@ object ChrootDetection {
     private data class CacheEntry(val installed: Boolean, val atMs: Long)
 
     private val cache = ConcurrentHashMap<String, CacheEntry>()
+
+    /** Written by setup_guest_chroot.sh once the rootfs tar extracted cleanly (M2). */
+    const val EXTRACT_MARKER = ".flux_extract_ok"
 
     data class Snapshot(
         val installed: Boolean,
@@ -43,12 +53,6 @@ object ChrootDetection {
     fun markerFile(path: String = ChrootPaths.CHROOT_PATH): File =
         File(path, ".flux_configured")
 
-    fun isVisibleToApp(path: String = ChrootPaths.CHROOT_PATH): Boolean {
-        return File("$path/.flux_configured").exists() ||
-            shellPresentToApp(path) ||
-            File(path).isDirectory
-    }
-
     fun isMarkerVisibleToApp(path: String = ChrootPaths.CHROOT_PATH): Boolean =
         markerFile(path).exists()
 
@@ -63,7 +67,7 @@ object ChrootDetection {
      * Background: may root-probe when cache is cold.
      */
     fun isInstalled(path: String = ChrootPaths.CHROOT_PATH): Boolean {
-        if (isVisibleToApp(path) && (isMarkerVisibleToApp(path) || shellPresentToApp(path))) {
+        if (completeToApp(path)) {
             putCache(path, true)
             return true
         }
@@ -111,10 +115,11 @@ object ChrootDetection {
         val markerApp = isMarkerVisibleToApp(path)
         val dirApp = isDirVisibleToApp(path)
         val shellApp = shellPresentToApp(path)
+        val completeApp = completeToApp(path)
 
         if (!forceRoot) {
             return Snapshot(
-                installed = markerApp || shellApp,
+                installed = completeApp,
                 markerOk = markerApp,
                 dirExists = dirApp || shellApp,
                 viaRoot = false,
@@ -123,9 +128,8 @@ object ChrootDetection {
         }
 
         if (!RootShell.isRootAvailable()) {
-            val installed = markerApp || shellApp
             return Snapshot(
-                installed = installed,
+                installed = completeApp,
                 markerOk = markerApp,
                 dirExists = dirApp,
                 viaRoot = false,
@@ -135,14 +139,17 @@ object ChrootDetection {
 
         val root = path
         val cap = RootShell.captureResult(
-            "M=0; D=0; S=0; " +
+            "M=0; D=0; S=0; E=0; X=0; " +
                 "[ -e '$root/.flux_configured' ] && M=1; " +
+                "[ -e '$root/$EXTRACT_MARKER' ] && E=1; " +
+                "{ [ -e '$root/usr/bin/startxfce4' ] || [ -L '$root/usr/bin/startxfce4' ] || " +
+                "[ -e '$root/usr/sbin/startxfce4' ]; } && X=1; " +
                 "[ -d '$root' ] && D=1; " +
                 // Alpine: bin/sh -> /bin/busybox (absolute); -e fails on host.
                 "{ [ -L '$root/bin/sh' ] || [ -e '$root/bin/sh' ] || " +
                 "[ -x '$root/bin/busybox' ] || [ -e '$root/usr/bin/bash' ] || " +
                 "[ -e '$root/usr/bin/sh' ] || [ -e '$root/sbin/apk' ]; } && S=1; " +
-                "echo MARKER=\$M DIR=\$D SHELL=\$S",
+                "echo MARKER=\$M DIR=\$D SHELL=\$S EXTRACT=\$E XFCE=\$X",
             timeoutMs = 8_000L
         )
         val flags = parseRootProbe(cap.exitCode, cap.stdout)
@@ -151,7 +158,7 @@ object ChrootDetection {
             // isInstalled() does not cache a false "not installed" for 30 s.
             Log.w(TAG, "probe inconclusive exit=${cap.exitCode} out=${cap.stdout.take(120)}")
             return Snapshot(
-                installed = markerApp || shellApp,
+                installed = completeApp,
                 markerOk = markerApp,
                 dirExists = dirApp,
                 viaRoot = false,
@@ -163,8 +170,9 @@ object ChrootDetection {
         val dir = dirApp || flags.dir
         val shell = shellApp || flags.shell
 
-        // A leftover empty directory after uninstall is not an install.
-        val installed = marker || shell
+        // A leftover directory (uninstall clears the markers first) or an interrupted
+        // extraction (shell, no marker) is not an install (M2).
+        val installed = completeApp || isComplete(flags)
         putCache(path, installed)
         return Snapshot(
             installed = installed,
@@ -193,7 +201,17 @@ object ChrootDetection {
     }
 
     /** Root probe flags; null when the probe did not run cleanly (non-zero exit / no line). */
-    internal data class RootProbeFlags(val marker: Boolean, val dir: Boolean, val shell: Boolean)
+    internal data class RootProbeFlags(
+        val marker: Boolean,
+        val dir: Boolean,
+        val shell: Boolean,
+        val extractOk: Boolean = false,
+        val xfce: Boolean = false,
+    )
+
+    /** Completion rule (M2) over root-probe flags: a shell or bare directory is not enough. */
+    internal fun isComplete(flags: RootProbeFlags): Boolean =
+        flags.marker || flags.extractOk || flags.xfce
 
     internal fun parseRootProbe(exitCode: Int, out: String): RootProbeFlags? {
         if (exitCode != 0) return null
@@ -202,14 +220,32 @@ object ChrootDetection {
         var marker = false
         var dir = false
         var shell = false
+        var extract = false
+        var xfce = false
         line.split(Regex("\\s+")).forEach { tok ->
             when {
                 tok.startsWith("MARKER=") -> marker = tok.removePrefix("MARKER=") == "1"
                 tok.startsWith("DIR=") -> dir = tok.removePrefix("DIR=") == "1"
                 tok.startsWith("SHELL=") -> shell = tok.removePrefix("SHELL=") == "1"
+                tok.startsWith("EXTRACT=") -> extract = tok.removePrefix("EXTRACT=") == "1"
+                tok.startsWith("XFCE=") -> xfce = tok.removePrefix("XFCE=") == "1"
             }
         }
-        return RootProbeFlags(marker, dir, shell)
+        return RootProbeFlags(marker, dir, shell, extract, xfce)
+    }
+
+    /** App-visible completion (M2): a marker or an installed desktop, never a bare shell. */
+    private fun completeToApp(path: String): Boolean {
+        if (File(path, ".flux_configured").exists() || File(path, EXTRACT_MARKER).exists()) {
+            return true
+        }
+        val xfce = File(path, "usr/bin/startxfce4")
+        if (xfce.exists() || File(path, "usr/sbin/startxfce4").exists()) return true
+        return try {
+            java.nio.file.Files.isSymbolicLink(xfce.toPath())
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun shellPresentToApp(path: String = ChrootPaths.CHROOT_PATH): Boolean {

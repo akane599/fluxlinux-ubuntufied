@@ -928,7 +928,7 @@ if [ "$OMZ_OK" = "1" ]; then
     else
         echo "FluxLinux: zsh-syntax-highlighting already present — skip"
     fi
-    # Ubuntu only — keep in sync with ZshPluginSet.EXTERNAL_PLUGIN_URLS.
+    # Ubuntu only — keep in sync with ZshPluginSet.EXTERNAL_PLUGINS.
     if _flux_is_ubuntu; then
         if [ ! -f "$ZSH_CUSTOM/plugins/fzf-tab/fzf-tab.plugin.zsh" ]; then
             echo "FluxLinux: Shallow clone fzf-tab (timeout 60s)…"

@@ -110,6 +110,21 @@ fi
 export PULSE_RUNTIME_PATH="${HOME}/.pulse"
 mkdir -p "$PULSE_RUNTIME_PATH" "$TMPDIR" 2>/dev/null
 
+# Whatever ends this script (early failure, guest failure, session end) also stops the
+# X server and VirGL it started (M12). su runs the guest as a child (no final exec), so
+# the trap stays armed for the whole session; stop_gui_chroot.sh covers a killed script.
+XSERVER_PID=""
+VIRGL_PID=""
+_flux_cleanup() {
+  [ -n "$XSERVER_PID" ] && kill "$XSERVER_PID" 2>/dev/null
+  [ -n "$VIRGL_PID" ] && kill "$VIRGL_PID" 2>/dev/null
+  return 0
+}
+trap _flux_cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 # Stale host graphics only — do NOT force-stop $PKG and do not kill Pulse.
 pkill -f "virgl_test_server" 2>/dev/null || true
 pkill -f termux-x11 2>/dev/null || true
@@ -127,6 +142,7 @@ fi
 if command -v virgl_test_server_android >/dev/null; then
   echo "FluxLinux: Starting VirGL server..."
   virgl_test_server_android --socket-path "$TERMUX_PREFIX/tmp/.virgl_test" >/dev/null 2>&1 &
+  VIRGL_PID=$!
   sleep 2
   test -S "${TMPDIR}/.virgl_test" && echo "FluxLinux: VirGL socket ready" \
     || echo "FluxLinux: [WARN] VirGL socket not found"
@@ -217,6 +233,8 @@ if [ ! -S "$TMPDIR/.X11-unix/X0" ] || ! kill -0 "$XSERVER_PID" 2>/dev/null; then
   echo "FluxLinux: [ERROR] X server did not create $TMPDIR/.X11-unix/X0 within 15s (or exited)."
   exit 1
 fi
+# Not a readiness marker (M12): DesktopLauncher waits for the guest FLUX_DESKTOP_READY,
+# printed by the root guest launcher only once the desktop process is alive.
 echo "FluxLinux: host X0 socket ready (X server PID=$XSERVER_PID)"
 
 echo "FluxLinux: Opening X11 activity..."

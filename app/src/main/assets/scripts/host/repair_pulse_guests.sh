@@ -130,7 +130,9 @@ migrate_chroot_guest() {
 # --- end chroot client-config migration ---
 
 repair_chroot_as_root() {
-  _helper=/data/local/tmp/fluxlinux_chroot.sh
+  # M14: only the verified helper in the root-only stage (RootShell.ensureChrootHelper),
+  # never the shell-writable /data/local/tmp copy.
+  _helper="/data/adb/fluxlinux/$PKG/fluxlinux_chroot.sh"
   for _path in $_CHROOT_PATHS; do
     [ -d "$_path/etc" ] || continue
     [ -L "$_path" ] && continue

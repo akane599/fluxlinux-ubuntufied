@@ -1,5 +1,6 @@
 package com.ivarna.fluxlinux.core.chroot
 
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -21,6 +22,19 @@ class ChrootLifecycleContractTest {
     private fun chrootScript(name: String) =
         repoFile("src/main/assets/scripts/chroot/$name").readText()
 
+    /** Every regular `*.sh` under assets/scripts, keyed by its path relative to that dir. */
+    private fun allAssetScripts(): Map<String, String> {
+        val root = repoFile("src/main/assets/scripts")
+        val out = sortedMapOf<String, String>()
+        SafeFiles.walkNoFollow(root) { f, attrs ->
+            if (attrs.isRegularFile && f.name.endsWith(".sh")) {
+                out[f.relativeTo(root).invariantSeparatorsPath] = f.readText()
+            }
+        }
+        assertTrue("asset script sweep found too few files", out.size > 50)
+        return out
+    }
+
     @Test
     fun ensureMounts_refusesUninstallingOrUnconfiguredTreeBeforeAnyMount() {
         val src = chrootScript("fluxlinux_chroot.sh")
@@ -41,6 +55,85 @@ class ChrootLifecycleContractTest {
             val src = chrootScript(name)
             assertFalse("$name must not call setenforce", src.contains("setenforce "))
         }
+    }
+
+    @Test
+    fun noAssetScript_switchesSelinuxToPermissive() {
+        // M13: a chroot guest shares the device kernel, so setenforce anywhere (host start
+        // script, guest family setup, legacy generated launcher) drops all of Android's MAC.
+        val call = Regex("""\bsetenforce\s+(0|[Pp]ermissive)\b""")
+        val offenders = allAssetScripts().filterValues { call.containsMatchIn(it) }.keys
+        assertTrue("setenforce 0 in: $offenders", offenders.isEmpty())
+    }
+
+    /**
+     * M14: lines/variables that write a file under shell-writable /data/local/tmp or run one
+     * from there as root. Chroot rootfs paths (/data/local/tmp/chroot*) are a recorded
+     * residual and allowed; rm -f cleanup and case-pattern rejection never match.
+     */
+    private fun dataLocalTmpWriteOrExec(src: String): List<String> {
+        val p = "/data/local/tmp/(?!chroot)"
+        val execLit = Regex("""(^|[;&|(`\s/"'])(sh|bash|exec|source|\.)\s+["']?""" + p)
+        val writeLit = Regex("""(>>?\s*["']?|\b(cp|mv|install|ln)\b[^\n#]*\s["']?)""" + p)
+        val assign = Regex("""\b([A-Za-z_][A-Za-z0-9_]*)=["']?""" + p + """[^\s"';]+""")
+        val code = src.lines().filterNot { it.trimStart().startsWith("#") }
+        val hits = code.filter { execLit.containsMatchIn(it) || writeLit.containsMatchIn(it) }
+            .map { it.trim() }.toMutableList()
+        val text = code.joinToString("\n")
+        for (name in assign.findAll(text).map { it.groupValues[1] }.toSet()) {
+            val use = Regex(
+                """(>>?\s*["']?|\b(sh|bash|exec|source|\.)\s+["']?|\b(cp|mv|install|ln)\b[^\n#]*\s["']?)""" +
+                    """\$\{?""" + Regex.escape(name) + """\b""",
+            )
+            if (use.containsMatchIn(text)) hits += "\$$name"
+        }
+        return hits
+    }
+
+    @Test
+    fun dataLocalTmpDetector_flagsWriteThenExec_notCleanupOrRootfs() {
+        assertTrue(dataLocalTmpWriteOrExec("_h=/data/local/tmp/fluxlinux_chroot.sh\n/system/bin/sh \"\$_h\" x").isNotEmpty())
+        assertTrue(dataLocalTmpWriteOrExec("S=\"/data/local/tmp/enter.sh\"\ncat > \"\$S\" <<EOF\nEOF").isNotEmpty())
+        assertTrue(dataLocalTmpWriteOrExec("cp -f \"\$A\" /data/local/tmp/stop.sh").isNotEmpty())
+        assertTrue(dataLocalTmpWriteOrExec("su -c \"sh /data/local/tmp/start.sh\"").isNotEmpty())
+        val allowed = """
+            CHROOT_PATH="${'$'}{CHROOT_PATH:-/data/local/tmp/chrootAlpine}"
+            mkdir -p "${'$'}CHROOT_PATH/tmp" && echo x > "${'$'}CHROOT_PATH/etc/x"
+            LAUNCH_SCRIPTS="/data/local/tmp/a.sh /data/local/tmp/b.sh"
+            for s in ${'$'}LAUNCH_SCRIPTS; do rm -f "${'$'}s"; done
+            rm -f /data/local/tmp/fluxlinux_chroot.sh 2>/dev/null
+            case "${'$'}_c" in /data/local/tmp/*) continue ;; esac
+            # M14: never source anything from shell-writable /data/local/tmp.
+        """.trimIndent()
+        assertTrue(dataLocalTmpWriteOrExec(allowed).toString(), dataLocalTmpWriteOrExec(allowed).isEmpty())
+    }
+
+    @Test
+    fun noAssetScript_writesThenRunsFilesInDataLocalTmp() {
+        // Legacy per-distro chroot setups with no live caller (nothing in the app loads them).
+        val legacyNoCaller = setOf(
+            "arch/chroot/setup/setup_arch_chroot.sh",
+            "debian/chroot/setup/setup_debian13_chroot.sh",
+            "debian/chroot/setup/setup_debian_chroot.sh",
+        )
+        val kotlin = repoFile("src/main/kotlin")
+        SafeFiles.walkNoFollow(kotlin) { f, attrs ->
+            if (attrs.isRegularFile && f.name.endsWith(".kt")) {
+                val src = f.readText()
+                assertFalse("$f loads a legacy chroot setup", src.contains("chroot/setup/"))
+            }
+        }
+        // FOLLOW-UP (owned by another remediation worker at the time of writing): these still
+        // write root-run compat launchers to /data/local/tmp; drop once moved to the stage.
+        val pendingFollowUp = setOf(
+            "chroot/setup_debian13_chroot.sh",
+            "chroot/setup_alpine_chroot.sh",
+        )
+        val offenders = allAssetScripts()
+            .filterKeys { it !in legacyNoCaller && it !in pendingFollowUp }
+            .mapValues { dataLocalTmpWriteOrExec(it.value) }
+            .filterValues { it.isNotEmpty() }
+        assertTrue("write-then-exec under /data/local/tmp: $offenders", offenders.isEmpty())
     }
 
     @Test

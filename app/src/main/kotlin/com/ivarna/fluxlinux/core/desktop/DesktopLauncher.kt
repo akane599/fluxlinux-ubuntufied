@@ -64,7 +64,7 @@ object DesktopLauncher {
     private val _ui = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _ui.asStateFlow()
 
-    /** Guest-side readiness line printed by start_gui.sh once the DE is running. */
+    /** Guest-side readiness line printed by start_gui.sh / the chroot launchers once the DE runs. */
     internal const val GUEST_READY_MARKER = "FLUX_DESKTOP_READY"
 
     private val runState = DesktopRunState()
@@ -329,7 +329,7 @@ object DesktopLauncher {
             onLine = { line ->
                 GuiDesktopLog.append(app, line)
                 appendLive(line)
-                if (runState.isCurrent(gen) && isDesktopReadyLine(line, method)) {
+                if (runState.isCurrent(gen) && isDesktopReadyLine(line)) {
                     onHealthyLine(gen, app, distroId, onResult)
                 }
             },
@@ -477,16 +477,14 @@ object DesktopLauncher {
     /**
      * True only for readiness markers, not banners or progress lines.
      *
-     * PRoot keys off the guest-side [GUEST_READY_MARKER] that start_gui.sh prints once the DE
-     * has been exec'd as flux and is still alive (M12): the host X socket line comes before the
-     * DE is even checked. The chroot scripts still announce only the host X socket, so their
-     * legacy markers stay accepted for chroot until they print the guest marker too.
+     * PRoot and chroot both key off the guest-side [GUEST_READY_MARKER] that start_gui.sh and
+     * the chroot launchers (start_guest_gui.sh, start_debian13_gui.sh, start_alpine_gui.sh)
+     * print once the DE has been exec'd as the guest user and is still alive (M12). The host
+     * X socket line comes before the DE is even checked, so it is never a marker.
      */
-    internal fun isDesktopReadyLine(line: String, method: String): Boolean {
+    internal fun isDesktopReadyLine(line: String): Boolean {
         val t = line.trim()
-        if (t == GUEST_READY_MARKER || t == "FLUXLINUX_DESKTOP_READY") return true
-        if (method != "chroot") return false
-        return t.contains("X server PID=") || t.contains("host X0 socket ready")
+        return t == GUEST_READY_MARKER || t == "FLUXLINUX_DESKTOP_READY"
     }
 
     private fun deliverStartResult(onResult: ((Boolean) -> Unit)?, ok: Boolean) {
