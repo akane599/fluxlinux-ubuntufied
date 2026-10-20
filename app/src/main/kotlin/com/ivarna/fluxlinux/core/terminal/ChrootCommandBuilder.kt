@@ -39,14 +39,31 @@ object ChrootCommandBuilder {
             loginShellFlux = fluxFlag,
             loginShellRoot = rootFlag
         )
-        // Pin FLUX_CHROOT for Alpine/Debian multi-chroot coexistence
-        val bb = RootShell.cachedBusyBox()
-        val exportBb = if (!bb.isNullOrEmpty()) "export FLUX_BB='$bb'; " else ""
-        val withPath = "${exportBb}export FLUX_CHROOT='$chrootPath'; $rootInner"
+        val withPath = rootSessionCommand(
+            rootInner,
+            chrootPath,
+            RootShell.cachedBusyBox(),
+            RootShell.helperExecGuard(),
+        )
         val cmd = RootShell.shellRootCommand(withPath)
         // Inline WINCH trap on outer sh (mShellPid). Keep this shell as parent (no leading exec).
         val winchCmd = winchWrap(cmd)
         return arrayOf(SESSION_EXEC, "-c", winchCmd) to buildEnv(user, chrootPath)
+    }
+
+    /**
+     * Root-side session command: pin FLUX_BB / FLUX_CHROOT (Alpine/Debian multi-chroot
+     * coexistence), then [helperGuard] ([RootShell.helperExecGuard]: SHA-256 re-check of the
+     * helper and its resolver, exit 127 on mismatch, M14) right before `exec sh $helper …`.
+     */
+    internal fun rootSessionCommand(
+        rootInner: String,
+        chrootPath: String,
+        bb: String?,
+        helperGuard: String,
+    ): String {
+        val exportBb = if (!bb.isNullOrEmpty()) "export FLUX_BB='$bb'; " else ""
+        return "${exportBb}export FLUX_CHROOT='$chrootPath'; $helperGuard$rootInner"
     }
 
     /** Inline WINCH trap prefix for the outer `/system/bin/sh` session. */

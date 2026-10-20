@@ -1,8 +1,13 @@
 package com.ivarna.fluxlinux.core.terminal
 
+import com.ivarna.fluxlinux.core.root.BusyBoxPaths
 import com.ivarna.fluxlinux.core.root.ChrootPaths
+import com.ivarna.fluxlinux.core.root.RootShell
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /** Pure argv shape tests for chroot sessions (SSOT helper; no device / no Context). */
@@ -159,5 +164,45 @@ class ChrootCommandBuilderTest {
             chrootPath = ChrootPaths.ALPINE_CHROOT_PATH
         )
         assertEquals(ChrootPaths.ALPINE_CHROOT_PATH, env["FLUX_CHROOT"])
+    }
+
+    @After
+    fun clearSeededHashes() {
+        RootShell.seedAssetShaForTest(ChrootPaths.CHROOT_HELPER_ASSET, null)
+        RootShell.seedAssetShaForTest(BusyBoxPaths.RESOLVER_ASSET, null)
+    }
+
+    @Test
+    fun rootSessionCommand_guardPrecedesHelperExec() {
+        RootShell.seedAssetShaForTest(ChrootPaths.CHROOT_HELPER_ASSET, "a".repeat(64))
+        RootShell.seedAssetShaForTest(BusyBoxPaths.RESOLVER_ASSET, "b".repeat(64))
+        val guard = RootShell.helperExecGuard()
+        assertTrue(guard.contains(RootShell.shaMatches(helper, "a".repeat(64))))
+        assertTrue(guard.contains(RootShell.shaMatches(BusyBoxPaths.RESOLVER_ON_DEVICE, "b".repeat(64))))
+        val inner = ChrootCommandBuilder.buildRootInner("bash -l", user = "flux")
+        val cmd = ChrootCommandBuilder.rootSessionCommand(inner, ChrootPaths.CHROOT_PATH, "/data/adb/ksu/bin/busybox", guard)
+        val g = cmd.indexOf(guard)
+        assertTrue(g >= 0)
+        assertTrue(cmd.indexOf("exec sh $helper") > g)
+        assertTrue(cmd.startsWith("export FLUX_BB='/data/adb/ksu/bin/busybox'; export FLUX_CHROOT="))
+    }
+
+    @Test
+    fun helperExecGuard_unknownHash_refuses() {
+        val guard = RootShell.helperExecGuard()
+        assertTrue(guard.contains("exit 127"))
+        assertFalse(guard.contains("_fsha"))
+    }
+
+    @Test
+    fun helperExecGuard_mismatch_neverRunsHelper() {
+        assumeTrue(java.io.File("/bin/sh").canExecute())
+        RootShell.seedAssetShaForTest(ChrootPaths.CHROOT_HELPER_ASSET, "a".repeat(64))
+        RootShell.seedAssetShaForTest(BusyBoxPaths.RESOLVER_ASSET, "b".repeat(64))
+        val cmd = ChrootCommandBuilder.rootSessionCommand("echo RAN", "/x", null, RootShell.helperExecGuard())
+        val p = ProcessBuilder("/bin/sh", "-c", cmd).redirectErrorStream(true).start()
+        val out = String(p.inputStream.readBytes())
+        assertEquals(127, p.waitFor())
+        assertFalse(out, out.contains("RAN"))
     }
 }

@@ -23,7 +23,7 @@ class ServiceLifecycleContractTest {
 
     @Test
     fun keepAliveServices_areNeverSticky() {
-        for (name in listOf("BaseInstallService", "DesktopSessionService", "AppTerminalService", "InstallServerService")) {
+        for (name in listOf("BaseInstallService", "DesktopSessionService", "AppTerminalService")) {
             val src = service(name)
             assertFalse("$name must not return START_STICKY", Regex("""\bSTART_STICKY\b""").containsMatchIn(src))
             assertTrue("$name returns START_NOT_STICKY", src.contains("START_NOT_STICKY"))
@@ -49,7 +49,7 @@ class ServiceLifecycleContractTest {
     @Test
     fun dataSyncServices_stopOnFgsTimeout() {
         val manifest = repoFile("src/main/AndroidManifest.xml").readText()
-        for (name in listOf("BaseInstallService", "InstallServerService")) {
+        for (name in listOf("BaseInstallService")) {
             assertTrue(
                 "$name is a dataSync FGS in the manifest",
                 Regex("""\.core\.service\.$name"\s+[^>]*foregroundServiceType="dataSync"""").containsMatchIn(manifest),

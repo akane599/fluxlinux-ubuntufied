@@ -138,6 +138,62 @@ class InstallControllerTest {
     }
 
     @Test
+    fun hostRepair_refusedWhileAnInstallRuns_orAnExtractionIsBusy() {
+        val engine = FakeEngine()
+        val c = InstallController(engine)
+        assertTrue(InstallController.hostRepairAllowed(c.state.value, extracting = false))
+        assertFalse(InstallController.hostRepairAllowed(c.state.value, extracting = true))
+
+        c.start("debian", "dark") // e.g. Distro Settings reinstall, then Back to Home
+        assertFalse(InstallController.hostRepairAllowed(c.state.value, extracting = false))
+
+        engine.sinks[0](progress(100, finished = true))
+        assertTrue(InstallController.hostRepairAllowed(c.state.value, extracting = false))
+    }
+
+    @Test
+    fun homeRepair_checksTheGuardAtTapAndBeforeExtracting() {
+        val src = repoFile("src/main/kotlin/com/ivarna/fluxlinux/ui/screens/HomeScreen.kt").readText()
+        val repair = src.substringAfter("fun repairHost()").substringBefore("\n    }\n")
+        assertTrue(src.contains("InstallController.hostRepairAllowed("))
+        val tap = repair.indexOf("if (!repairAllowed())")
+        val onExecutor = repair.indexOf("if (!repairAllowed())", tap + 1)
+        val extract = repair.indexOf("ensureExtracted(app, force = true)")
+        assertTrue(repair, tap in 0 until onExecutor && onExecutor < extract)
+    }
+
+    @Test
+    fun reopenAfterSystemBack_forgetsFinishedRun_butKeepsARunningOne() {
+        val engine = FakeEngine()
+        val c = InstallController(engine)
+        c.start("debian", "dark")
+        engine.sinks[0](progress(100, finished = true))
+        // System Back on Done: the screen leaves without calling anything.
+        assertEquals(Status.Succeeded, c.state.value.status)
+        // Fresh open of the wizard: finished run is forgotten -> Options, no re-toast.
+        c.clearFinished()
+        assertFalse(c.state.value.isActiveFor("debian"))
+
+        c.start("ubuntu", "dark")
+        c.clearFinished() // fresh open while running: resumed, not reset
+        assertTrue(c.state.value.isActiveFor("ubuntu"))
+        assertEquals(Status.Running, c.state.value.status)
+    }
+
+    @Test
+    fun screens_clearFinishedOnFreshOpen_beforeCollecting() {
+        for (rel in listOf(
+            "src/main/kotlin/com/ivarna/fluxlinux/ui/onboarding/OnboardingFlowScreen.kt",
+            "src/main/kotlin/com/ivarna/fluxlinux/ui/screens/InstallConfigScreen.kt",
+        )) {
+            val src = repoFile(rel).readText()
+            val clear = src.indexOf("rememberSaveable { installer.clearFinished(); true }")
+            val collect = src.indexOf("installer.state.collectAsState()")
+            assertTrue(rel, clear in 0 until collect)
+        }
+    }
+
+    @Test
     fun screens_doNotCancelOnDispose() {
         // Contract: no composition-scoped runner and no cancel-on-dispose remain.
         for (rel in listOf(

@@ -47,6 +47,7 @@ import com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
 import com.ivarna.fluxlinux.core.files.UbuntuFiles
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
+import com.ivarna.fluxlinux.core.install.InstallController
 import com.ivarna.fluxlinux.core.terminal.BootstrapInstaller
 import com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
@@ -242,9 +243,19 @@ fun HomeScreen(
         }.start()
     }
 
+    fun repairAllowed(): Boolean = InstallController.hostRepairAllowed(
+        InstallController.get(context.applicationContext).state.value,
+        extracting = BootstrapInstaller.busy.value,
+    )
+
     fun repairHost() {
-        // BootstrapInstaller.busy is process-wide (the local flag resets on recreation).
-        if (repairing || BootstrapInstaller.busy.value) return
+        // Process-wide guards (the local flag resets on recreation): no repair while
+        // an install (it outlives its screen) or another extraction uses usr/.
+        if (repairing) return
+        if (!repairAllowed()) {
+            toast(context.getString(R.string.home_repair_blocked_install))
+            return
+        }
         repairing = true
         toast(context.getString(R.string.home_repair_running))
         val app = context.applicationContext
@@ -253,6 +264,16 @@ fun HomeScreen(
             // Same single-thread executor as terminal/desktop host preparation, and the
             // extract lock inside ensureExtracted, so repair never races them (M1).
             TerminalLauncher.executor.execute {
+                // Re-check right before deleting usr/: an install may have started while
+                // the desktop was stopping. (An install started after this waits on the
+                // extract lock in its host-preparation step.)
+                if (!repairAllowed()) {
+                    mainHandler.post {
+                        repairing = false
+                        Toast.makeText(app, app.getString(R.string.home_repair_blocked_install), Toast.LENGTH_LONG).show()
+                    }
+                    return@execute
+                }
                 // Containers under usr/var/lib/proot-distro are moved aside and restored.
                 val ok = runCatching { BootstrapInstaller.ensureExtracted(app, force = true) }
                     .getOrDefault(false)

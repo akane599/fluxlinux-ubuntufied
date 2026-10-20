@@ -126,7 +126,7 @@ object RootShell {
             val rootPid = AtomicReference<RootPid?>(null)
             // The holder gets a Process whose destroyForcibly() kills the root tree first, so
             // owners that only ever call destroyForcibly() on the holder still stop the job.
-            val job = RootJobProcess(pb, rootPid)
+            val job = RootJobProcess(pb, rootPid, inv)
             processHolder?.set(job)
             try {
                 val sb = StringBuilder()
@@ -232,11 +232,13 @@ object RootShell {
     private class RootJobProcess(
         private val delegate: Process,
         private val rootPid: AtomicReference<RootPid?>,
+        /** su argv captured at job start: a later [clearSuCache] must not disable the kill. */
+        private val suInvocation: List<String>,
     ) : Process() {
         private val killed = AtomicBoolean(false)
 
         fun killTreeThenDestroy() {
-            if (killed.compareAndSet(false, true)) killRootTree(rootPid.get())
+            if (killed.compareAndSet(false, true)) killRootTree(rootPid.get(), suInvocation)
             delegate.destroyForcibly()
         }
 
@@ -322,33 +324,10 @@ object RootShell {
     """.trimIndent()
 
     /** Kill a tracked root job tree through a fresh su (never wrapped, bounded). */
-    private fun killRootTree(rootPid: RootPid?) {
+    private fun killRootTree(rootPid: RootPid?, inv: List<String>) {
         if (rootPid == null) return
-        val inv = cachedSuInvocation ?: return
         val code = runCommand(buildSuArgs(inv, buildTreeKillScript(rootPid)), onLine = null, timeoutMs = 10_000L)
         Log.i(TAG, "killRootTree pid=${rootPid.pid} exit=$code")
-    }
-
-    /**
-     * Execute a shell command as root.
-     * [onLine] is called on the Main thread for each stdout/stderr line.
-     * [onDone] is called on the Main thread with the exit code.
-     */
-    fun execute(
-        cmd: String,
-        onLine: (String) -> Unit = {},
-        onDone: (Int) -> Unit = {}
-    ) {
-        executor.execute {
-            val inv = resolveSuInvocation()
-            val code = if (inv == null) {
-                mainHandler.post { onLine("[RootShell] ERROR: no working su binary") }
-                -1
-            } else {
-                runCommand(buildSuArgs(inv, wrapWithPidMarker(cmd)), onLine, tracked = true)
-            }
-            mainHandler.post { onDone(code) }
-        }
     }
 
     /** Default bound for [executeSync]: staging / probe commands finish in well under this. */
@@ -365,54 +344,8 @@ object RootShell {
             buildSuArgs(inv, wrapWithPidMarker(cmd)),
             onLine = null,
             timeoutMs = timeoutMs,
-            tracked = true,
+            killWith = inv,
         )
-    }
-
-    /**
-     * Execute a shell script file as root.
-     * [scriptPath] must be an absolute path to a script on the device.
-     */
-    fun executeScript(
-        scriptPath: String,
-        onLine: (String) -> Unit = {},
-        onDone: (Int) -> Unit = {}
-    ) {
-        execute("sh \"$scriptPath\"", onLine, onDone)
-    }
-
-    /**
-     * Copy an asset to the app-private `staged_scripts/` dir ([stageAsset]),
-     * then run it as root.
-     */
-    fun executeScriptAsset(
-        context: Context,
-        assetName: String,
-        onLine: (String) -> Unit = {},
-        onDone: (Int) -> Unit = {}
-    ) {
-        executor.execute {
-            val stagedPath = stageAsset(context, assetName)
-            if (stagedPath == null) {
-                mainHandler.post {
-                    onLine("[RootShell] ERROR: Failed to stage asset '$assetName'")
-                    onDone(-1)
-                }
-                return@execute
-            }
-            val inv = resolveSuInvocation()
-            val code = if (inv == null) {
-                mainHandler.post { onLine("[RootShell] ERROR: no working su binary") }
-                -1
-            } else {
-                runCommand(
-                    buildSuArgs(inv, wrapWithPidMarker("sh \"$stagedPath\"")),
-                    onLine,
-                    tracked = true,
-                )
-            }
-            mainHandler.post { onDone(code) }
-        }
     }
 
     /** Serialises su discovery so concurrent callers never raise parallel grant prompts (L7). */
@@ -593,11 +526,12 @@ object RootShell {
         return try {
             val bbOk = ensureBusyBoxResolver(ctx)
             val ok = stageVerified(ctx, ChrootPaths.CHROOT_HELPER_ASSET, ChrootPaths.CHROOT_HELPER)
-            if (!ok) {
-                Log.w(TAG, "ensureChrootHelper: stage/verify failed")
+            if (!ok || !bbOk) {
+                // The helper sources its stage-dir resolver sidecar: both must be verified.
+                Log.w(TAG, "ensureChrootHelper: stage/verify failed helper=$ok resolver=$bbOk")
                 return false
             }
-            chrootHelperReady.set(bbOk)
+            chrootHelperReady.set(true)
             true
         } catch (e: Exception) {
             Log.w(TAG, "ensureChrootHelper failed: ${e.message}")
@@ -695,10 +629,17 @@ object RootShell {
             "{ rm -f ${LEGACY_ARTIFACTS.joinToString(" ") { "'$it'" }} 2>/dev/null; true; }"
 
     /**
-     * Ensure [dest] (inside the root-only stage dir) holds exactly [asset]: no-op when the
+     * Ensure [dest] holds exactly APK [asset] (SHA-256-verified, temp + rename): no-op when the
      * hash already matches, else copy from the app-private staged copy, else stream base64.
+     * [dest] must be a direct child of [ChrootPaths.ROOT_STAGE_DIR] (root:root 0700, created
+     * here); anything else is refused. Then run it as root with `sh '<dest>'` and nothing
+     * else in between. Blocking (su): background thread only. Returns false on any failure.
      */
-    private fun stageVerified(ctx: Context, asset: String, dest: String): Boolean {
+    fun stageVerified(ctx: Context, asset: String, dest: String): Boolean {
+        if (File(dest).parent != ChrootPaths.ROOT_STAGE_DIR || dest.contains('\'')) {
+            Log.w(TAG, "stageVerified refused dest outside root stage: $dest")
+            return false
+        }
         return try {
             val sha = assetSha256(ctx, asset) ?: return false
             if (captureResult("$SHA_FN; ${shaMatches(dest, sha)}", timeoutMs = 8_000L).exitCode == 0) {
@@ -726,27 +667,6 @@ object RootShell {
             Log.w(TAG, "stageVerified $asset failed: ${e.message}")
             false
         }
-    }
-
-    /**
-     * Run a command inside the Debian 13 chroot as [user] via SSOT helper.
-     * Pass [context] so the helper is staged from assets when missing.
-     */
-    fun executeInChroot(
-        cmd: String,
-        user: String = "flux",
-        chrootPath: String = ChrootPaths.CHROOT_PATH,
-        onLine: (String) -> Unit = {},
-        onDone: (Int) -> Unit = {},
-        context: Context? = null
-    ) {
-        context?.let { ensureChrootHelper(it) }
-        val u = if (user == "root") "root" else "flux"
-        val b64 = android.util.Base64.encodeToString(
-            cmd.toByteArray(Charsets.UTF_8),
-            android.util.Base64.NO_WRAP
-        )
-        execute(buildChrootHelperCmd(u, b64, chrootPath), onLine, onDone)
     }
 
     /**
@@ -800,15 +720,43 @@ object RootShell {
         if (sha == null) {
             return env + "echo '[RootShell] helper hash unknown — open a chroot session once to stage $helper' >&2; exit 127"
         }
+        val resolverSha = expectedSha(BusyBoxPaths.RESOLVER_ASSET)
+            ?: return env + "echo '[RootShell] resolver hash unknown — open a chroot session once to stage it' >&2; exit 127"
         return env + "$SHA_FN; " +
-            "if ! ${shaMatches(helper, sha)}; then ${stageDirSnippet()} && " +
+            selfHealSnippet(helper, sha, "fluxlinux_chroot.sh", pkg) +
+            selfHealSnippet(BusyBoxPaths.RESOLVER_ON_DEVICE, resolverSha, "resolve_bb.sh", pkg) +
+            helperGuardBody(sha, resolverSha) +
+            "sh '$helper' b64 --user $user -- $b64"
+    }
+
+    /** Re-stage [dest] from the app-private copies (verified before rename) when it fails its hash. */
+    private fun selfHealSnippet(dest: String, sha: String, name: String, pkg: String): String =
+        "if ! ${shaMatches(dest, sha)}; then ${stageDirSnippet()} && " +
             "for _s in " +
-            "/data/data/$pkg/files/staged_scripts/fluxlinux_chroot.sh " +
-            "/data/data/$pkg/files/home/fluxlinux_chroot.sh; do " +
-            "[ -f \"\$_s\" ] && ${installSnippet(helper, sha, srcWord = "\"\$_s\"")} && break; " +
-            "done; fi; " +
-            "if ${shaMatches(helper, sha)}; then sh '$helper' b64 --user $user -- $b64; " +
-            "else echo '[RootShell] $helper missing or failed SHA-256 check — reinstall chroot or open a chroot session once' >&2; exit 127; fi"
+            "/data/data/$pkg/files/staged_scripts/$name " +
+            "/data/data/$pkg/files/home/$name; do " +
+            "[ -f \"\$_s\" ] && ${installSnippet(dest, sha, srcWord = "\"\$_s\"")} && break; " +
+            "done; fi; "
+
+    /** Needs [SHA_FN]. Exits 127 unless both the helper and its resolver sidecar verify. */
+    private fun helperGuardBody(helperSha: String, resolverSha: String): String =
+        "if ! { ${shaMatches(ChrootPaths.CHROOT_HELPER, helperSha)} && " +
+            "${shaMatches(BusyBoxPaths.RESOLVER_ON_DEVICE, resolverSha)}; }; then " +
+            "echo '[RootShell] ${ChrootPaths.CHROOT_HELPER} or its resolver missing or failed SHA-256 check" +
+            " — reinstall chroot or open a chroot session once' >&2; exit 127; fi; "
+
+    /**
+     * Root-shell prefix that must precede every `sh <CHROOT_HELPER> …` (M14): re-verifies the
+     * helper and its resolver sidecar against the APK hashes right before running them, and
+     * refuses (exit 127) when either hash is unknown or does not match.
+     */
+    fun helperExecGuard(): String {
+        val h = expectedSha(ChrootPaths.CHROOT_HELPER_ASSET)
+        val r = expectedSha(BusyBoxPaths.RESOLVER_ASSET)
+        if (h == null || r == null) {
+            return "echo '[RootShell] helper hash unknown — open a chroot session once to stage it' >&2; exit 127; "
+        }
+        return "$SHA_FN; " + helperGuardBody(h, r)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -864,7 +812,8 @@ object RootShell {
         args: List<String>,
         onLine: ((String) -> Unit)?,
         timeoutMs: Long = 0L,
-        tracked: Boolean = false,
+        /** Non-null = the cmd was wrapped with [wrapWithPidMarker]; su argv used for the tree kill. */
+        killWith: List<String>? = null,
     ): Int {
         Log.d(TAG, "runCommand: ${args.joinToString(" ").take(200)}")
         return try {
@@ -877,7 +826,7 @@ object RootShell {
             val reader = Thread {
                 try {
                     BufferedReader(InputStreamReader(pb.inputStream)).use { r ->
-                        var first = tracked
+                        var first = killWith != null
                         var line: String?
                         while (r.readLine().also { line = it } != null) {
                             val l = line ?: continue
@@ -906,7 +855,7 @@ object RootShell {
                 true
             }
             if (!finished) {
-                if (tracked) killRootTree(rootPid.get())
+                if (killWith != null) killRootTree(rootPid.get(), killWith)
                 pb.destroyForcibly()
                 reader.join(500)
                 Log.w(TAG, "runCommand timeout after ${timeoutMs}ms")

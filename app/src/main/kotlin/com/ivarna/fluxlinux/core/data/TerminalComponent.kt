@@ -2,7 +2,7 @@ package com.ivarna.fluxlinux.core.data
 
 /**
  * In-app terminal component used for Distro Install/Run actions.
- * Single place so cards never call TermuxIntentFactory for these ids.
+ * Single place that maps distro ids to their in-app terminal component.
  */
 enum class TerminalComponent(val method: String, val label: String) {
     /** Host + proot Debian sessions (no root). */

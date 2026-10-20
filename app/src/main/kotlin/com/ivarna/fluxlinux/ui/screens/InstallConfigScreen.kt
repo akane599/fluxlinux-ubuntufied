@@ -70,6 +70,9 @@ fun InstallConfigScreen(
     val appCtx = context.applicationContext
     // H2: process-scoped install; leaving this screen never cancels it (only Back/Cancel does).
     val installer = remember { InstallController.get(appCtx) }
+    // A fresh open (not a rotation restore) forgets a finished run the user left with
+    // system Back, so it neither shows DONE again nor re-toasts. Runs before collecting.
+    rememberSaveable { installer.clearFinished(); true }
     val install by installer.state.collectAsState()
     var selectedTheme by rememberSaveable { mutableStateOf("dark") }
     var showLog by rememberSaveable { mutableStateOf(true) }
