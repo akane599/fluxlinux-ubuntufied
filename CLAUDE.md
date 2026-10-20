@@ -10,7 +10,7 @@ Android, developed on Ubuntu from the CLI.
 - JDK target 17 · Gradle 8.14 · AGP 8.7.3 · Kotlin 2.0.20 · compileSdk 36 · targetSdk 36 · minSdk 26
 - Modules: :app :termux-x11 :terminal-emulator :stub · Architecture: single-activity Compose, no DI framework · DI/DB/Net: none / none / okhttp
 - Flavors (dimension `store`): `ivarna` = com.ivarna.fluxlinux (F-Droid/GitHub, arm64-v8a only) · `zenithblue` = com.zenithblue.fluxlinux (Play) · Launcher: .MainActivity
-- Baseline: build ok (ivarnaDebug) · 463 unit tests, 0 failures (PROGRESS.md)
+- Baseline: build ok (ivarnaDebug) · 727 unit tests, 0 failures (v2.1.4, 2026-10-20)
 <!-- STACK:END -->
 
 ## How work flows here
@@ -31,11 +31,14 @@ Android, developed on Ubuntu from the CLI.
 - Device: `./gradlew :app:installIvarnaDebug -q && adb shell am start -n com.ivarna.fluxlinux/.MainActivity` · logs: `adb logcat -d --pid=$(adb shell pidof -s com.ivarna.fluxlinux) | tail -80`
 - Emulator: `emulator -avd pixel-api35 -no-window -no-audio &` then `adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'` (ivarna ships arm64-v8a host binaries only; x86_64 emulators run them via native bridge)
 - No-KVM host (current VM, temporary): instead of the emulator, use the `redroid` Docker container (Android 15 x86_64, adb `emulator-5554` / `127.0.0.1:5555`, drive it through mobile-mcp (`.mcp.json`)). Its image sets `ro.dalvik.vm.native.bridge=libnb.so` but ships no libnb or arm64 linker, so the arm64 host binaries can't run there: host setup fails (`libbash.so: syntax error`) and the PRoot/desktop runtime can only be verified on a real arm64 device. Kotlin UI, the DocumentsProvider and `~/storage` links can be checked with a staged fake rootfs. If it's stopped, run `docker start redroid` then `adb connect 127.0.0.1:5555`
+- Real device: an arm64 phone (SM-S938B, Android 17) is sometimes attached and shows up as adb serial `emulator-5554`. Check `adb devices -l` for the model before assuming redroid. The user often runs Claude from Termux on that phone, so don't drive its UI while Termux has focus; ask them to tap through and monitor via adb. Release builds aren't debuggable, so diagnose with the debug APK and `run-as`.
+- The Bash tool runs zsh: unquoted `$VAR` isn't word-split and bare `=====` words fail. Wrap multi-step pipelines in `bash -c '…'`, or use scratchpad bash scripts.
 - Fresh checkout prerequisites (the build fails without them):
   - termux-x11 C sources: `git submodule update --init --depth 1 -- $(git config -f .gitmodules --get-regexp 'submodule\.termux-x11.*\.path' | awk '{print $2}')`. Skip `native/termux-packages`, which is huge and only needed to rebuild debs.
   - Host bootstrap (gitignored, ~124 MB, built from the tracked `native/output/<appId>/*.deb`): `python3 scripts/assemble_bootstrap.py --package-name <appId> --mode full && bash scripts/verify_bootstrap.sh <appId>`. `:app:packageHostAssets<Flavor>` fails closed without it.
   - Repo-local git identity, or executor worktrees can't commit: `git config user.name akane && git config user.email hackistek@gmail.com`
 - Executor worktrees get the gitignored `bootstrap.tar` and the termux-x11 sources from the board's `worktreeSetup` (copied from the main checkout); if a worktree build fails on missing assets, check that the main checkout has them.
+- Manual worktrees: initialise termux-x11 submodules with per-command `git -c submodule.<name>.url=<main>/.git/modules/<name>`, never `git config submodule.*.url`, which rewrites the shared `.git/config`. Remove worktrees with `git worktree remove --force --force` once their branch is merged (git refuses worktrees with submodules). Their dirty submodule sources are the build's own patches, same as in the main checkout.
 - Release: follow `.agent/workflows/fdroid-update.md` (commit-identity rule in live-rules). F-Droid metadata: `com.ivarna.fluxlinux.yml` (UpdateCheckMode: Tags).
 
 ## Parallel execution

@@ -22,6 +22,7 @@ _Work items, stories and blockers live on the Sidequest board. This file keeps w
 - 2026-10-20: v2.1.2: terminal opens Ubuntu directly (TerminalToolSelector removed; extras via long-press "+") over a distro picker, because only Ubuntu is installable in this fork. Ubuntu zsh plugin list is built at start-up from what's installed (ZshPluginSet.kt is the source of truth, script copy test-enforced), so partial network installs never print errors.
 - 2026-10-20: v2.1.3: audit remediation (AUDIT_REPORT.md §6; 57 fixed, M14/L8 partial, L29 blocked on a toolchain decision). Chroot root helpers live in root-only /data/adb/fluxlinux/<pkg> and are SHA-256-checked before exec, never /data/local/tmp. PulseAudio uses a private unix socket, not 127.0.0.1:4713. Chroot mounts are guarded by a shared mkdir lock that is identical across 7 scripts (test-enforced).
 - 2026-10-20: v2.1.4: stock Android tar can't run xz, so XFCE `.tar.xz` assets are unpacked by the guest. ProotXfceAssetInstaller must never delete the guest copies in `$PREFIX/tmp/flux_xfce_assets`: doing so in v2.1.3 sent fresh installs into a many-minute `papirus-icon-theme` apt unpack. PRoot guests get `FLUX_PROOT=1` and skip that package. Releases also ship a debug APK (live-rule).
+- 2026-10-20: verify a release candidate on the real phone with the debug APK before publishing, over publishing first, because v2.1.3 shipped an L19 regression (Papirus apt stall) that unit tests couldn't catch and only the device showed.
 - 2026-10-19: redroid (no-KVM host) can't execute the arm64 host binaries (no native bridge libs), so on-device QA there covers UI, provider and links with a staged fake rootfs only.
 
 ## Audit status
@@ -32,7 +33,12 @@ _Work items, stories and blockers live on the Sidequest board. This file keeps w
 | Audit fixes | 2026-10-20 | 57 fixed, M14/L8 partial, L29 blocked; device-unverified | `/audit-remediate` |
 | UI / design | — | — | `/ui-overhaul` phase review |
 | Lint | 2026-10-20 | 0 errors | `./gradlew :app:lintIvarnaDebug -q` |
-| Device QA | 2026-10-19 | redroid: upgrade preserved staged files; SAF roots, ~/storage links, Home, auto-start guard, Settings switch, onboarding OK; runtime not testable | Mobile MCP | Mobile MCP (when configured) or android-emulator-qa fallback skill |
+| Device QA | 2026-10-20 | SM-S938B (Android 17): v2.1.4 fresh install OK, customization in about 2.5 min, bundled Papirus-Dark passes the icon check; desktop start not checked | adb + debug run-as |
+
+## To file (Sidequest was off on 2026-10-20)
+- `ProotXfceAssetInstaller.writeAtomically` uses a fixed `.tmp` name, so two installs running at once can collide.
+- `MountLockTest` adds about 45 s to the unit suite because it waits on real timeouts. Make those timeouts injectable.
+- `.agent/workflows/fdroid-update.md` is stale for this fork: wrong repo (`abhay-byte/fluxlinux`), `assembleRelease`, and no debug APK.
 
 ## Environment notes
 - A fresh checkout needs the termux-x11 submodules and an assembled host bootstrap before any build (see CLAUDE.md Commands). Both were done on this machine on 2026-10-19.

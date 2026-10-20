@@ -8,3 +8,4 @@ globs: ["docs/releases/**"]
 - The debug APK strips `META-INF/**`, so it has no version-control-info. Verify that `aapt2 dump badging` shows the same versionCode/versionName as the release APK.
 - After upload, download both assets and `cmp` them against the local builds.
 - Release notes list both APKs' SHA-256. They also say the debug APK is signed with the debug key and is for diagnosis (`run-as` works), and that it can't update a release install (uninstall first, which deletes app data).
+- Put the APK checksums only in the GitHub release body (a scratch notes file), never in the committed `docs/releases` file: committing them changes HEAD and so the APK. The committed notes point to the release page.

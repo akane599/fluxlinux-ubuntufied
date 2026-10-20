@@ -47,7 +47,7 @@
     },
     {
       "path": "rules/release-commit-identity.md",
-      "hash": "8bf140b0122e55e672f22ac7d14f5ea60b0eafcefe357ce6f58d43583f8496c3",
+      "hash": "bba9eb49a84102a87389e5c3b4b5d05d02901696b341c42c09adc09f355108ad",
       "description": "FluxLinux release commit identity",
       "globs": [
         "fastlane/metadata/**",
@@ -69,7 +69,7 @@
     },
     {
       "path": "rules/release-debug-apk.md",
-      "hash": "f844a651611353c6a5dac5f796e50f134ca9c2b3e994cde5c627536777884284",
+      "hash": "aa95f0b06f2dbecaa2fc1b7c84e0e5d7d93a19b24a72226d42357e900db80825",
       "description": "FluxLinux releases ship a debug APK too",
       "globs": [
         "docs/releases/**"
