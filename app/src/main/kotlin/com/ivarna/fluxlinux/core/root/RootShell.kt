@@ -91,9 +91,15 @@ object RootShell {
      * Capture stdout + exit code of a root command (blocking).
      * Background thread only.
      *
-     * @param timeoutMs 0 = wait forever; >0 kills process after timeout (exitCode -2).
+     * The root shell reports its pid first (see [wrapWithPidMarker]); on timeout or cancel the
+     * whole root process tree is killed through a fresh su ([killRootTree]) instead of only the
+     * su client, so tar/apt/dpkg children cannot keep running or hold the output pipe (H3).
+     * Cancel = [processHolder] no longer holds this job's Process (the owner cleared or
+     * replaced it, e.g. `getAndSet(null)?.destroyForcibly()`); prefer [cancelRootJob].
+     *
+     * @param timeoutMs 0 = wait forever; >0 kills the job tree after timeout (exitCode -2).
      * @param onLine optional live line callback (reader thread) for install UIs.
-     * @param processHolder optional live Process for cancel/destroyForcibly.
+     * @param processHolder optional live Process for cancel.
      * @return [CaptureResult] with exitCode -1 if no su / exception, -2 on timeout.
      */
     fun captureResult(
@@ -104,97 +110,175 @@ object RootShell {
     ): CaptureResult {
         val inv = resolveSuInvocation() ?: return CaptureResult(-1, "")
         return try {
-            val args = buildSuArgs(inv, cmd)
+            val args = buildSuArgs(inv, wrapWithPidMarker(cmd))
             val pb = ProcessBuilder(args).redirectErrorStream(true).start()
             try { pb.outputStream.close() } catch (_: Exception) {}
+            val rootPid = AtomicReference<RootPid?>(null)
+            liveRootJobs[pb] = rootPid
             processHolder?.set(pb)
             try {
-                if (onLine != null) {
-                    // Stream lines while process runs (install progress).
-                    val sb = StringBuilder()
-                    val readerThread = Thread {
-                        try {
-                            pb.inputStream.bufferedReader().use { reader ->
-                                var line: String?
-                                while (reader.readLine().also { line = it } != null) {
-                                    val l = line ?: continue
-                                    synchronized(sb) { sb.append(l).append('\n') }
+                val sb = StringBuilder()
+                val readerThread = Thread {
+                    try {
+                        pb.inputStream.bufferedReader().use { reader ->
+                            var first = true
+                            var line: String?
+                            while (reader.readLine().also { line = it } != null) {
+                                val l = line ?: continue
+                                if (first) {
+                                    first = false
+                                    val marker = parsePidMarker(l)
+                                    if (marker != null) {
+                                        rootPid.set(marker)
+                                        continue
+                                    }
+                                }
+                                synchronized(sb) { sb.append(l).append('\n') }
+                                if (onLine != null) {
                                     try {
                                         onLine(l)
                                     } catch (_: Exception) {
                                     }
                                 }
                             }
-                        } catch (_: Exception) {
                         }
-                    }.also { it.isDaemon = true; it.start() }
+                    } catch (_: Exception) {
+                    }
+                }.also { it.isDaemon = true; it.start() }
 
-                    val finished = if (timeoutMs > 0L) {
-                        pb.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-                    } else {
-                        pb.waitFor()
-                        true
+                val deadline = if (timeoutMs > 0L) System.nanoTime() + timeoutMs * 1_000_000 else Long.MAX_VALUE
+                var cancelled = false
+                var timedOut = false
+                while (!pb.waitFor(POLL_MS, TimeUnit.MILLISECONDS)) {
+                    if (processHolder != null && processHolder.get() !== pb) {
+                        cancelled = true
+                        break
                     }
-                    if (!finished) {
-                        pb.destroyForcibly()
-                        try {
-                            readerThread.join(500)
-                        } catch (_: Exception) {
-                        }
-                        Log.w(TAG, "capture timeout after ${timeoutMs}ms cmd=${cmd.take(80)}")
-                        val partial = synchronized(sb) { sb.toString() }
-                        return CaptureResult(-2, partial)
+                    if (System.nanoTime() - deadline >= 0) {
+                        timedOut = true
+                        break
                     }
-                    try {
-                        readerThread.join(5_000)
-                    } catch (_: Exception) {
-                    }
-                    val code = try {
-                        pb.exitValue()
-                    } catch (_: Exception) {
-                        -1
-                    }
-                    CaptureResult(code, synchronized(sb) { sb.toString() })
-                } else {
-                    val outFuture = executor.submit<String> {
-                        pb.inputStream.bufferedReader().use { it.readText() }
-                    }
-                    val finished = if (timeoutMs > 0L) {
-                        pb.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-                    } else {
-                        pb.waitFor()
-                        true
-                    }
-                    if (!finished) {
-                        pb.destroyForcibly()
-                        val partial = try {
-                            outFuture.get(500, TimeUnit.MILLISECONDS)
-                        } catch (_: Exception) {
-                            ""
-                        }
-                        Log.w(TAG, "capture timeout after ${timeoutMs}ms cmd=${cmd.take(80)}")
-                        return CaptureResult(-2, partial)
-                    }
-                    val out = try {
-                        outFuture.get(5, TimeUnit.SECONDS)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "capture read failed: ${e.message}")
-                        ""
-                    }
-                    val code = try {
-                        pb.exitValue()
-                    } catch (_: Exception) {
-                        -1
-                    }
-                    CaptureResult(code, out)
                 }
+                if (!cancelled && processHolder != null && processHolder.get() !== pb) {
+                    // Owner destroyed the su client: the root side may still be running.
+                    cancelled = true
+                }
+                if (timedOut || cancelled) {
+                    killRootTree(rootPid.get())
+                    pb.destroyForcibly()
+                    try {
+                        pb.waitFor(2, TimeUnit.SECONDS)
+                        readerThread.join(1_000)
+                    } catch (_: Exception) {
+                    }
+                    val partial = synchronized(sb) { sb.toString() }
+                    if (timedOut) {
+                        Log.w(TAG, "capture timeout after ${timeoutMs}ms cmd=${cmd.take(80)}")
+                        return CaptureResult(-2, partial)
+                    }
+                    Log.w(TAG, "capture cancelled cmd=${cmd.take(80)}")
+                    val code = try { pb.exitValue() } catch (_: Exception) { -1 }
+                    return CaptureResult(if (code == 0) -1 else code, partial)
+                }
+                try {
+                    readerThread.join(5_000)
+                } catch (_: Exception) {
+                }
+                val code = try {
+                    pb.exitValue()
+                } catch (_: Exception) {
+                    -1
+                }
+                CaptureResult(code, synchronized(sb) { sb.toString() })
             } finally {
+                liveRootJobs.remove(pb)
                 processHolder?.compareAndSet(pb, null)
             }
         } catch (e: Exception) {
             Log.w(TAG, "capture failed: ${e.message}")
             CaptureResult(-1, "")
         }
+    }
+
+    /**
+     * Cancel a root job started by [captureResult] / [execute]: kill its whole root process
+     * tree via a fresh su, then the su client. Safe on any Process (non-root ones are just
+     * destroyed). Blocking (one short su call): background thread only.
+     */
+    fun cancelRootJob(process: Process?) {
+        if (process == null) return
+        killRootTree(liveRootJobs[process]?.get())
+        process.destroyForcibly()
+    }
+
+    // ── H3: root process-tree tracking ──────────────────────────────────────
+
+    private const val POLL_MS = 200L
+    internal const val ROOT_PID_MARKER = "__FLUX_ROOT_PID__"
+
+    /** Live root jobs: su client Process -> root shell pid (filled from the marker line). */
+    private val liveRootJobs = java.util.concurrent.ConcurrentHashMap<Process, AtomicReference<RootPid?>>()
+
+    /** Root shell identity: pid plus `/proc/pid/stat` starttime (guards against pid reuse). */
+    internal data class RootPid(val pid: Int, val startTime: String)
+
+    /**
+     * Prefix [cmd] so the root shell first prints `__FLUX_ROOT_PID__ <pid> <starttime>`.
+     * Builtins only (read/set/echo): no fork, works in mksh, toybox/busybox sh and dash.
+     */
+    internal fun wrapWithPidMarker(cmd: String): String =
+        "{ read -r _fs < /proc/\$\$/stat; } 2>/dev/null; _fs=\${_fs##*) }; set -- \$_fs; " +
+            "echo \"$ROOT_PID_MARKER \$\$ \${20}\"; set --; unset _fs; $cmd"
+
+    internal fun parsePidMarker(line: String): RootPid? {
+        val parts = line.trim().split(Regex("\\s+"))
+        if (parts.size < 2 || parts[0] != ROOT_PID_MARKER) return null
+        val pid = parts[1].toIntOrNull()?.takeIf { it > 1 } ?: return null
+        return RootPid(pid, parts.getOrNull(2)?.takeIf { s -> s.all { it.isDigit() } }.orEmpty())
+    }
+
+    /**
+     * Root script: SIGSTOP then SIGKILL [p] and every descendant (ppid walk over /proc), plus
+     * its process group / session members when the root shell leads them (Magisk-style setsid),
+     * which also catches children re-parented to init. No-op when the pid is gone or its
+     * starttime changed. Never signals a group the shell does not lead (under KernelSU the root
+     * shell can share the app's process group).
+     */
+    internal fun buildTreeKillScript(p: RootPid): String = """
+        P=${p.pid}; ST='${p.startTime}'
+        { read -r s < /proc/${'$'}P/stat; } 2>/dev/null || exit 0
+        s=${'$'}{s##*) }; set -- ${'$'}s
+        [ -z "${'$'}ST" ] || [ "${'$'}{20}" = "${'$'}ST" ] || exit 0
+        G=""; [ "${'$'}3" = "${'$'}P" ] && G=${'$'}P
+        S=""; [ "${'$'}4" = "${'$'}P" ] && S=${'$'}P
+        all=" ${'$'}P "; front="${'$'}P"
+        while [ -n "${'$'}front" ]; do
+          next=""
+          for f in /proc/[0-9]*/stat; do
+            { read -r s < "${'$'}f"; } 2>/dev/null || continue
+            q=${'$'}{f#/proc/}; q=${'$'}{q%/stat}
+            [ "${'$'}q" = "${'$'}${'$'}" ] && continue
+            case "${'$'}all" in *" ${'$'}q "*) continue ;; esac
+            s=${'$'}{s##*) }; set -- ${'$'}s
+            hit=""
+            case " ${'$'}front " in *" ${'$'}2 "*) hit=1 ;; esac
+            [ -n "${'$'}G" ] && [ "${'$'}3" = "${'$'}G" ] && hit=1
+            [ -n "${'$'}S" ] && [ "${'$'}4" = "${'$'}S" ] && hit=1
+            if [ -n "${'$'}hit" ]; then all="${'$'}all${'$'}q "; next="${'$'}next ${'$'}q"; fi
+          done
+          front=${'$'}next
+        done
+        kill -STOP ${'$'}all 2>/dev/null
+        kill -9 ${'$'}all 2>/dev/null
+        echo "killed:${'$'}all"
+    """.trimIndent()
+
+    /** Kill a tracked root job tree through a fresh su (never wrapped, bounded). */
+    private fun killRootTree(rootPid: RootPid?) {
+        if (rootPid == null) return
+        val inv = cachedSuInvocation ?: return
+        val code = runCommand(buildSuArgs(inv, buildTreeKillScript(rootPid)), onLine = null, timeoutMs = 10_000L)
+        Log.i(TAG, "killRootTree pid=${rootPid.pid} exit=$code")
     }
 
     /**
@@ -213,7 +297,7 @@ object RootShell {
                 mainHandler.post { onLine("[RootShell] ERROR: no working su binary") }
                 -1
             } else {
-                runCommand(buildSuArgs(inv, cmd), onLine)
+                runCommand(buildSuArgs(inv, wrapWithPidMarker(cmd)), onLine, tracked = true)
             }
             mainHandler.post { onDone(code) }
         }
@@ -229,7 +313,12 @@ object RootShell {
      */
     fun executeSync(cmd: String, timeoutMs: Long = SYNC_TIMEOUT_MS): Int {
         val inv = resolveSuInvocation() ?: return -1
-        return runCommand(buildSuArgs(inv, cmd), onLine = null, timeoutMs = timeoutMs)
+        return runCommand(
+            buildSuArgs(inv, wrapWithPidMarker(cmd)),
+            onLine = null,
+            timeoutMs = timeoutMs,
+            tracked = true,
+        )
     }
 
     /**
@@ -268,7 +357,11 @@ object RootShell {
                 mainHandler.post { onLine("[RootShell] ERROR: no working su binary") }
                 -1
             } else {
-                runCommand(buildSuArgs(inv, "sh \"$stagedPath\""), onLine)
+                runCommand(
+                    buildSuArgs(inv, wrapWithPidMarker("sh \"$stagedPath\"")),
+                    onLine,
+                    tracked = true,
+                )
             }
             mainHandler.post { onDone(code) }
         }
@@ -657,6 +750,7 @@ object RootShell {
         args: List<String>,
         onLine: ((String) -> Unit)?,
         timeoutMs: Long = 0L,
+        tracked: Boolean = false,
     ): Int {
         Log.d(TAG, "runCommand: ${args.joinToString(" ").take(200)}")
         return try {
@@ -665,12 +759,23 @@ object RootShell {
                 .start()
             try { pb.outputStream.close() } catch (_: Exception) {}
 
+            val rootPid = AtomicReference<RootPid?>(null)
+            if (tracked) liveRootJobs[pb] = rootPid
             val reader = Thread {
                 try {
                     BufferedReader(InputStreamReader(pb.inputStream)).use { r ->
+                        var first = tracked
                         var line: String?
                         while (r.readLine().also { line = it } != null) {
                             val l = line ?: continue
+                            if (first) {
+                                first = false
+                                val marker = parsePidMarker(l)
+                                if (marker != null) {
+                                    rootPid.set(marker)
+                                    continue
+                                }
+                            }
                             Log.d(TAG, l)
                             if (onLine != null) mainHandler.post { onLine(l) }
                         }
@@ -688,11 +793,14 @@ object RootShell {
                 true
             }
             if (!finished) {
+                if (tracked) killRootTree(rootPid.get())
                 pb.destroyForcibly()
+                liveRootJobs.remove(pb)
                 reader.join(500)
                 Log.w(TAG, "runCommand timeout after ${timeoutMs}ms")
                 return -2
             }
+            liveRootJobs.remove(pb)
             // Grandchildren may keep the pipe open; bound the drain.
             reader.join(5_000)
             val code = pb.exitValue()
