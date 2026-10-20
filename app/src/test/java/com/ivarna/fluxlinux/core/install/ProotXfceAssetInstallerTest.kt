@@ -1,5 +1,6 @@
 package com.ivarna.fluxlinux.core.install
 
+import com.ivarna.fluxlinux.core.install.ProotXfceAssetInstaller.Extract
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -207,5 +208,23 @@ class ProotXfceAssetInstallerTest {
         assertTrue(ProotXfceAssetInstaller.isMissingXz(1, "sh: xz: not found"))
         assertFalse(ProotXfceAssetInstaller.isMissingXz(2, "xz: (stdin): Compressed data is corrupt"))
         assertFalse(ProotXfceAssetInstaller.isMissingXz(1, "tar: short read"))
+    }
+
+    @Test
+    fun classifyHostTar_mapsExitCodeAndOutput() {
+        assertEquals(Extract.OK, ProotXfceAssetInstaller.classifyHostTar(xz = true, exitCode = 0, output = ""))
+        assertEquals(Extract.OK, ProotXfceAssetInstaller.classifyHostTar(xz = false, exitCode = 0, output = ""))
+        assertEquals(Extract.UNAVAILABLE, ProotXfceAssetInstaller.classifyHostTar(xz = true, exitCode = 127, output = ""))
+        assertEquals(
+            Extract.UNAVAILABLE,
+            ProotXfceAssetInstaller.classifyHostTar(xz = true, exitCode = 1, output = "tar: exec xz: No such file or directory"),
+        )
+        assertEquals(Extract.FAILED, ProotXfceAssetInstaller.classifyHostTar(xz = false, exitCode = 127, output = ""))
+        assertEquals(
+            Extract.FAILED,
+            ProotXfceAssetInstaller.classifyHostTar(xz = false, exitCode = 1, output = "tar: exec xz: No such file or directory"),
+        )
+        assertEquals(Extract.FAILED, ProotXfceAssetInstaller.classifyHostTar(xz = true, exitCode = 2, output = "xz: (stdin): Compressed data is corrupt"))
+        assertEquals(Extract.FAILED, ProotXfceAssetInstaller.classifyHostTar(xz = false, exitCode = 1, output = "tar: short read"))
     }
 }

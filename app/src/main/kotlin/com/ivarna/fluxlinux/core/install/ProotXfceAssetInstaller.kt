@@ -26,8 +26,6 @@ import java.nio.file.StandardCopyOption
 object ProotXfceAssetInstaller {
 
     private const val TAG = "ProotXfceAssets"
-    private const val GH_BASE =
-        "https://github.com/abhay-byte/fluxlinux/releases/download/debian-v1"
 
     /** Sole icon set we ship / install. */
     const val ICON_NAME = "Papirus-Dark"
@@ -136,7 +134,7 @@ object ProotXfceAssetInstaller {
             // Guest /tmp maps here with proot --shared-tmp (fallback path for script).
             shared = File(TermuxHostPaths.TMPDIR, "flux_xfce_assets"),
             openAsset = { app.assets.open(it) },
-            extract = { archive, dest, onlyPrefix -> hostTarExtract(archive, dest, stripXz = true, onlyPrefix, onLog) },
+            extract = { archive, dest, onlyPrefix -> hostTarExtract(archive, dest, onlyPrefix, onLog) },
             onLog = onLog,
         )
     }
@@ -422,17 +420,23 @@ object ProotXfceAssetInstaller {
     internal fun isMissingXz(exitCode: Int, output: String): Boolean =
         exitCode == 127 || output.contains("exec xz") || Regex("""\bxz: (not found|No such file)""").containsMatchIn(output)
 
+    /** Maps a host `tar` run to an [Extract]; only an xz archive can be [Extract.UNAVAILABLE]. */
+    internal fun classifyHostTar(xz: Boolean, exitCode: Int, output: String): Extract = when {
+        exitCode == 0 -> Extract.OK
+        xz && isMissingXz(exitCode, output) -> Extract.UNAVAILABLE
+        else -> Extract.FAILED
+    }
+
     /**
      * @param onlyPrefix if set, pass as additional tar path args (e.g. "Papirus-Dark")
      */
     private fun hostTarExtract(
         archive: File,
         destDir: File,
-        stripXz: Boolean,
         onlyPrefix: String?,
         onLog: (String) -> Unit
     ): Extract {
-        val xz = archive.name.endsWith(".tar.xz") || stripXz && archive.name.endsWith(".xz")
+        val xz = archive.name.endsWith(".tar.xz") || archive.name.endsWith(".xz")
         if (xz && hostXzMissing) return Extract.UNAVAILABLE
         destDir.mkdirs()
         val tarBin = when {
@@ -461,69 +465,19 @@ object ProotXfceAssetInstaller {
             val proc = pb.start()
             val out = proc.inputStream.bufferedReader().readText()
             val code = proc.waitFor()
-            when {
-                code == 0 -> Extract.OK
-                xz && isMissingXz(code, out) -> {
+            val result = classifyHostTar(xz, code, out)
+            when (result) {
+                Extract.UNAVAILABLE -> {
                     hostXzMissing = true
                     onLog("Host tar has no xz — leaving .tar.xz archives to the guest")
-                    Extract.UNAVAILABLE
                 }
-                else -> {
-                    onLog("tar exit $code: ${out.take(400)}")
-                    Extract.FAILED
-                }
+                Extract.FAILED -> onLog("tar exit $code: ${out.take(400)}")
+                Extract.OK -> Unit
             }
+            result
         } catch (e: Exception) {
             onLog("tar failed: ${e.message}")
             Extract.FAILED
-        }
-    }
-
-    /** Legacy icons.zip → nested tar.gz; extract only [onlyIcon] if present. */
-    private fun hostUnzipNestedTars(
-        zip: File,
-        destDir: File,
-        onlyIcon: String,
-        onLog: (String) -> Unit
-    ): Boolean {
-        val tmp = File(zip.parentFile, "icons_unpack").also {
-            SafeFiles.deleteTree(it)
-            it.mkdirs()
-        }
-        return try {
-            val pb = ProcessBuilder("unzip", "-q", "-o", zip.absolutePath, "-d", tmp.absolutePath)
-            pb.redirectErrorStream(true)
-            val p = pb.start()
-            p.inputStream.bufferedReader().readText()
-            if (p.waitFor() != 0) return false
-            val tars = mutableListOf<File>()
-            SafeFiles.walkNoFollow(tmp) { f, attrs ->
-                if (attrs.isRegularFile &&
-                    (f.name.endsWith(".tar.gz") || f.name.endsWith(".tar.xz") || f.name.endsWith(".tgz"))
-                ) {
-                    tars += f
-                }
-            }
-            var any = false
-            for (t in tars) {
-                val ok = hostTarExtract(
-                    t, destDir,
-                    stripXz = t.name.endsWith(".xz"),
-                    onlyPrefix = onlyIcon,
-                    onLog
-                ) == Extract.OK
-                if (ok) any = true
-            }
-            // If path filter failed (archive layout differs), full extract of first tar
-            if (!any && tars.isNotEmpty()) {
-                any = hostTarExtract(tars.first(), destDir, stripXz = false, onlyPrefix = null, onLog) == Extract.OK
-            }
-            any
-        } catch (e: Exception) {
-            onLog("unzip icons failed: ${e.message}")
-            false
-        } finally {
-            SafeFiles.deleteTree(tmp)
         }
     }
 }
