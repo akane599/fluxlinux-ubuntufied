@@ -66,6 +66,28 @@
       "priority": 0,
       "enabled": true,
       "include": []
+    },
+    {
+      "path": "rules/release-debug-apk.md",
+      "hash": "f844a651611353c6a5dac5f796e50f134ca9c2b3e994cde5c627536777884284",
+      "description": "FluxLinux releases ship a debug APK too",
+      "globs": [
+        "docs/releases/**"
+      ],
+      "dirs": [],
+      "prompt": [
+        "release",
+        "tag",
+        "version bump",
+        "fdroid",
+        "f-droid",
+        "changelog",
+        "publish",
+        "push apk"
+      ],
+      "priority": 0,
+      "enabled": true,
+      "include": []
     }
   ]
 }
