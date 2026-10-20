@@ -230,11 +230,19 @@ public final class TerminalSession extends TerminalOutput {
         notifyScreenUpdate();
     }
 
-    /** Finish this terminal session by sending SIGKILL to the shell. */
+    /**
+     * Finish this terminal session by sending SIGKILL to the shell.
+     * No-op until the shell has started: an unstarted session has pid 0, and
+     * kill(0, …) would signal the app's own process group.
+     */
     public void finishIfRunning() {
-        if (isRunning()) {
+        final int pid;
+        synchronized (this) {
+            pid = mShellPid;
+        }
+        if (pid > 0) {
             try {
-                Os.kill(mShellPid, OsConstants.SIGKILL);
+                Os.kill(pid, OsConstants.SIGKILL);
             } catch (ErrnoException e) {
                 mClient.logWarn(LOG_TAG, "Failed sending SIGKILL: " + e.getMessage());
             }

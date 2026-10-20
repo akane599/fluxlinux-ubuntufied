@@ -119,10 +119,7 @@ object SessionRegistry {
     fun closeSession(ctx: Context, index: Int) {
         if (index < 0 || index >= sessionsList.size) return
         val managed = sessionsList[index]
-        try {
-            managed.session?.finishIfRunning()
-        } catch (_: Exception) {
-        }
+        killIfStarted(managed)
         sessionsList.removeAt(index)
         _revision.value++
         if (_activeIndex.value == index) {
@@ -133,16 +130,22 @@ object SessionRegistry {
     }
 
     fun closeAll(ctx: Context) {
-        for (m in sessionsList) {
-            try {
-                m.session?.finishIfRunning()
-            } catch (_: Exception) {
-            }
-        }
+        for (m in sessionsList) killIfStarted(m)
         sessionsList.clear()
         _revision.value++
         _activeIndex.value = -1
         updateService(ctx)
+    }
+
+    /**
+     * SIGKILL the shell only once it has a real pid: an unstarted session has
+     * pid 0, and kill(0, …) would hit the app's own process group (M6).
+     */
+    private fun killIfStarted(managed: ManagedSession) {
+        try {
+            managed.session?.takeIf { it.pid > 0 }?.finishIfRunning()
+        } catch (_: Exception) {
+        }
     }
 
     /** Attach the active session to a TerminalView (called when TerminalScreen shows). */
