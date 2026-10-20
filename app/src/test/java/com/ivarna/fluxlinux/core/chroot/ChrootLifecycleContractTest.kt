@@ -100,6 +100,21 @@ class ChrootLifecycleContractTest {
     }
 
     @Test
+    fun chrootGuests_usePulseUnixSocketThroughHostTmp() {
+        val names = listOf(
+            "fluxlinux_chroot.sh", "setup_debian13_chroot.sh",
+            "start_guest_gui.sh", "start_debian13_gui.sh", "start_alpine_gui.sh",
+        )
+        for (name in names) {
+            val src = chrootScript(name)
+            assertFalse("$name: anonymous TCP pulse", src.contains("PULSE_SERVER=tcp:"))
+            assertTrue(name, src.contains("PULSE_SERVER=unix:/mnt/host-tmp/pulse-native"))
+        }
+        // The socket is reached through the host-tmp bind; keep it.
+        assertTrue(chrootScript("fluxlinux_chroot.sh").contains("bind_if_missing \"\$FLUX_HOST_TMP\" \"\$FLUX_CHROOT/mnt/host-tmp\""))
+    }
+
+    @Test
     fun setupClearsStaleUninstallingMarkerWhenConfigured() {
         val src = chrootScript("setup_guest_chroot.sh")
         assertTrue(src.contains("rm -f \"\$GUESTPATH/.flux_uninstalling\""))

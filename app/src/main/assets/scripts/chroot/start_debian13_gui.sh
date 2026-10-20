@@ -219,7 +219,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export TMPDIR=/tmp
 su - $USERNAME -c '
   export DISPLAY=:0
-  export PULSE_SERVER=tcp:127.0.0.1
+  export PULSE_SERVER=unix:/mnt/host-tmp/pulse-native
   export XDG_RUNTIME_DIR=/tmp
   export VTEST_SOCKET_NAME=/mnt/host-tmp/.virgl_test
 

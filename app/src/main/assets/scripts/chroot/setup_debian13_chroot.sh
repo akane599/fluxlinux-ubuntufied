@@ -328,7 +328,7 @@ sh "\$HELPER" sh --user root -- \\
 echo "Starting Debian 13 Chroot GUI (\$USERNAME) via SSOT helper..."
 echo "NOTE: Prefer app Settings START (start_gui_chroot.sh) for Pulse/X11 host stack."
 exec sh "\$HELPER" sh --user "\$USERNAME" -- \\
-  'export DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1 XDG_RUNTIME_DIR=/tmp VTEST_SOCKET_NAME=/mnt/host-tmp/.virgl_test; xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; exec dbus-launch --exit-with-session startxfce4'
+  'export DISPLAY=:0 PULSE_SERVER=unix:/mnt/host-tmp/pulse-native XDG_RUNTIME_DIR=/tmp VTEST_SOCKET_NAME=/mnt/host-tmp/.virgl_test; xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; exec dbus-launch --exit-with-session startxfce4'
 EOF
     chmod 755 "$LAUNCH_SCRIPT"
     success "GUI Launch script created (SSOT thin wrapper)."

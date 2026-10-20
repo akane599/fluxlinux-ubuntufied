@@ -195,7 +195,7 @@ fi
 su -s \"\$FLUX_SU_SHELL\" - $USERNAME -c '
   unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID DBUS_SESSION_BUS_WINDOWID
   export DISPLAY=:0
-  export PULSE_SERVER=tcp:127.0.0.1
+  export PULSE_SERVER=unix:/mnt/host-tmp/pulse-native
   export XDG_CONFIG_DIRS=/etc/xdg
   export XDG_DATA_DIRS=/usr/local/share:/usr/share
   export HOME=/home/$USERNAME
