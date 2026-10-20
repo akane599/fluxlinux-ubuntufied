@@ -41,6 +41,10 @@ import com.termux.x11.input.TouchInputHandler;
 import com.termux.x11.utils.SamsungDexUtils;
 
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 import java.util.regex.PatternSyntaxException;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -62,6 +66,21 @@ public class LorieView extends SurfaceView implements InputStub {
     private long lastClipboardTimestamp = System.currentTimeMillis();
     private boolean keyboardVisible = false;
     private long mNativeContext;
+
+    // Text is typed one code point at a time with a short gap so X clients see each temporary
+    // keysym mapping; that pacing runs here, off the UI thread. Key events sent while text is
+    // still queued go through the same worker so they keep their order (e.g. IME DEL + retype).
+    private static final long TEXT_EVENT_SPACING_NS = 2_500_000L;
+    private static final ExecutorService textSender = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "LorieTextSender");
+        t.setDaemon(true);
+        return t;
+    });
+    // Guards mNativeContext against nativeDestroy while the worker uses it.
+    private final Object nativeLock = new Object();
+    // Tasks queued on textSender and not finished yet. Only the UI thread enqueues, so zero means
+    // nothing sent earlier is still pending and a key may go straight out.
+    private final AtomicInteger pendingQueued = new AtomicInteger();
     private static boolean clipboardSyncEnabled = false;
     private static boolean hardwareKbdScancodesWorkaround = false;
     private final InputMethodManager mIMM = (InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -323,8 +342,10 @@ public class LorieView extends SurfaceView implements InputStub {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        nativeDestroy(mNativeContext);
-        mNativeContext = 0;
+        synchronized (nativeLock) {
+            nativeDestroy(mNativeContext);
+            mNativeContext = 0;
+        }
     }
 
     public void setCallback(Callback callback) {
@@ -734,11 +755,52 @@ public class LorieView extends SurfaceView implements InputStub {
     public void sendLockKeysState(int state) { sendLockKeysState(mNativeContext, state); }
     @FastNative private native void sendLockKeysState(long ptr, int state);
 
-    public boolean sendKeyEvent(int scanCode, int keyCode, boolean keyDown) { return sendKeyEvent(mNativeContext, scanCode, keyCode, keyDown); }
+    public boolean sendKeyEvent(int scanCode, int keyCode, boolean keyDown) {
+        if (pendingQueued.get() == 0)
+            return sendKeyEvent(mNativeContext, scanCode, keyCode, keyDown);
+
+        markUserActivity();
+        enqueue(() -> {
+            synchronized (nativeLock) {
+                if (mNativeContext != 0)
+                    sendKeyEvent(mNativeContext, scanCode, keyCode, keyDown);
+            }
+        });
+        return true;
+    }
     @FastNative private native boolean sendKeyEvent(long ptr, int scanCode, int keyCode, boolean keyDown);
 
-    public void sendTextEvent(byte[] text) { sendTextEvent(mNativeContext, text); }
-    @FastNative private native void sendTextEvent(long ptr, byte[] text);
+    public void sendTextEvent(byte[] text) {
+        markUserActivity();
+        if (text == null || text.length == 0)
+            return;
+
+        final int[] codePoints = new String(text, UTF_8).codePoints().toArray();
+        enqueue(() -> {
+            for (int i = 0; i < codePoints.length && codePoints[i] != 0; i++) {
+                synchronized (nativeLock) {
+                    if (mNativeContext == 0)
+                        return;
+                    sendUnicodeEvent(mNativeContext, codePoints[i]);
+                }
+                if (i + 1 < codePoints.length)
+                    LockSupport.parkNanos(TEXT_EVENT_SPACING_NS);
+            }
+        });
+    }
+    // Not @FastNative: called from the text worker, and the X server write may block.
+    private native void sendUnicodeEvent(long ptr, int codePoint);
+
+    private void enqueue(Runnable task) {
+        pendingQueued.incrementAndGet();
+        textSender.execute(() -> {
+            try {
+                task.run();
+            } finally {
+                pendingQueued.decrementAndGet();
+            }
+        });
+    }
 
     public boolean requestConnection() { return requestConnection(mNativeContext); }
     @CriticalNative private static native boolean requestConnection(long ptr);

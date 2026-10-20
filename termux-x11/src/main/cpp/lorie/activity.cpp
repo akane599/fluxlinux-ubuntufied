@@ -376,43 +376,6 @@ static void startLogcat(JNIEnv *env, __unused jclass clazz, __unused jlong ptr, 
     }
 }
 
-static void sendTextEvent(JNIEnv *env, __unused jobject thiz, jlong ptr, jbyteArray text) {
-    lastInputTimestampMs = nowMs();
-    auto* r = (LorieViewResources*) ptr;
-    if (r && r->connFd != -1 && text) {
-        jsize length = env->GetArrayLength(text);
-        jbyte *str = env->GetByteArrayElements(text, NULL);
-        char *p = (char*) str;
-        mbstate_t mbstate = { 0 };
-        if (!length)
-            return;
-
-        log(DEBUG, "Sending text (%d bytes)", length);
-
-        while (*p) {
-            wchar_t wc;
-            size_t len = mbrtowc(&wc, p, MB_CUR_MAX, &mbstate);
-
-            if (len == (size_t)-1 || len == (size_t)-2) {
-                log(ERROR, "Invalid UTF-8 sequence encountered");
-                break;
-            }
-
-            if (len == 0)
-                break;
-
-            lorieEvent e = { .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) wc } };
-            lorieActivitySend(&r->connFd, &e, sizeof(e), NULL, 0);
-            p += len;
-            if (p - (char*) str >= length)
-                break;
-            usleep(2500);
-        }
-
-        env->ReleaseByteArrayElements(text, str, JNI_ABORT);
-    }
-}
-
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
     JNIEnv* env;
     static JNINativeMethod methods[] = {
@@ -530,7 +493,11 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
                 }
                 return true;
             }},
-            {"sendTextEvent", "(J[B)V", (void *)&sendTextEvent},
+            // Called per code point from LorieView's text worker thread, which does the pacing.
+            {"sendUnicodeEvent", "(JI)V", (void *) +[](__unused JNIEnv *env, __unused jobject thiz, jlong ptr, jint code) {
+                auto* r = (LorieViewResources*) ptr;
+                sendEvent(r, .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) code });
+            }},
             {"requestConnection", "(J)Z", (void *)&requestConnection},
             {"getLastInputTimestamp", "()J", (void *) +[](__unused JNIEnv* env, __unused jclass clazz) -> jlong {
                 return (jlong) lastInputTimestampMs;
