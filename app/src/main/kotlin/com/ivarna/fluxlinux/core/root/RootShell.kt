@@ -594,11 +594,12 @@ object RootShell {
         return try {
             val bbOk = ensureBusyBoxResolver(ctx)
             val ok = stageVerified(ctx, ChrootPaths.CHROOT_HELPER_ASSET, ChrootPaths.CHROOT_HELPER)
-            if (!ok) {
-                Log.w(TAG, "ensureChrootHelper: stage/verify failed")
+            if (!ok || !bbOk) {
+                // The helper sources its stage-dir resolver sidecar: both must be verified.
+                Log.w(TAG, "ensureChrootHelper: stage/verify failed helper=$ok resolver=$bbOk")
                 return false
             }
-            chrootHelperReady.set(bbOk)
+            chrootHelperReady.set(true)
             true
         } catch (e: Exception) {
             Log.w(TAG, "ensureChrootHelper failed: ${e.message}")
@@ -696,10 +697,17 @@ object RootShell {
             "{ rm -f ${LEGACY_ARTIFACTS.joinToString(" ") { "'$it'" }} 2>/dev/null; true; }"
 
     /**
-     * Ensure [dest] (inside the root-only stage dir) holds exactly [asset]: no-op when the
+     * Ensure [dest] holds exactly APK [asset] (SHA-256-verified, temp + rename): no-op when the
      * hash already matches, else copy from the app-private staged copy, else stream base64.
+     * [dest] must be a direct child of [ChrootPaths.ROOT_STAGE_DIR] (root:root 0700, created
+     * here); anything else is refused. Then run it as root with `sh '<dest>'` and nothing
+     * else in between. Blocking (su): background thread only. Returns false on any failure.
      */
-    private fun stageVerified(ctx: Context, asset: String, dest: String): Boolean {
+    fun stageVerified(ctx: Context, asset: String, dest: String): Boolean {
+        if (File(dest).parent != ChrootPaths.ROOT_STAGE_DIR || dest.contains('\'')) {
+            Log.w(TAG, "stageVerified refused dest outside root stage: $dest")
+            return false
+        }
         return try {
             val sha = assetSha256(ctx, asset) ?: return false
             if (captureResult("$SHA_FN; ${shaMatches(dest, sha)}", timeoutMs = 8_000L).exitCode == 0) {
@@ -801,15 +809,43 @@ object RootShell {
         if (sha == null) {
             return env + "echo '[RootShell] helper hash unknown — open a chroot session once to stage $helper' >&2; exit 127"
         }
+        val resolverSha = expectedSha(BusyBoxPaths.RESOLVER_ASSET)
+            ?: return env + "echo '[RootShell] resolver hash unknown — open a chroot session once to stage it' >&2; exit 127"
         return env + "$SHA_FN; " +
-            "if ! ${shaMatches(helper, sha)}; then ${stageDirSnippet()} && " +
+            selfHealSnippet(helper, sha, "fluxlinux_chroot.sh", pkg) +
+            selfHealSnippet(BusyBoxPaths.RESOLVER_ON_DEVICE, resolverSha, "resolve_bb.sh", pkg) +
+            helperGuardBody(sha, resolverSha) +
+            "sh '$helper' b64 --user $user -- $b64"
+    }
+
+    /** Re-stage [dest] from the app-private copies (verified before rename) when it fails its hash. */
+    private fun selfHealSnippet(dest: String, sha: String, name: String, pkg: String): String =
+        "if ! ${shaMatches(dest, sha)}; then ${stageDirSnippet()} && " +
             "for _s in " +
-            "/data/data/$pkg/files/staged_scripts/fluxlinux_chroot.sh " +
-            "/data/data/$pkg/files/home/fluxlinux_chroot.sh; do " +
-            "[ -f \"\$_s\" ] && ${installSnippet(helper, sha, srcWord = "\"\$_s\"")} && break; " +
-            "done; fi; " +
-            "if ${shaMatches(helper, sha)}; then sh '$helper' b64 --user $user -- $b64; " +
-            "else echo '[RootShell] $helper missing or failed SHA-256 check — reinstall chroot or open a chroot session once' >&2; exit 127; fi"
+            "/data/data/$pkg/files/staged_scripts/$name " +
+            "/data/data/$pkg/files/home/$name; do " +
+            "[ -f \"\$_s\" ] && ${installSnippet(dest, sha, srcWord = "\"\$_s\"")} && break; " +
+            "done; fi; "
+
+    /** Needs [SHA_FN]. Exits 127 unless both the helper and its resolver sidecar verify. */
+    private fun helperGuardBody(helperSha: String, resolverSha: String): String =
+        "if ! { ${shaMatches(ChrootPaths.CHROOT_HELPER, helperSha)} && " +
+            "${shaMatches(BusyBoxPaths.RESOLVER_ON_DEVICE, resolverSha)}; }; then " +
+            "echo '[RootShell] ${ChrootPaths.CHROOT_HELPER} or its resolver missing or failed SHA-256 check" +
+            " — reinstall chroot or open a chroot session once' >&2; exit 127; fi; "
+
+    /**
+     * Root-shell prefix that must precede every `sh <CHROOT_HELPER> …` (M14): re-verifies the
+     * helper and its resolver sidecar against the APK hashes right before running them, and
+     * refuses (exit 127) when either hash is unknown or does not match.
+     */
+    fun helperExecGuard(): String {
+        val h = expectedSha(ChrootPaths.CHROOT_HELPER_ASSET)
+        val r = expectedSha(BusyBoxPaths.RESOLVER_ASSET)
+        if (h == null || r == null) {
+            return "echo '[RootShell] helper hash unknown — open a chroot session once to stage it' >&2; exit 127; "
+        }
+        return "$SHA_FN; " + helperGuardBody(h, r)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
