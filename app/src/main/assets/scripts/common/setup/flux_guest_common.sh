@@ -215,7 +215,7 @@ _flux_ensure_home() {
     chmod -R u+rwX /home/flux/.config /home/flux/.cache /home/flux/.local 2>/dev/null || true
     cat > /home/flux/.vnc/xstartup <<'EOF'
 #!/bin/sh
-export PULSE_SERVER=tcp:127.0.0.1
+export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native"
 [ -f "$HOME/.Xresources" ] && xrdb "$HOME/.Xresources"
 exec startxfce4
 EOF
@@ -225,9 +225,15 @@ EOF
     fi
 }
 
+# First-paint default only: a family re-run must not downgrade the mode that
+# setup_hw_accel_guest.sh chose (turnip/panvk), so keep any existing value.
 _flux_write_gpu_mode() {
     _mode="${1:-virgl}"
     mkdir -p /etc/fluxlinux
+    if [ -s /etc/fluxlinux/gpu_mode ]; then
+        _flux_log "gpu_mode kept ($(tr -d '[:space:]' </etc/fluxlinux/gpu_mode))"
+        return 0
+    fi
     printf '%s\n' "$_mode" > /etc/fluxlinux/gpu_mode
     _flux_log "gpu_mode=$_mode"
 }
@@ -462,31 +468,34 @@ _flux_apt_prep() {
 }
 
 # Host Pulse in the app PREFIX. Guests are clients only (no guest daemon).
+# Host serves a unix socket in its shared tmp: /tmp/pulse-native under proot
+# (--shared-tmp), /mnt/host-tmp/pulse-native under chroot. libpulse tries each
+# server in the list in turn. Never TCP 127.0.0.1:4713 (open to every app).
+FLUX_PULSE_SERVERS="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native"
 _flux_write_pulse_client() {
+    _srv="$FLUX_PULSE_SERVERS"
     mkdir -p /etc/profile.d
-    printf 'export PULSE_SERVER=tcp:127.0.0.1\n' > /etc/profile.d/flux-pulse.sh
+    printf 'export PULSE_SERVER="%s"\n' "$_srv" > /etc/profile.d/flux-pulse.sh
     chmod 644 /etc/profile.d/flux-pulse.sh 2>/dev/null || true
     if [ -f /etc/environment ]; then
         if grep -q '^PULSE_SERVER=' /etc/environment 2>/dev/null; then
-            _flux_sed_i 's|^PULSE_SERVER=.*|PULSE_SERVER=tcp:127.0.0.1|' /etc/environment
+            _flux_sed_i "s|^PULSE_SERVER=.*|PULSE_SERVER=\"$_srv\"|" /etc/environment
         else
-            printf 'PULSE_SERVER=tcp:127.0.0.1\n' >> /etc/environment
+            printf 'PULSE_SERVER="%s"\n' "$_srv" >> /etc/environment
         fi
     else
-        printf 'PULSE_SERVER=tcp:127.0.0.1\n' > /etc/environment
+        printf 'PULSE_SERVER="%s"\n' "$_srv" > /etc/environment
     fi
     mkdir -p /etc/pulse/client.conf.d 2>/dev/null || true
     if [ -d /etc/pulse/client.conf.d ]; then
-        cat > /etc/pulse/client.conf.d/99-fluxlinux.conf <<'EOF'
-default-server = tcp:127.0.0.1
-autospawn = no
-EOF
+        printf 'default-server = %s\nautospawn = no\n' "$_srv" \
+            > /etc/pulse/client.conf.d/99-fluxlinux.conf
     fi
     if [ -f /etc/pulse/client.conf ]; then
         if grep -qE '^;?[[:space:]]*default-server' /etc/pulse/client.conf 2>/dev/null; then
-            _flux_sed_i 's/^;*[[:space:]]*default-server.*/default-server = tcp:127.0.0.1/' /etc/pulse/client.conf
+            _flux_sed_i "s|^;*[[:space:]]*default-server.*|default-server = $_srv|" /etc/pulse/client.conf
         else
-            printf '\ndefault-server = tcp:127.0.0.1\n' >> /etc/pulse/client.conf
+            printf '\ndefault-server = %s\n' "$_srv" >> /etc/pulse/client.conf
         fi
         if grep -qE '^;?[[:space:]]*autospawn' /etc/pulse/client.conf 2>/dev/null; then
             _flux_sed_i 's/^;*[[:space:]]*autospawn.*/autospawn = no/' /etc/pulse/client.conf
@@ -495,12 +504,12 @@ EOF
         fi
     fi
     if [ -f /home/flux/.vnc/xstartup ]; then
-        _flux_sed_i 's|^export PULSE_SERVER=.*|export PULSE_SERVER=tcp:127.0.0.1|' /home/flux/.vnc/xstartup
+        _flux_sed_i "s|^export PULSE_SERVER=.*|export PULSE_SERVER=\"$_srv\"|" /home/flux/.vnc/xstartup
     fi
 }
 
 _flux_mask_pipewire_pulse() {
-    # Do not remove PipeWire — only stop pipewire-pulse stealing 4713 / the default.
+    # Do not remove PipeWire — only stop pipewire-pulse stealing the default server.
     if command -v systemctl >/dev/null 2>&1; then
         systemctl --user mask --now pipewire-pulse.socket pipewire-pulse.service 2>/dev/null || true
         systemctl mask pipewire-pulse.socket pipewire-pulse.service 2>/dev/null || true

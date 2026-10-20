@@ -36,7 +36,7 @@ object ProotCommandBuilder {
         return listOf(
             "HOME=$home", "USER=$u", "LOGNAME=$u", "TERM=$term", "LANG=C",
             "TMPDIR=/tmp", "XDG_RUNTIME_DIR=/tmp", "PATH=$GUEST_PATH",
-            "PULSE_SERVER=tcp:127.0.0.1"
+            "PULSE_SERVER=${PulseHost.PROOT_GUEST_SERVER}",
         )
     }
 
@@ -186,7 +186,7 @@ object ProotCommandBuilder {
         val env = HashMap<String, String>()
         env["PATH"] = "$GUEST_PATH:/usr/local/games:/usr/games:/system/bin:/system/xbin:$prefix/bin"
         env["MOZ_FAKE_NO_SANDBOX"] = "1"
-        env["PULSE_SERVER"] = "127.0.0.1"
+        env["PULSE_SERVER"] = PulseHost.PROOT_GUEST_SERVER
         for (k in ANDROID_HOST_ENV_VARS + listOf(
             "PROOT_NO_SECCOMP", "PROOT_VERBOSE", "PROOT_LOADER", "PROOT_LOADER_32", "PROOT_TMP_DIR"
         )) {

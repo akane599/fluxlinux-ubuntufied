@@ -296,7 +296,8 @@ class GuestDocumentPathsTest {
             ),
         )
         assertTrue(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_HOME, "Documents/a.txt")))
-        assertTrue(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_HOME, "storage/shared")))
+        // The link itself leads to shared storage, so it is not part of the tree either (L9).
+        assertFalse(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_HOME, "storage/shared")))
         assertFalse(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_SYSTEM, "etc")))
     }
 
@@ -326,5 +327,46 @@ class GuestDocumentPathsTest {
         assertNull(GuestDocumentPaths.resolve(rootfs, "/home/flux/l0", null))
         // Exactly MAX_HOPS links still resolve.
         assertEquals(target, GuestDocumentPaths.resolve(rootfs, "/home/flux/l1", null))
+    }
+
+    // ---- L9: final-component links leaving the container ---------------------------
+
+    @Test
+    fun finalLinkLeavesContainer_onlyForLinksOutOfTheContainer() {
+        link("home/flux/storage/shared", absentOnHost("/storage/emulated/0"))
+        link("home/flux/report.pdf", absentOnHost("/sdcard/Download/report.pdf"))
+        link("home/flux/out", "../../../../outside-container")
+        File(rootfs, "usr/bin").mkdirs()
+        link("bin", "usr/bin")
+        val l2s = File(container, ".l2s/.l2s.libfoo0001").apply { parentFile.mkdirs(); writeText("so") }
+        link("usr/lib/libfoo.so", l2s.absolutePath)
+        File(rootfs, "home/flux/notes.txt").writeText("n")
+        link("home/flux/dangling", "nowhere-yet")
+
+        assertTrue(GuestDocumentPaths.finalLinkLeavesContainer(rootfs, "/home/flux/storage/shared"))
+        assertTrue(GuestDocumentPaths.finalLinkLeavesContainer(rootfs, "/home/flux/report.pdf"))
+        assertTrue(GuestDocumentPaths.finalLinkLeavesContainer(rootfs, "/home/flux/out"))
+        assertFalse(GuestDocumentPaths.finalLinkLeavesContainer(rootfs, "/bin"))
+        assertFalse(GuestDocumentPaths.finalLinkLeavesContainer(rootfs, "/usr/lib/libfoo.so"))
+        assertFalse(GuestDocumentPaths.finalLinkLeavesContainer(rootfs, "/home/flux/notes.txt"))
+        assertFalse(GuestDocumentPaths.finalLinkLeavesContainer(rootfs, "/home/flux/dangling"))
+        assertFalse(GuestDocumentPaths.finalLinkLeavesContainer(rootfs, "/"))
+    }
+
+    @Test
+    fun treeGrantExcludesEscapingLinksButKeepsContainerLinks() {
+        link("home/flux/report.pdf", absentOnHost("/sdcard/Download/report.pdf"))
+        File(rootfs, "home/flux/real").mkdirs()
+        link("home/flux/alias", "real")
+        val home = DocId(ROOT_HOME, "")
+        val system = DocId(ROOT_SYSTEM, "")
+        File(rootfs, "usr/bin").mkdirs()
+        link("bin", "usr/bin")
+
+        assertFalse(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_HOME, "report.pdf")))
+        assertTrue(GuestDocumentPaths.isChildWithoutLink(rootfs, home, DocId(ROOT_HOME, "alias")))
+        assertTrue(GuestDocumentPaths.isChildWithoutLink(rootfs, system, DocId(ROOT_SYSTEM, "bin")))
+        // The shared file itself is untouched by the checks.
+        assertTrue(File(shared, "Download/report.pdf").isFile)
     }
 }

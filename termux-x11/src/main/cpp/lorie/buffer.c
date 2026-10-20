@@ -24,6 +24,7 @@
 #include <android/sharedmem.h>
 #include "list.h"
 #include "buffer.h"
+#include "conn_io.h"
 
 // libEGL exports this only since API 26, weak so the library still loads below that.
 __attribute__((weak)) EGLClientBuffer eglGetNativeClientBufferANDROID(const struct AHardwareBuffer* buffer);
@@ -371,7 +372,9 @@ __LIBC_HIDDEN__ void LorieBuffer_sendHandleToUnixSocket(LorieBuffer* _Nonnull bu
     if (socketFd < 0 || !buffer)
         return;
 
-    write(socketFd, buffer, sizeof(*buffer));
+    // A short write would misframe every later event; then the handle isn't sent either.
+    if (!lorie_write_full(socketFd, buffer, sizeof(*buffer)))
+        return;
     if (buffer->desc.type == LORIEBUFFER_FD)
         ancil_send_fd(socketFd, buffer->fd);
     else if (buffer->desc.type == LORIEBUFFER_AHARDWAREBUFFER) {
@@ -381,39 +384,61 @@ __LIBC_HIDDEN__ void LorieBuffer_sendHandleToUnixSocket(LorieBuffer* _Nonnull bu
 }
 
 __LIBC_HIDDEN__ void LorieBuffer_recvHandleFromUnixSocket(int socketFd, LorieBuffer** outBuffer) {
-    LorieBuffer buffer = {0}, *ret = NULL;
-    // We should read buffer from socket despite outbuffer is NULL, otherwise we will get protocol error
+    LorieBuffer received = {0}, buffer = {0}, *ret = NULL;
+    size_t size = 0;
+
+    if (outBuffer)
+        *outBuffer = NULL;
+
     if (socketFd < 0)
         return;
 
-    // Reset process-specific data;
-    buffer.refcount = 0;
-    buffer.locked = false;
-    buffer.fd = -1;
-    buffer.lockedData = NULL;
-    __sync_fetch_and_add(&buffer.refcount, 1); // refcount is the first object in the struct
+    // We should read buffer from socket despite outbuffer is NULL, otherwise we will get protocol error
+    if (!lorie_read_full(socketFd, &received, sizeof(received)))
+        return;
 
-    read(socketFd, &buffer, sizeof(buffer));
-    buffer.image = NULL; // Only for process-local use
+    // Only the description is meaningful across processes. Everything else in the sender's struct
+    // (refcount, fd, size, lock state, GL objects, list links, pointers) is process-local, so start
+    // from a fresh object owning exactly one reference.
+    buffer.refcount = 1;
+    buffer.desc = received.desc;
+    buffer.desc.buffer = NULL;
+    buffer.desc.data = NULL;
+    buffer.locked = 0;
+    buffer.lockedData = NULL;
+    buffer.fd = -1;
+    buffer.size = 0;
+    buffer.offset = 0;
+    buffer.id = 0;
+    buffer.image = NULL;
+    buffer.gpuCopyPending = 0;
+
     if (buffer.desc.type == LORIEBUFFER_FD) {
-        size_t size = buffer.desc.stride * buffer.desc.height * sizeof(uint32_t);
         buffer.fd = ancil_recv_fd(socketFd);
-        if (buffer.fd == -1) {
-            if (outBuffer)
-                *outBuffer = NULL;
+        if (buffer.fd == -1)
+            return;
+
+        if (buffer.desc.width <= 0 || buffer.desc.height <= 0 || buffer.desc.stride < buffer.desc.width) {
+            close(buffer.fd);
             return;
         }
 
+        size = (size_t) buffer.desc.stride * (size_t) buffer.desc.height * sizeof(uint32_t);
         buffer.desc.data = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, buffer.fd, 0);
         if (buffer.desc.data == NULL || buffer.desc.data == MAP_FAILED) {
             close(buffer.fd);
-            if (outBuffer)
-                *outBuffer = NULL;
             return;
         }
+        buffer.size = size;
     } else if (buffer.desc.type == LORIEBUFFER_AHARDWAREBUFFER) {
+        int err = -ENOSYS;
         if (__builtin_available(android 26, *))
-            AHardwareBuffer_recvHandleFromUnixSocket(socketFd, &buffer.desc.buffer);
+            err = AHardwareBuffer_recvHandleFromUnixSocket(socketFd, &buffer.desc.buffer);
+        if (err != 0 || !buffer.desc.buffer)
+            return;
+    } else {
+        // Regular buffers have no shareable handle; their data pointer belongs to the sender.
+        return;
     }
 
 #pragma clang diagnostic push
@@ -422,14 +447,13 @@ __LIBC_HIDDEN__ void LorieBuffer_recvHandleFromUnixSocket(int socketFd, LorieBuf
         ret = calloc(1, sizeof(buffer));
 #pragma clang diagnostic pop
     if (!ret) {
-        if (buffer.fd >= 0)
+        if (buffer.desc.type == LORIEBUFFER_FD) {
+            munmap(buffer.desc.data, buffer.size);
             close(buffer.fd);
-        if (buffer.desc.buffer) {
+        } else if (buffer.desc.buffer) {
             if (__builtin_available(android 26, *))
                 AHardwareBuffer_release(buffer.desc.buffer);
         }
-        if (outBuffer)
-            outBuffer = NULL;
         return;
     }
 

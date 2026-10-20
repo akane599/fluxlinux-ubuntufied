@@ -17,13 +17,28 @@
 #include <poll.h>
 #include <new>
 #include "lorie.h"
+#include "conn_io.h"
 
 #pragma clang diagnostic ignored "-Wunknown-pragmas"
 #pragma ide diagnostic ignored "cppcoreguidelines-narrowing-conversions"
 #pragma ide diagnostic ignored "ConstantFunctionResult"
 #define log(prio, ...) __android_log_print(ANDROID_LOG_ ## prio, "LorieNative", __VA_ARGS__)
 // `r` must be a LorieViewResources* — the connection fd is per-instance state, not a process global.
-#define sendEvent(r, ...) do { if ((r) && (r)->connFd != -1) { lorieEvent e = { __VA_ARGS__ }; write((r)->connFd, &e, sizeof(e)); } } while (0)
+#define sendEvent(r, ...) do { if ((r) && (r)->connFd != -1) { lorieEvent e = { __VA_ARGS__ }; lorieActivitySend(&(r)->connFd, &e, sizeof(e), NULL, 0); } } while (0)
+
+// Serialises every writer of the activity end of the socket (GUI thread, renderer thread) and
+// every change of connFd, so a header and its payload are never split by another event and
+// nobody writes into an fd number that was just closed and reused.
+static pthread_mutex_t connWriteLock = PTHREAD_MUTEX_INITIALIZER;
+
+bool lorieActivitySend(volatile int* fdPtr, const void* header, size_t headerLen, const void* payload, size_t payloadLen) {
+    pthread_mutex_lock(&connWriteLock);
+    int fd = *fdPtr;
+    bool ok = fd != -1 && lorie_write_full(fd, header, headerLen)
+            && (!payloadLen || lorie_write_full(fd, payload, payloadLen));
+    pthread_mutex_unlock(&connWriteLock);
+    return ok;
+}
 
 bool lorieDebugEnabled = false;
 
@@ -65,6 +80,7 @@ struct LorieViewResources {
     LorieViewResources(JNIEnv* callerEnv, jobject view);
     ~LorieViewResources();
     void connect(jint fd);
+    void disconnect();
     int xcallback(int fd, int events);
 };
 
@@ -164,11 +180,13 @@ LorieViewResources::LorieViewResources(JNIEnv *callerEnv, jobject view) {
 LorieViewResources::~LorieViewResources() {
     destroyed = true;
 
+    pthread_mutex_lock(&connWriteLock);
     if (connFd != -1) {
         ALooper_removeFd(ALooper_forThread(), connFd);
         close(connFd);
         connFd = -1;
     }
+    pthread_mutex_unlock(&connWriteLock);
 
     renderer.destroy();
 
@@ -178,18 +196,27 @@ LorieViewResources::~LorieViewResources() {
     }
 }
 
-int LorieViewResources::xcallback(int fd, int events) {
-    if (events & (ALOOPER_EVENT_ERROR | ALOOPER_EVENT_HANGUP)) {
-        jobject instance = env->CallStaticObjectMethod(MainActivity.self, MainActivity.getInstance);
-        if (instance)
-            env->CallVoidMethod(instance, MainActivity.clientConnectedStateChanged);
+// Drops the X server connection (hangup, or a stream we can no longer parse).
+void LorieViewResources::disconnect() {
+    jobject instance = env->CallStaticObjectMethod(MainActivity.self, MainActivity.getInstance);
+    if (instance)
+        env->CallVoidMethod(instance, MainActivity.clientConnectedStateChanged);
 
-        ALooper_removeFd(ALooper_forThread(), fd);
+    pthread_mutex_lock(&connWriteLock);
+    if (connFd != -1) {
+        ALooper_removeFd(ALooper_forThread(), connFd);
         close(connFd);
         connFd = -1;
-        renderer.setSharedState(NULL);
-        renderer.removeAllBuffers();
-        log(DEBUG, "disconnected");
+    }
+    pthread_mutex_unlock(&connWriteLock);
+    renderer.setSharedState(NULL);
+    renderer.removeAllBuffers();
+    log(DEBUG, "disconnected");
+}
+
+int LorieViewResources::xcallback(int fd, int events) {
+    if (events & (ALOOPER_EVENT_ERROR | ALOOPER_EVENT_HANGUP)) {
+        disconnect();
         return 1;
     }
 
@@ -197,24 +224,54 @@ int LorieViewResources::xcallback(int fd, int events) {
         lorieEvent e = {0};
 
         again:
-        if (read(connFd, &e, sizeof(e)) == sizeof(e)) {
+        if (!lorie_read_full(connFd, &e, sizeof(e))) {
+            disconnect();
+            return 1;
+        }
+        {
             switch(e.type) {
                 case EVENT_CLIPBOARD_SEND: {
-                    if (!e.clipboardSend.count)
+                    uint32_t count = e.clipboardSend.count;
+                    if (!count)
                         break;
-                    char clipboard[e.clipboardSend.count + 1];
-                    memset(clipboard, 0, e.clipboardSend.count + 1);
-                    read(connFd, clipboard, sizeof(clipboard));
-                    clipboard[e.clipboardSend.count] = 0;
-                    log(DEBUG, "Clipboard content (%zu symbols) is %s", strlen(clipboard), clipboard);
+                    if (count > LORIE_MAX_PAYLOAD) {
+                        log(ERROR, "Dropping oversized clipboard (%u bytes)", count);
+                        if (!lorie_skip_full(connFd, count)) {
+                            disconnect();
+                            return 1;
+                        }
+                        break;
+                    }
+                    char* clipboard = (char*) malloc(count + 1);
+                    if (!clipboard) {
+                        log(ERROR, "Out of memory for clipboard (%u bytes)", count);
+                        if (!lorie_skip_full(connFd, count)) {
+                            disconnect();
+                            return 1;
+                        }
+                        break;
+                    }
+                    if (!lorie_read_full(connFd, clipboard, count)) {
+                        free(clipboard);
+                        disconnect();
+                        return 1;
+                    }
+                    clipboard[count] = 0;
+                    log(DEBUG, "Received clipboard content (%zu bytes)", strlen(clipboard));
                     jmethodID id = env->GetMethodID(env->GetObjectClass(thiz), "setClipboardText","(Ljava/lang/String;)V");
                     jobject bb = env->NewDirectByteBuffer(clipboard, strlen(clipboard));
-                    jobject charset = env->CallStaticObjectMethod(Charset.self, Charset.forName, env->NewStringUTF("UTF-8"));
+                    jstring charsetName = env->NewStringUTF("UTF-8");
+                    jobject charset = env->CallStaticObjectMethod(Charset.self, Charset.forName, charsetName);
                     jobject cb = env->CallObjectMethod(charset, Charset.decode, bb);
                     env->DeleteLocalRef(bb);
 
                     jstring str = (jstring) env->CallObjectMethod(cb, CharBuffer.toString);
+                    free(clipboard); // decode() copied it; the direct buffer is gone
                     env->CallVoidMethod(thiz, id, str);
+                    env->DeleteLocalRef(str);
+                    env->DeleteLocalRef(cb);
+                    env->DeleteLocalRef(charset);
+                    env->DeleteLocalRef(charsetName);
                     break;
                 }
                 case EVENT_CLIPBOARD_REQUEST: {
@@ -267,22 +324,33 @@ int LorieViewResources::xcallback(int fd, int events) {
 }
 
 void LorieViewResources::connect(jint fd) {
-    if (connFd != -1) {
+    bool wasConnected;
+    pthread_mutex_lock(&connWriteLock);
+    if ((wasConnected = connFd != -1)) {
         ALooper_removeFd(ALooper_forThread(), connFd);
         close(connFd);
+        connFd = -1;
+    }
+    pthread_mutex_unlock(&connWriteLock);
+
+    if (wasConnected) {
         renderer.setSharedState(NULL);
         renderer.removeAllBuffers();
         log(DEBUG, "disconnected");
     }
 
-    if ((connFd = fd) != -1) {
+    if (fd != -1) {
+        pthread_mutex_lock(&connWriteLock);
+        connFd = fd;
         ALooper_addFd(ALooper_forThread(), fd, 0, ALOOPER_EVENT_INPUT | ALOOPER_EVENT_ERROR | ALOOPER_EVENT_HANGUP,
                       +[](int fd, int events, void* data) -> int { return ((LorieViewResources*) data)->xcallback(fd, events); }, this);
 
-        // Give the X server our renderer wakeup cond var fd, resent on every reconnect.
+        // Give the X server our renderer wakeup cond var fd, resent on every reconnect. Header and
+        // fd go out under the writer lock so no other event lands between them.
         lorieEvent e = { .type = EVENT_RENDERER_WAKEUP_COND };
-        write(connFd, &e, sizeof(e));
-        ancil_send_fd(connFd, renderer.getWakeupCondFd());
+        if (lorie_write_full(connFd, &e, sizeof(e)))
+            ancil_send_fd(connFd, renderer.getWakeupCondFd());
+        pthread_mutex_unlock(&connWriteLock);
 
         log(DEBUG, "XCB connection is successfull");
     }
@@ -305,44 +373,6 @@ static void startLogcat(JNIEnv *env, __unused jclass clazz, __unused jlong ptr, 
             execl("/system/bin/logcat", "logcat", buf, NULL);
             log(ERROR, "exec logcat: %s", strerror(errno));
             env->FatalError("Exiting");
-    }
-}
-
-static void sendTextEvent(JNIEnv *env, __unused jobject thiz, jlong ptr, jbyteArray text) {
-    lastInputTimestampMs = nowMs();
-    auto* r = (LorieViewResources*) ptr;
-    if (r && r->connFd != -1 && text) {
-        jsize length = env->GetArrayLength(text);
-        jbyte *str = env->GetByteArrayElements(text, NULL);
-        char *p = (char*) str;
-        mbstate_t mbstate = { 0 };
-        if (!length)
-            return;
-
-        log(DEBUG, "Parsing text: %.*s", length, str);
-
-        while (*p) {
-            wchar_t wc;
-            size_t len = mbrtowc(&wc, p, MB_CUR_MAX, &mbstate);
-
-            if (len == (size_t)-1 || len == (size_t)-2) {
-                log(ERROR, "Invalid UTF-8 sequence encountered");
-                break;
-            }
-
-            if (len == 0)
-                break;
-
-            log(DEBUG, "Sending unicode event: %lc (U+%X)", wc, wc);
-            lorieEvent e = { .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) wc } };
-            write(r->connFd, &e, sizeof(e));
-            p += len;
-            if (p - (char*) str >= length)
-                break;
-            usleep(2500);
-        }
-
-        env->ReleaseByteArrayElements(text, str, JNI_ABORT);
     }
 }
 
@@ -399,21 +429,30 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
                 auto* r = (LorieViewResources*) ptr;
                 if (r && r->connFd != -1 && text) {
                     jsize length = env->GetArrayLength(text);
+                    // An oversized clipboard is answered as empty: the requesting X client still
+                    // gets its reply and the server never has to swallow the payload.
+                    if (length < 0 || (uint32_t) length > LORIE_MAX_PAYLOAD)
+                        length = 0;
                     jbyte* str = env->GetByteArrayElements(text, NULL);
-                    sendEvent(r, .clipboardSend = { .t = EVENT_CLIPBOARD_SEND, .count = (uint32_t) length });
-                    write(r->connFd, str, length);
-                    env->ReleaseByteArrayElements(text, str, JNI_ABORT);
+                    if (!str)
+                        length = 0; // never announce bytes we can't send
+                    lorieEvent e = { .clipboardSend = { .t = EVENT_CLIPBOARD_SEND, .count = (uint32_t) length } };
+                    lorieActivitySend(&r->connFd, &e, sizeof(e), str, length);
+                    if (str)
+                        env->ReleaseByteArrayElements(text, str, JNI_ABORT);
                 }
             }},
             {"sendWindowChange", "(JIIILjava/lang/String;)V", (void *) +[](__unused JNIEnv* env, __unused jobject cls, jlong ptr, jint width, jint height, jint framerate, jstring jname) {
                 auto* r = (LorieViewResources*) ptr;
                 if (r && r->connFd != -1) {
                     const char *name = (!jname || width <= 0 || height <= 0) ? NULL : env->GetStringUTFChars(jname, JNI_FALSE);
-                    sendEvent(r, .screenSize = { .t = EVENT_SCREEN_SIZE, .width = (uint16_t) width, .height = (uint16_t) height, .framerate = (uint16_t) framerate, .name_size = (name ? strlen(name) : 0) });
-                    if (name) {
-                        write(r->connFd, name, strlen(name));
+                    size_t nameSize = name ? strlen(name) : 0;
+                    if (nameSize > LORIE_MAX_NAME)
+                        nameSize = LORIE_MAX_NAME;
+                    lorieEvent e = { .screenSize = { .t = EVENT_SCREEN_SIZE, .width = (uint16_t) width, .height = (uint16_t) height, .framerate = (uint16_t) framerate, .name_size = nameSize } };
+                    lorieActivitySend(&r->connFd, &e, sizeof(e), name, nameSize);
+                    if (name)
                         env->ReleaseStringUTFChars(jname, name);
-                    }
                 }
             }},
             {"sendMouseEvent", "(JFFIZZ)V", (void *) +[](JNIEnv* env, __unused jobject cls, jlong ptr, jfloat x, jfloat y, jint which_button, jboolean button_down, jboolean relative) {
@@ -451,12 +490,20 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
                 lastInputTimestampMs = nowMs();
                 auto* r = (LorieViewResources*) ptr;
                 if (r && r->connFd != -1) {
+                    // Keycodes past the table (stylus/macro keys, newer Android keys) have no mapping.
+                    const int tableSize = (int) (sizeof(android_to_linux_keycode) / sizeof(android_to_linux_keycode[0]));
+                    if (!scan_code && (key_code < 0 || key_code >= tableSize))
+                        return true;
                     int code = (scan_code) ?: android_to_linux_keycode[key_code];
                     sendEvent(r, .key = { .t = EVENT_KEY, .key = (uint16_t) (code + 8), .state = key_down });
                 }
                 return true;
             }},
-            {"sendTextEvent", "(J[B)V", (void *)&sendTextEvent},
+            // Called per code point from LorieView's text worker thread, which does the pacing.
+            {"sendUnicodeEvent", "(JI)V", (void *) +[](__unused JNIEnv *env, __unused jobject thiz, jlong ptr, jint code) {
+                auto* r = (LorieViewResources*) ptr;
+                sendEvent(r, .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) code });
+            }},
             {"requestConnection", "(J)Z", (void *)&requestConnection},
             {"getLastInputTimestamp", "()J", (void *) +[](__unused JNIEnv* env, __unused jclass clazz) -> jlong {
                 return (jlong) lastInputTimestampMs;

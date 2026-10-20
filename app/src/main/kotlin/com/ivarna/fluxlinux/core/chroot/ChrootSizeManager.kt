@@ -16,6 +16,7 @@ object ChrootSizeManager {
     private const val TAG = "ChrootSize"
     private const val ASSET = "scripts/chroot/chroot_size.sh"
     private const val MEASURE_TIMEOUT_MS = 90_000L
+    private const val EXISTS_TIMEOUT_MS = 8_000L
 
     data class Result(
         val path: String,
@@ -57,6 +58,7 @@ object ChrootSizeManager {
         val parsed = parse(cap.stdout, path, cap.exitCode, rootOk = true)
         if (parsed.bytes == null && parsed.error != "no_dir") {
             Log.w(TAG, "parse failed duOut=${cap.stdout.take(400)} exit=${cap.exitCode}")
+            if (cap.exitCode == -1) return parsed // su itself failed: inline would fail too
             if (cap.exitCode == -2 || cap.stdout.isBlank()) {
                 return measureInline(path)
             }
@@ -65,9 +67,24 @@ object ChrootSizeManager {
     }
 
     private fun measureInline(path: String): Result {
-        val existsOut = RootShell.capture(
-            "if [ -d '$path' ]; then echo YES; else echo NO; fi"
+        val exists = RootShell.captureResult(
+            "if [ -d '$path' ]; then echo YES; else echo NO; fi",
+            timeoutMs = EXISTS_TIMEOUT_MS
         )
+        val existsOut = exists.stdout
+        RootShell.failureReason(exists.exitCode)?.let { err ->
+            // su timeout / failure is not "no_dir" (L4).
+            return Result(
+                path = path,
+                bytes = null,
+                dirExists = false,
+                viaRoot = false,
+                raw = existsOut,
+                exitCode = exists.exitCode,
+                rootOk = err != "su_failed",
+                error = err
+            )
+        }
         val dirExists = existsOut.trim().lines().lastOrNull()?.trim() == "YES"
         if (!dirExists) {
             return Result(
@@ -129,7 +146,7 @@ object ChrootSizeManager {
         val viaRoot = bytes != null
         if (bytes == null && error == null) {
             error = when {
-                exitCode == -2 -> "timeout"
+                RootShell.failureReason(exitCode) != null -> RootShell.failureReason(exitCode)
                 raw.isBlank() -> "empty_output"
                 else -> "measure_failed"
             }
@@ -141,7 +158,7 @@ object ChrootSizeManager {
             viaRoot = viaRoot,
             raw = raw,
             exitCode = exitCode,
-            rootOk = rootOk && error != "root_required",
+            rootOk = rootOk && error != "root_required" && error != "su_failed",
             error = error
         )
     }

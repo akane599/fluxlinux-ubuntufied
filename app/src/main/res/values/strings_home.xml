@@ -95,7 +95,7 @@
     <string name="trouble_black_title">Black screen</string>
     <string name="trouble_black_body">XFCE draws a few seconds after the display opens. If it stays black, stop the desktop and start it again. Settings > X11 Display controls scaling and fullscreen.</string>
     <string name="trouble_sound_title">No sound</string>
-    <string name="trouble_sound_body">Settings > Audio shows whether PulseAudio is running and can restart it. Ubuntu plays through PULSE_SERVER=tcp:127.0.0.1, so don\'t install a sound server inside Ubuntu.</string>
+    <string name="trouble_sound_body">Settings > Audio shows whether PulseAudio is running and can restart it. Ubuntu plays through the host\'s private socket (PULSE_SERVER=unix:/tmp/pulse-native), so don\'t install a sound server inside Ubuntu.</string>
     <string name="trouble_links_title">~/storage folders are empty</string>
     <string name="trouble_links_body">The links point at your phone\'s folders. On Home, allow shared storage, then tap Create links. Existing files with the same names are never replaced.</string>
     <string name="trouble_phantom_title">Android 12+ closes Linux apps</string>

@@ -30,12 +30,28 @@ extern "C" {
 #include <arpa/inet.h>
 #include <poll.h>
 #include "lorie.h"
+#include "conn_io.h"
 
 #define log(prio, ...) __android_log_print(ANDROID_LOG_ ## prio, "LorieNative", __VA_ARGS__)
 
 static int argc = 0;
 static char** argv = nullptr;
 __LIBC_HIDDEN__ volatile int conn_fd = -1;
+// Serialises every writer of conn_fd and every change of it, so a header and its payload (or
+// passed fd) are never split by another event and nothing is written into a just-closed fd.
+// Separate from the activity side's lock: in the embedded case both ends live in one process.
+static pthread_mutex_t connWriteLock = PTHREAD_MUTEX_INITIALIZER;
+// Clipboard payloads from the activity larger than this are drained and dropped.
+#define LORIE_MAX_CLIPBOARD LORIE_MAX_PAYLOAD
+
+static bool serverSend(const void* header, size_t headerLen, const void* payload, size_t payloadLen) {
+    pthread_mutex_lock(&connWriteLock);
+    int fd = conn_fd;
+    bool ok = fd != -1 && lorie_write_full(fd, header, headerLen)
+            && (!payloadLen || lorie_write_full(fd, payload, payloadLen));
+    pthread_mutex_unlock(&connWriteLock);
+    return ok;
+}
 extern DeviceIntPtr lorieMouse, lorieTouch, lorieKeyboard, loriePen, lorieEraser;
 extern ScreenPtr pScreenPtr;
 extern "C" int ucs2keysym(long ucs);
@@ -87,6 +103,7 @@ Java_com_termux_x11_CmdEntryPoint_start(JNIEnv *env, __unused jclass cls, jobjec
 
     {
         cpu_set_t mask;
+        CPU_ZERO(&mask);
         long num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
         for (int i = num_cpus/2; i < num_cpus; i++)
@@ -244,31 +261,57 @@ static Bool handleTouchEvent(__unused ClientPtr pClient, void *closure) {
     return TRUE;
 }
 
+// Tears down the activity connection: on socket error, or when the stream can no longer be
+// parsed (short read inside a message), since every later event would be misframed.
+static void dropLorieConnection(int fd) {
+    LorieBuffer* buf;
+    InputThreadUnregisterDev(fd);
+    pthread_mutex_lock(&connWriteLock);
+    close(fd);
+    if (conn_fd == fd)
+        conn_fd = -1;
+    pthread_mutex_unlock(&connWriteLock);
+    lorieEnableClipboardSync(FALSE);
+    while ((buf = LorieBufferList_first(&registeredBuffers)))
+        LorieBuffer_removeFromList(buf);
+}
+
 void handleLorieEvents(int fd, __unused int ready, __unused void *ignored) {
     ValuatorMask mask;
     lorieEvent e = {0};
     valuator_mask_zero(&mask);
 
     if (ready & X_NOTIFY_ERROR) {
-        LorieBuffer* buf;
-        InputThreadUnregisterDev(fd);
-        close(fd);
-        conn_fd = -1;
-        lorieEnableClipboardSync(FALSE);
-        while ((buf = LorieBufferList_first(&registeredBuffers)))
-            LorieBuffer_removeFromList(buf);
+        dropLorieConnection(fd);
         return;
     }
 
     again:
-    if (read(fd, &e, sizeof(e)) == sizeof(e)) {
+    if (!lorie_read_full(fd, &e, sizeof(e)))
+        return dropLorieConnection(fd);
+    {
         switch(e.type) {
             case EVENT_SCREEN_SIZE: {
-                auto *copy = (lorieEvent*) calloc(1, sizeof(lorieEvent) + e.screenSize.name_size + 1);
+                size_t nameSize = e.screenSize.name_size;
+                if (nameSize > LORIE_MAX_NAME) {
+                    // Not a name we would ever send: drain it to stay in sync and use none.
+                    if (!lorie_skip_full(fd, nameSize))
+                        return dropLorieConnection(fd);
+                    nameSize = 0;
+                }
+                auto *copy = (lorieEvent*) calloc(1, sizeof(lorieEvent) + nameSize + 1);
+                if (!copy) {
+                    if (!lorie_skip_full(fd, nameSize))
+                        return dropLorieConnection(fd);
+                    break;
+                }
                 memcpy(copy, &e, sizeof(e));
-                copy->screenSize.name = copy->screenSize.name_size ? (char*) (copy + 1) : nullptr;
-                if (copy->screenSize.name_size)
-                    read(fd, copy->screenSize.name, copy->screenSize.name_size);
+                copy->screenSize.name_size = nameSize;
+                copy->screenSize.name = nameSize ? (char*) (copy + 1) : nullptr;
+                if (nameSize && !lorie_read_full(fd, copy->screenSize.name, nameSize)) {
+                    free(copy);
+                    return dropLorieConnection(fd);
+                }
                 QueueWorkProc(+[](__unused ClientPtr pClient, void *closure) -> Bool {
                     // This must be done only on X server thread.
                     auto* e = (lorieEvent*) closure;
@@ -371,7 +414,6 @@ void handleLorieEvents(int fd, __unused int ready, __unused void *ignored) {
                 break;
             case EVENT_UNICODE: {
                 int ks = ucs2keysym((long) e.unicode.code);
-                __android_log_print(ANDROID_LOG_DEBUG, "LorieNative", "Trying to input keysym %d\n", ks);
                 lorieKeysymKeyboardEvent(ks, TRUE);
                 lorieKeysymKeyboardEvent(ks, FALSE);
                 break;
@@ -388,9 +430,21 @@ void handleLorieEvents(int fd, __unused int ready, __unused void *ignored) {
                 lorieWakeServer();
                 break;
             case EVENT_CLIPBOARD_SEND: {
-                char *data = (char*) calloc(1, e.clipboardSend.count + 1);
-                read(conn_fd, data, e.clipboardSend.count);
-                data[e.clipboardSend.count] = 0;
+                uint32_t count = e.clipboardSend.count;
+                char *data = count <= LORIE_MAX_CLIPBOARD ? (char*) calloc(1, (size_t) count + 1) : nullptr;
+                if (!data) {
+                    // Too large (or no memory): drain it to stay in sync and answer with nothing.
+                    log(ERROR, "Dropping clipboard payload of %u bytes", count);
+                    if (!lorie_skip_full(fd, count))
+                        return dropLorieConnection(fd);
+                    data = (char*) calloc(1, 1);
+                    if (!data)
+                        break;
+                } else if (!lorie_read_full(fd, data, count)) {
+                    free(data);
+                    return dropLorieConnection(fd);
+                } else
+                    data[count] = 0;
                 QueueWorkProc(+[](__unused ClientPtr pClient, void *closure) -> Bool {
                     // This must be done only on X server thread.
                     lorieHandleClipboardData((const char*) closure);
@@ -437,16 +491,19 @@ void handleLorieEvents(int fd, __unused int ready, __unused void *ignored) {
 void lorieSendClipboardData(const char* data) {
     if (data && conn_fd != -1) {
         size_t len = strlen(data);
+        if (len > LORIE_MAX_PAYLOAD) {
+            log(ERROR, "Not sending a %zu byte clipboard to the activity", len);
+            return;
+        }
         lorieEvent e = { .clipboardSend = { .t = EVENT_CLIPBOARD_SEND, .count = (uint32_t) len } };
-        write(conn_fd, &e, sizeof(e));
-        write(conn_fd, data, len);
+        serverSend(&e, sizeof(e), data, len);
     }
 }
 
 void lorieRequestClipboard(void) {
     if (conn_fd != -1) {
         lorieEvent e = { .type = EVENT_CLIPBOARD_REQUEST };
-        write(conn_fd, &e, sizeof(e));
+        serverSend(&e, sizeof(e), nullptr, 0);
     }
 }
 
@@ -460,11 +517,13 @@ bool lorieConnectionAlive(void) {
 }
 
 void lorieSendSharedServerState(int memfd) {
+    pthread_mutex_lock(&connWriteLock);
     if (conn_fd != -1) {
         lorieEvent e = { .type = EVENT_SHARED_SERVER_STATE };
-        write(conn_fd, &e, sizeof(e));
-        ancil_send_fd(conn_fd, memfd);
+        if (lorie_write_full(conn_fd, &e, sizeof(e)))
+            ancil_send_fd(conn_fd, memfd);
     }
+    pthread_mutex_unlock(&connWriteLock);
 }
 
 void lorieRegisterBuffer(LorieBuffer* buffer) {
@@ -474,8 +533,10 @@ void lorieRegisterBuffer(LorieBuffer* buffer) {
 
     if (conn_fd != -1 && buffer) {
         lorieEvent e = { .type = EVENT_ADD_BUFFER };
-        write(conn_fd, &e, sizeof(e));
-        LorieBuffer_sendHandleToUnixSocket(buffer, conn_fd);
+        pthread_mutex_lock(&connWriteLock);
+        if (conn_fd != -1 && lorie_write_full(conn_fd, &e, sizeof(e)))
+            LorieBuffer_sendHandleToUnixSocket(buffer, conn_fd);
+        pthread_mutex_unlock(&connWriteLock);
         LorieBuffer_addToList(buffer, &registeredBuffers);
         const LorieBuffer_Desc* desc = LorieBuffer_description(buffer);
         log(INFO, "Sent shared buffer width %d stride %d height %d format %d type %d id %llu", desc->width, desc->stride, desc->height, desc->format, desc->type, desc->id);
@@ -489,7 +550,7 @@ void lorieUnregisterBuffer(LorieBuffer* buffer) {
 
     if (conn_fd != -1 && buffer) {
         lorieEvent e = { .removeBuffer = { .t = EVENT_REMOVE_BUFFER, .id = id } };
-        write(conn_fd, &e, sizeof(e));
+        serverSend(&e, sizeof(e), nullptr, 0);
         LorieBuffer_removeFromList(buffer);
     }
 }
@@ -497,7 +558,7 @@ void lorieUnregisterBuffer(LorieBuffer* buffer) {
 extern "C" void DDXNotifyFocusChanged(void) {
     if (conn_fd != -1) {
         lorieEvent e = { .type = EVENT_WINDOW_FOCUS_CHANGED };
-        write(conn_fd, &e, sizeof(e));
+        serverSend(&e, sizeof(e), nullptr, 0);
     }
 }
 
@@ -509,7 +570,9 @@ Java_com_termux_x11_CmdEntryPoint_getXConnection(JNIEnv *env, __unused jobject c
     socketpair(AF_UNIX, SOCK_STREAM, 0, client);
     QueueWorkProc(+[](__unused ClientPtr pClient, void *closure) -> Bool {
         InputThreadRegisterDev((int) (int64_t) closure, handleLorieEvents, nullptr);
+        pthread_mutex_lock(&connWriteLock);
         conn_fd = (int) (int64_t) closure;
+        pthread_mutex_unlock(&connWriteLock);
         lorieActivityConnected();
         return TRUE;
     }, nullptr, (void*) (int64_t) client[1]);
@@ -530,8 +593,8 @@ Java_com_termux_x11_CmdEntryPoint_getLogcatOutput(JNIEnv *env, __unused jobject 
         fchmod(p[1], 0777);
         pthread_create(&t, nullptr, +[](void *arg) -> void* {
             char buffer[4096];
-            size_t len;
-            while((len = read((int) (int64_t) arg, buffer, 4096)) >=0)
+            ssize_t len;
+            while((len = read((int) (int64_t) arg, buffer, 4096)) > 0)
                 write(2, buffer, len);
             close((int) (int64_t) arg);
             return nullptr;
@@ -549,7 +612,8 @@ Java_com_termux_x11_CmdEntryPoint_connected(__unused JNIEnv *env, __unused jclas
 extern "C" JNIEXPORT void JNICALL
 Java_com_termux_x11_CmdEntryPoint_listenForConnections(JNIEnv *env, jobject thiz) {
     int server_fd, client, count;
-    struct sockaddr_in address = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr = { .s_addr = INADDR_ANY } };
+    // Loopback only: the wake-up poke comes from our own activity (requestConnection, 127.0.0.1).
+    struct sockaddr_in address = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) } };
     int addrlen = sizeof(address);
     jmethodID sendBroadcast = env->GetMethodID(env->GetObjectClass(thiz), "sendBroadcast", "()V");
     uint8_t buffer[512] = {0};
@@ -558,7 +622,7 @@ Java_com_termux_x11_CmdEntryPoint_listenForConnections(JNIEnv *env, jobject thiz
     // Even in the case if it will fail for some reason everything will work fine
     // But connection will be delayed a bit
 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         log(ERROR, "Socket creation failed: %s", strerror(errno));
         return;
     }
@@ -584,11 +648,22 @@ Java_com_termux_x11_CmdEntryPoint_listenForConnections(JNIEnv *env, jobject thiz
             continue;
         }
 
-        if ((count = read(client, buffer, sizeof(buffer))) > 0) {
-            if (!memcmp(buffer, MAGIC, min(count, sizeof(MAGIC)))) {
-                log(DEBUG, "New client connection!\n");
-                env->CallVoidMethod(thiz, sendBroadcast);
-            }
+        // A silent peer must not wedge the listener, and the whole magic must match (a single
+        // matching byte used to be enough).
+        struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        count = 0;
+        while (count < (int) sizeof(MAGIC) - 1) {
+            ssize_t n = read(client, buffer + count, sizeof(buffer) - count);
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n <= 0)
+                break;
+            count += (int) n;
+        }
+        if (count >= (int) sizeof(MAGIC) - 1 && !memcmp(buffer, MAGIC, sizeof(MAGIC) - 1)) {
+            log(DEBUG, "New client connection!\n");
+            env->CallVoidMethod(thiz, sendBroadcast);
         }
         close(client);
     }

@@ -91,4 +91,22 @@ class ChrootProcessManagerTest {
         assertEquals(3, merged.size)
         assertEquals(listOf(201, 202, 203), merged.map { it.pid })
     }
+
+    @Test
+    fun captureError_suFailureOrMissingReport_isNeverClean() {
+        assertEquals("timeout", ChrootProcessManager.captureError(-2, ""))
+        assertEquals("su_failed", ChrootProcessManager.captureError(-1, ""))
+        // su ran but the script never reported (e.g. could not read the staged file).
+        assertEquals("no_output", ChrootProcessManager.captureError(127, "sh: can't open"))
+        assertEquals("no_output", ChrootProcessManager.captureError(0, ""))
+        assertEquals(
+            null,
+            ChrootProcessManager.captureError(0, "# chroot_processes v1\n# count=0\n"),
+        )
+        // reap exits 2 with residual processes: still a valid report.
+        assertEquals(
+            null,
+            ChrootProcessManager.captureError(2, "# chroot_processes v1\n99\tx\t\n"),
+        )
+    }
 }

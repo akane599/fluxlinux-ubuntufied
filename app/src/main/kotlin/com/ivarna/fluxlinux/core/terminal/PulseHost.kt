@@ -6,10 +6,25 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Host PulseAudio supervisor (app uid). Guests are TCP clients only.
+ * Host PulseAudio supervisor (app uid). Guests are clients of a unix socket in the
+ * app-private shared tmp ([SOCKET_NAME] under `$PREFIX/tmp`): proot sees it at
+ * [PROOT_GUEST_SERVER] (`--shared-tmp`), chroot at [CHROOT_GUEST_SERVER]
+ * (`/mnt/host-tmp` bind). No TCP listener: loopback 4713 is open to every app.
  * [ensureStarted] is once-per-process; [start]/[restart] are explicit UI actions.
  */
 object PulseHost {
+
+    /** Socket file name inside the host shared tmp (`$PREFIX/tmp`). */
+    const val SOCKET_NAME = "pulse-native"
+
+    /** Guest `PULSE_SERVER` under proot, where `$PREFIX/tmp` is bound at `/tmp`. */
+    const val PROOT_GUEST_SERVER = "unix:/tmp/$SOCKET_NAME"
+
+    /** Guest `PULSE_SERVER` under chroot, where `$PREFIX/tmp` is bound at `/mnt/host-tmp`. */
+    const val CHROOT_GUEST_SERVER = "unix:/mnt/host-tmp/$SOCKET_NAME"
+
+    /** Host path of the guest socket; must match `start_pulse_host.sh` (`$PREFIX/tmp`). */
+    fun hostSocketPath(hostTmp: String = TermuxHostPaths.TMPDIR): String = "$hostTmp/$SOCKET_NAME"
 
     private const val TAG = "PulseHost"
     private const val LOG_NAME = "pulse_host.log"
@@ -20,11 +35,11 @@ object PulseHost {
     data class Status(
         val running: Boolean,
         val sink: String,
-        val tcpOk: Boolean,
+        val socketOk: Boolean,
         val raw: String
     ) {
         val healthy: Boolean
-            get() = running && tcpOk && sink.isNotBlank() &&
+            get() = running && socketOk && sink.isNotBlank() &&
                 sink != "auto_null" && sink != "null"
 
         val label: String
@@ -32,7 +47,7 @@ object PulseHost {
                 !running -> "Stopped"
                 sink.isBlank() || sink == "auto_null" || sink == "null" ->
                     "Running (dummy sink)"
-                !tcpOk -> "Running (no TCP)"
+                !socketOk -> "Running (no guest socket)"
                 else -> "Running"
             }
 
@@ -40,8 +55,8 @@ object PulseHost {
             get() = buildString {
                 if (running) {
                     append("sink=").append(sink.ifBlank { "?" })
-                    append("  tcp=")
-                    append(if (tcpOk) "127.0.0.1:4713" else "down")
+                    append("  socket=")
+                    append(if (socketOk) SOCKET_NAME else "down")
                 } else {
                     append("Host Pulse is not running")
                 }
@@ -106,7 +121,7 @@ object PulseHost {
         // Exec libpactl.so directly. Do not go through toybox `env` (paths contain
         // `=`) or `libbash -c` + `exec "$0"` (termux-exec then looks up `$0`).
         val extra = hashMapOf(
-            "PULSE_SERVER" to "tcp:127.0.0.1",
+            "PULSE_SERVER" to "unix:${hostSocketPath()}",
             "PULSE_RUNTIME_PATH" to "${TermuxHostPaths.HOME}/.pulse",
             "XDG_RUNTIME_DIR" to "${TermuxHostPaths.HOME}/.pulse-runtime",
             "LD_PRELOAD" to ""
@@ -119,11 +134,11 @@ object PulseHost {
         val statusOut = buildString {
             if (exit == 0 && out.contains("Default Sink:", ignoreCase = true)) {
                 appendLine("FLUX_PULSE_RUNNING=1")
-                appendLine("FLUX_PULSE_TCP=1")
+                appendLine("FLUX_PULSE_SOCKET=1")
                 append(out.trimEnd())
             } else {
                 appendLine("FLUX_PULSE_RUNNING=0")
-                appendLine("FLUX_PULSE_TCP=0")
+                appendLine("FLUX_PULSE_SOCKET=0")
                 if (out.isNotBlank()) append(out.trimEnd())
             }
         }
@@ -217,9 +232,9 @@ object PulseHost {
 
     fun parseStatus(output: String): Status {
         val running = output.lineSequence().any { it.trim() == "FLUX_PULSE_RUNNING=1" }
-        val tcpOk = output.lineSequence().any { it.trim() == "FLUX_PULSE_TCP=1" }
+        val socketOk = output.lineSequence().any { it.trim() == "FLUX_PULSE_SOCKET=1" }
         val sink = parseDefaultSink(output)
-        return Status(running = running, sink = sink, tcpOk = tcpOk, raw = output)
+        return Status(running = running, sink = sink, socketOk = socketOk, raw = output)
     }
 
     fun parseDefaultSink(output: String): String {

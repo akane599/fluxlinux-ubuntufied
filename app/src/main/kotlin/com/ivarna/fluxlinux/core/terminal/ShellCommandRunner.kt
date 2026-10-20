@@ -4,6 +4,11 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Cancel handle for a streamed shell process. */
 class ShellJob(private val process: Process) {
@@ -17,6 +22,80 @@ class ShellJob(private val process: Process) {
             process.destroyForcibly()
         } catch (_: Exception) {
         }
+    }
+}
+
+/**
+ * Runs a job as its own process group so cancel/timeout reaches every descendant
+ * (proot-distro → proot → tar/apt/git), not only the direct child (H3).
+ *
+ * The job is started by a small bash wrapper with job control on (`set -m`), which
+ * puts it in a new process group whose id is the job's pid. No `setsid` binary is
+ * needed (none is guaranteed on the host prefix, and `$PREFIX/bin` cannot be argv0
+ * under W^X): the wrapper is the same nativeLibraryDir `libbash.so`. On SIGTERM the
+ * wrapper SIGKILLs the whole group and exits 143; otherwise it exits with the
+ * job's status. Job-status chatter from `wait` goes to /dev/null.
+ */
+internal object ProcessGroupLauncher {
+    const val WRAPPER =
+        "trap 'kill -9 -- -\"\$pid\" 2>/dev/null; exit 143' TERM HUP INT; " +
+            "set -m; \"\$@\" & pid=\$!; wait \"\$pid\" 2>/dev/null"
+
+    /** `bash -c WRAPPER flux-job cmd...` — [bash] must be the host libbash (or /bin/bash in tests). */
+    fun wrap(bash: String, cmd: Array<String>): Array<String> =
+        arrayOf(bash, "-c", WRAPPER, "flux-job", *cmd)
+}
+
+/**
+ * A [Process] started via [ProcessGroupLauncher] whose [destroy]/[destroyForcibly]
+ * kill the job's whole process group: SIGTERM makes the wrapper SIGKILL the group;
+ * a wrapper that does not exit within [graceMs] is SIGKILLed, and the output stream
+ * is then closed so a reader blocked by an escaped descendant (e.g. a daemon that
+ * called setsid and still holds the pipe) unblocks. Non-blocking: escalation runs on
+ * a daemon thread, so callers may cancel from the main thread.
+ *
+ * Root jobs can reuse this by passing a custom [killGroup].
+ */
+class GroupKillingProcess(
+    private val delegate: Process,
+    private val graceMs: Long = 2_000L,
+    private val killGroup: (Process) -> Unit = { it.destroy() },
+) : Process() {
+    private val killed = AtomicBoolean(false)
+
+    /** True once a kill was requested (readers treat a closed stream as cancellation). */
+    val isKilled: Boolean get() = killed.get()
+
+    override fun getOutputStream(): OutputStream = delegate.outputStream
+    override fun getInputStream(): InputStream = delegate.inputStream
+    override fun getErrorStream(): InputStream = delegate.errorStream
+    override fun waitFor(): Int = delegate.waitFor()
+    override fun waitFor(timeout: Long, unit: TimeUnit): Boolean = delegate.waitFor(timeout, unit)
+    override fun exitValue(): Int = delegate.exitValue()
+    override fun isAlive(): Boolean = delegate.isAlive
+
+    override fun destroy() {
+        if (!killed.compareAndSet(false, true)) return
+        runCatching { killGroup(delegate) }
+        Thread({
+            try {
+                if (!delegate.waitFor(graceMs, TimeUnit.MILLISECONDS)) {
+                    delegate.destroyForcibly()
+                    delegate.waitFor(graceMs, TimeUnit.MILLISECONDS)
+                }
+                // Group is dead; give the reader a moment to drain to EOF, then make
+                // sure it cannot stay blocked on a pipe an escaped process still holds.
+                Thread.sleep(graceMs)
+                runCatching { delegate.inputStream.close() }
+            } catch (_: InterruptedException) {
+                delegate.destroyForcibly()
+            }
+        }, "flux-group-kill").apply { isDaemon = true }.start()
+    }
+
+    override fun destroyForcibly(): Process {
+        destroy()
+        return this
     }
 }
 
@@ -95,10 +174,32 @@ object ShellCommandRunner {
         /** Optional: live line callback (bg thread). */
         onLine: ((String) -> Unit)? = null
     ): Pair<Int, String> {
-        val pb = ProcessBuilder(*adjustHostCmd(cmd)); setHostCwd(pb, cmd)
+        // Cancellable jobs (a holder is given) run as their own process group so
+        // cancel kills proot-distro/tar/apt too, not just the direct bash child (H3).
+        val launch = if (processHolder != null) {
+            ProcessGroupLauncher.wrap(TermuxHostPaths.libBash(ctx).absolutePath, cmd)
+        } else {
+            adjustHostCmd(cmd)
+        }
+        val pb = ProcessBuilder(*launch); setHostCwd(pb, cmd)
         applyEnvironment(ctx, pb, envMap)
+        return captureExit(pb, grouped = processHolder != null, processHolder, onLine)
+    }
+
+    /**
+     * Context-free core of [runCaptureExit] (JVM-testable). When [grouped], [pb] must
+     * be a [ProcessGroupLauncher.wrap] command and the holder receives a
+     * [GroupKillingProcess].
+     */
+    internal fun captureExit(
+        pb: ProcessBuilder,
+        grouped: Boolean,
+        processHolder: java.util.concurrent.atomic.AtomicReference<Process?>?,
+        onLine: ((String) -> Unit)?,
+    ): Pair<Int, String> {
         pb.redirectErrorStream(true)
-        val proc = pb.start()
+        val raw = pb.start()
+        val proc: Process = if (grouped) GroupKillingProcess(raw) else raw
         processHolder?.set(proc)
         return try {
             // Close stdin so interactive scripts (`read -p "Press Enter…"`) get EOF
@@ -107,23 +208,26 @@ object ShellCommandRunner {
                 proc.outputStream.close()
             } catch (_: Exception) {
             }
-            val text = if (onLine != null) {
-                val sb = StringBuilder()
+            val sb = StringBuilder()
+            try {
                 proc.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
                     var line: String?
                     while (reader.readLine().also { line = it } != null) {
                         val l = line ?: continue
                         sb.append(l).append('\n')
-                        try {
-                            onLine(l)
-                        } catch (_: Exception) {
+                        if (onLine != null) {
+                            try {
+                                onLine(l)
+                            } catch (_: Exception) {
+                            }
                         }
                     }
                 }
-                sb.toString()
-            } else {
-                proc.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } catch (e: IOException) {
+                // A cancel closes the stream to unblock this reader; anything else is real.
+                if (!(proc is GroupKillingProcess && proc.isKilled)) throw e
             }
+            val text = sb.toString()
             val exit = try {
                 proc.waitFor()
             } catch (_: InterruptedException) {
@@ -158,7 +262,9 @@ object ShellCommandRunner {
         onLine: (line: String) -> Unit,
         onDone: (exitCode: Int) -> Unit
     ): ShellJob {
-        val pb = ProcessBuilder(*adjustHostCmd(cmd)); setHostCwd(pb, cmd)
+        // Own process group: cancel kills the script's children too (H3).
+        val launch = ProcessGroupLauncher.wrap(TermuxHostPaths.libBash(ctx).absolutePath, cmd)
+        val pb = ProcessBuilder(*launch); setHostCwd(pb, cmd)
         applyEnvironment(ctx, pb, envMap)
         pb.redirectErrorStream(true)
 
@@ -186,7 +292,7 @@ object ShellCommandRunner {
                     mainHandler.post { onDone(-1) }
                     return@Thread
                 }
-                pb.start().also { holder[0] = it }
+                GroupKillingProcess(pb.start()).also { holder[0] = it }
             } catch (_: Exception) {
                 mainHandler.post { onDone(-1) }
                 return@Thread

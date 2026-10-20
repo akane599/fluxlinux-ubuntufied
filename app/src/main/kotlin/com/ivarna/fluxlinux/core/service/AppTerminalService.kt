@@ -43,7 +43,8 @@ class AppTerminalService : Service() {
                 Log.e(TAG, "fallback startForeground failed", e2)
             }
         }
-        return START_STICKY
+        // Not sticky: terminal sessions live in this process and die with it.
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -62,7 +63,7 @@ class AppTerminalService : Service() {
 
     private fun createNotification(count: Int): Notification {
         val intent = Intent(this, MainActivity::class.java).apply {
-            putExtra("EXTRA_TARGET_PAGE", "terminal")
+            putExtra(LaunchTargets.EXTRA_TARGET_PAGE, LaunchTargets.PAGE_TERMINAL)
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(

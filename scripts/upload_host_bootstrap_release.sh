@@ -139,11 +139,29 @@ for pin in "${PINS[@]}"; do
   fi
 done
 
+# Download the release's sha256sums.txt into dir $1. Returns 1 only when the
+# release is confirmed to have no such asset; any gh failure aborts, so a
+# transient error can never truncate the published pins.
+fetch_remote_sums() {
+  local dest="$1" names
+  if ! names="$(gh release view "$RELEASE_TAG" --repo "$REPO" --json assets --jq '.assets[].name')"; then
+    echo "ERROR: could not list $RELEASE_TAG release assets — refusing to rewrite sha256sums.txt" >&2
+    exit 1
+  fi
+  if ! grep -qxF 'sha256sums.txt' <<<"$names"; then
+    return 1
+  fi
+  if ! gh release download "$RELEASE_TAG" --repo "$REPO" --pattern sha256sums.txt --dir "$dest" --clobber \
+    || [ ! -f "$dest/sha256sums.txt" ]; then
+    echo "ERROR: sha256sums.txt exists on $RELEASE_TAG but could not be downloaded — refusing to rewrite it" >&2
+    exit 1
+  fi
+}
+
 # Merge bootstrap lines into the existing sha256sums.txt without dropping rootfs pins.
 SUMS_REMOTE="$WORK_DIR/sha256sums.remote"
 SUMS_OUT="$WORK_DIR/sha256sums.txt"
-if gh release download "$RELEASE_TAG" --repo "$REPO" --pattern sha256sums.txt --dir "$WORK_DIR" --clobber 2>/dev/null \
-  && [ -f "$WORK_DIR/sha256sums.txt" ]; then
+if fetch_remote_sums "$WORK_DIR"; then
   cp -f "$WORK_DIR/sha256sums.txt" "$SUMS_REMOTE"
 else
   : > "$SUMS_REMOTE"

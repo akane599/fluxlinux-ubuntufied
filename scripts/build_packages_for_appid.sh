@@ -199,6 +199,14 @@ for deb in "$BUILD_OUT_DIR"/*.deb; do
   fi
 done
 echo "[*] mirrored=$mirrored skipped_other_prefix=$skipped" | tee -a "$LOG"
+# Mirroring never prunes, so a rebuilt version lands next to the old one.
+# assemble_bootstrap.py refuses ambiguous packages; flag them here too.
+dup_pkgs="$(find "$OUT_DIR" -maxdepth 1 -name '*.deb' -printf '%f\n' \
+  | sed -E 's/_[^_]+_[^_]+\.deb$//' | sort | uniq -d)"
+if [[ -n "$dup_pkgs" ]]; then
+  echo "[!] multiple versions in $OUT_DIR (remove stale debs before assemble_bootstrap.py):" | tee -a "$LOG"
+  echo "$dup_pkgs" | sed 's/^/    /' | tee -a "$LOG"
+fi
 
 echo "" | tee -a "$LOG"
 echo "[*] done: ok=$ok fail=$fail" | tee -a "$LOG"

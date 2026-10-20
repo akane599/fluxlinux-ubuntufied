@@ -3,7 +3,9 @@ package com.ivarna.fluxlinux.core.install
 import android.content.Context
 import android.util.Log
 import com.ivarna.fluxlinux.core.system.SafeFiles
+import com.ivarna.fluxlinux.core.terminal.GroupKillingProcess
 import com.ivarna.fluxlinux.core.terminal.HostCommandBuilder
+import com.ivarna.fluxlinux.core.terminal.ProcessGroupLauncher
 import com.ivarna.fluxlinux.core.terminal.TermuxHostPaths
 import com.ivarna.fluxlinux.core.terminal.ZshPluginSet
 import java.io.File
@@ -220,11 +222,13 @@ object ProotZshBootstrap {
     ): Int? {
         val bash = TermuxHostPaths.libBash(app).absolutePath
         return try {
-            val pb = ProcessBuilder(bash, "-c", script)
+            // Own process group: a timeout must also kill git/apt children, not just bash (H3).
+            val pb = ProcessBuilder(*ProcessGroupLauncher.wrap(bash, arrayOf(bash, "-c", script)))
             HostCommandBuilder.applyTo(app, pb, forceHostSetup = false)
             pb.redirectErrorStream(true)
             runCatching { pb.directory(File(TermuxHostPaths.BIN)) }
-            val proc = pb.start()
+            val proc = GroupKillingProcess(pb.start())
+            runCatching { proc.outputStream.close() }
             Thread {
                 try {
                     proc.inputStream.bufferedReader().forEachLine { line ->

@@ -25,6 +25,12 @@ class DesktopSessionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent == null) {
+            // Defensive: a null intent only comes from a sticky restart after process death,
+            // when the desktop died with the old process. Never show a false "active" notice.
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val notification = createNotification()
         try {
             if (Build.VERSION.SDK_INT >= 34) {
@@ -44,14 +50,21 @@ class DesktopSessionService : Service() {
                 Log.e(TAG, "fallback startForeground failed", e2)
             }
         }
-        return START_STICKY
+        // Not sticky: the guest desktop runs in this process tree and dies with it.
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotification(): Notification {
+        // A target page makes a cold-start tap land on Home without counting as a plain
+        // launch (which could auto-start the desktop again).
+        val open = Intent(this, MainActivity::class.java).apply {
+            putExtra(LaunchTargets.EXTRA_TARGET_PAGE, LaunchTargets.PAGE_HOME)
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
+            this, 0, open,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)

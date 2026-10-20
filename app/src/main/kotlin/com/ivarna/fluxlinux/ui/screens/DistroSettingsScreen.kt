@@ -587,6 +587,22 @@ fun SettingsThemeOption(name: String, desc: String, id: String, selected: Boolea
     }
 }
 
+/**
+ * Component ids whose scripts have no uninstall branch: they ignore the
+ * `uninstall` argument and re-run the install (the customization scripts also
+ * rewrite ~/.zshrc), after which the app would record them as uninstalled.
+ * xfce4_desktop is the base desktop install (setup_*_family.sh). Every
+ * customization script (XFCE, KDE, Termux, Debian, Alpine) is install-only.
+ * kde_plasma keeps its button: setup_kde_*.sh handle `uninstall`.
+ */
+private val INSTALL_ONLY_COMPONENT_IDS = setOf("xfce4_desktop", "customization", "kde_customization")
+
+/** True when the Distro Settings card may offer Uninstall for [component]. */
+internal fun componentSupportsUninstall(component: DistroComponent): Boolean =
+    !component.isMandatory &&
+        !component.comingSoon &&
+        component.id !in INSTALL_ONLY_COMPONENT_IDS
+
 @Composable
 fun ComponentManagementGlassCard(
     component: DistroComponent,
@@ -707,18 +723,9 @@ fun ComponentManagementGlassCard(
                                 }
                             }
 
-                            // Secondary Uninstall button — only for installed, non-mandatory components.
-                            // Mandatory components (e.g., hw_accel) cannot be removed.
-                            // xfce4_desktop is also hidden: its script (setup_debian_family.sh /
-                            // setup_xfce4_termux.sh / setup_arch_family.sh) is the base install
-                            // and has no uninstall branch — tapping Uninstall would re-install XFCE.
-                            // Termux xfce customisation (id="customization", scriptName contains
-                            // "termux") and Termux kde customisation (id="kde_customization",
-                            // scriptName contains "termux") are hidden for the same reason — see
-                            // T8 + T9 v4. The scripts have no uninstall branch; tapping would
-                            // re-run the install. setup_kde_termux.sh DOES have a real uninstall
-                            // branch, so the kde_plasma button remains visible.
-                            if (isInstalled && !component.isMandatory && !component.comingSoon && component.id != "xfce4_desktop" && !(component.id == "customization" && component.scriptName.contains("termux")) && !(component.id == "kde_customization" && component.scriptName.contains("termux")) && onUninstall != null) {
+                            // Secondary Uninstall button — only for installed components whose
+                            // script has a real uninstall branch (see componentSupportsUninstall).
+                            if (isInstalled && componentSupportsUninstall(component) && onUninstall != null) {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 TextButton(
                                     onClick = onUninstall,

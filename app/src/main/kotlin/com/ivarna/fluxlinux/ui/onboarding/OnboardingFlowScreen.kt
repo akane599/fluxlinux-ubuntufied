@@ -64,10 +64,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -92,7 +95,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
-import com.ivarna.fluxlinux.core.install.OnboardingInstallRunner
+import com.ivarna.fluxlinux.core.install.InstallController
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
@@ -131,51 +134,44 @@ fun OnboardingFlowScreen(
     onStartDesktop: (distroId: String) -> Unit = {}
 ) {
     val context = LocalContext.current
-    var step by remember { mutableStateOf(OnboardStep.Welcome) }
-    var theme by remember { mutableStateOf("dark") }
+    // H2: the install is process-scoped. Leaving composition (rotation, uiMode change,
+    // split-screen, Back) never cancels it; only the explicit Cancel action does.
+    val installer = remember { InstallController.get(context.applicationContext) }
+    val install by installer.state.collectAsState()
+    var step by rememberSaveable {
+        // Re-opened while an Ubuntu install runs (or just finished): show its progress.
+        mutableStateOf(
+            if (installer.state.value.isActiveFor(UBUNTU_DISTRO_ID)) OnboardStep.Running else OnboardStep.Welcome
+        )
+    }
+    var theme by rememberSaveable { mutableStateOf("dark") }
+    var showLog by rememberSaveable { mutableStateOf(true) }
 
-    var percent by remember { mutableIntStateOf(0) }
-    var phaseLabel by remember { mutableStateOf("") }
-    var detail by remember { mutableStateOf("") }
-    var logText by remember { mutableStateOf("") }
-    var failed by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showLog by remember { mutableStateOf(true) }
-
-    val runner = remember { OnboardingInstallRunner(context.applicationContext) }
-    DisposableEffect(Unit) {
-        onDispose { runner.cancel() }
+    LaunchedEffect(step, install.runId, install.status) {
+        if (step != OnboardStep.Running) return@LaunchedEffect
+        when {
+            // Restored after process death: the install died with the process.
+            !install.isActiveFor(UBUNTU_DISTRO_ID) -> step = OnboardStep.Options
+            install.status == InstallController.Status.Succeeded -> {
+                // Idempotent: only creates missing ~/storage links, never replaces anything.
+                val appContext = context.applicationContext
+                thread(name = "onboarding-storage-links") {
+                    runCatching { GuestStorageLinks.ensure(appContext, UBUNTU_DISTRO_ID) }
+                }
+                step = OnboardStep.Done
+            }
+        }
     }
 
     fun startInstall() {
         step = OnboardStep.Running
-        percent = 0
-        phaseLabel = "Starting…"
-        detail = ""
-        logText = ""
-        failed = false
-        errorMessage = null
-        runner.start(UBUNTU_DISTRO_ID, theme) { p ->
-            percent = p.overallPercent
-            phaseLabel = p.phaseLabel
-            detail = p.detail
-            p.logLine?.let { line ->
-                logText = (logText + line + "\n").takeLast(12_000)
-            }
-            if (p.finished) {
-                if (p.failed) {
-                    failed = true
-                    errorMessage = p.errorMessage
-                } else {
-                    // Idempotent: only creates missing ~/storage links, never replaces anything.
-                    val appContext = context.applicationContext
-                    thread(name = "onboarding-storage-links") {
-                        runCatching { GuestStorageLinks.ensure(appContext, UBUNTU_DISTRO_ID) }
-                    }
-                    step = OnboardStep.Done
-                }
-            }
-        }
+        installer.start(UBUNTU_DISTRO_ID, theme)
+    }
+
+    /** Leaving the Done page: the finished run no longer needs to be shown. */
+    fun leaveDone(then: () -> Unit) {
+        installer.clearFinished()
+        then()
     }
 
     Box(
@@ -211,24 +207,25 @@ fun OnboardingFlowScreen(
                 onNext = { startInstall() }
             )
             OnboardStep.Running -> InstallProgressPanel(
-                percent = percent,
-                phaseLabel = phaseLabel,
-                detail = detail,
-                logText = logText,
-                failed = failed,
-                errorMessage = errorMessage,
+                percent = install.percent,
+                phaseLabel = install.phaseLabel.ifBlank { stringResource(R.string.install_starting) },
+                detail = install.detail,
+                logText = install.logText,
+                failed = install.status == InstallController.Status.Failed,
+                errorMessage = install.errorMessage,
                 showLog = showLog,
                 onToggleLog = { showLog = !showLog },
                 onRetry = { startInstall() },
                 onBack = {
-                    runner.cancel()
+                    // Explicit user cancel — the only path that stops the install.
+                    installer.cancel()
                     step = OnboardStep.Options
                 }
             )
             OnboardStep.Done -> DonePage(
-                onHome = onFinished,
-                onTerminal = onOpenTerminal,
-                onDesktop = { onStartDesktop(UBUNTU_DISTRO_ID) }
+                onHome = { leaveDone(onFinished) },
+                onTerminal = { leaveDone(onOpenTerminal) },
+                onDesktop = { leaveDone { onStartDesktop(UBUNTU_DISTRO_ID) } }
             )
         }
     }

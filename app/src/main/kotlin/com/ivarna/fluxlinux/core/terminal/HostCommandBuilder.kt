@@ -51,7 +51,8 @@ object HostCommandBuilder {
         env["CURL_CA_BUNDLE"] = TermuxHostPaths.SSL_CERT
         // Do not set PULSE_SERVER here: pulseaudio refuses to spawn a
         // daemon when it is set. Native clients use the unix socket via
-        // PULSE_RUNTIME_PATH. Guests get tcp:127.0.0.1 from the builders.
+        // PULSE_RUNTIME_PATH. Guests get the shared-tmp unix socket
+        // (unix:/tmp/pulse-native, chroot /mnt/host-tmp) from the builders.
         env["PULSE_RUNTIME_PATH"] = "${TermuxHostPaths.HOME}/.pulse"
 
         val termuxExec = TermuxHostPaths.termuxExec(ctx)

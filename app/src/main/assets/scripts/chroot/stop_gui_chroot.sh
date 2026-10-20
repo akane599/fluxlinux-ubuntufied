@@ -66,9 +66,12 @@ case "$DISTRO_HINT" in
     ;;
 esac
 ROOT_STOP_SCRIPT="$TERMUX_HOME/$ROOT_STOP_NAME"
-ROOT_STOP_TMP="/data/local/tmp/$ROOT_STOP_NAME"
 RESOLVER_SRC="$TERMUX_HOME/resolve_bb.sh"
-RESOLVER_TMP="/data/local/tmp/fluxlinux_resolve_bb.sh"
+# M14: root runs only copies in the root-only stage (root:root 0700; ChrootPaths.ROOT_STAGE_DIR).
+ROOT_STAGE_PARENT="/data/adb/fluxlinux"
+ROOT_STAGE="$ROOT_STAGE_PARENT/$PKG"
+ROOT_STOP_STAGED="$ROOT_STAGE/$ROOT_STOP_NAME"
+RESOLVER_STAGED="$ROOT_STAGE/resolve_bb.sh"
 
 echo "========================================"
 echo "FluxLinux: STOP XFCE (chroot mode)"
@@ -82,12 +85,17 @@ else
   for s in /system/bin/su /system/xbin/su /sbin/su; do
     if [ -x "$s" ]; then SU_BIN="$s"; break; fi
   done
-  "$SU_BIN" -c "cp -f '$ROOT_STOP_SCRIPT' '$ROOT_STOP_TMP' 2>/dev/null; \
-    [ -f '$RESOLVER_SRC' ] && cp -f '$RESOLVER_SRC' '$RESOLVER_TMP' 2>/dev/null; \
-    chmod 755 '$ROOT_STOP_TMP' '$RESOLVER_TMP' 2>/dev/null; \
+  "$SU_BIN" -c "( umask 077; mkdir -p '$ROOT_STAGE' ) && [ ! -L '$ROOT_STAGE_PARENT' ] && [ ! -L '$ROOT_STAGE' ] && \
+      chown 0:0 '$ROOT_STAGE_PARENT' '$ROOT_STAGE' && chmod 0700 '$ROOT_STAGE_PARENT' '$ROOT_STAGE' || \
+      { echo 'FluxLinux: [ERROR] cannot create root-only stage $ROOT_STAGE' >&2; exit 1; }; \
+    _stage() { [ -f \"\$1\" ] || return 1; cp -f \"\$1\" \"\$2.stage.\$\$\" && chmod 0600 \"\$2.stage.\$\$\" && \
+      mv -f \"\$2.stage.\$\$\" \"\$2\" || { rm -f \"\$2.stage.\$\$\"; return 1; }; }; \
+    _stage '$ROOT_STOP_SCRIPT' '$ROOT_STOP_STAGED' || { echo 'FluxLinux: [ERROR] cannot stage $ROOT_STOP_NAME' >&2; exit 1; }; \
+    _stage '$RESOLVER_SRC' '$RESOLVER_STAGED'; \
+    rm -f '/data/local/tmp/$ROOT_STOP_NAME' /data/local/tmp/fluxlinux_resolve_bb.sh 2>/dev/null; \
     DEBIANPATH='$CHROOT_PATH' CHROOT_ROOT='$CHROOT_PATH' FLUX_CHROOT='$CHROOT_PATH' \
     TARGET_PREFIX='$TERMUX_PREFIX' \
-    FLUX_BB='${FLUX_BB:-}' FLUX_RESOLVE_BB='$RESOLVER_TMP' sh '$ROOT_STOP_TMP'"
+    FLUX_BB='${FLUX_BB:-}' FLUX_RESOLVE_BB='$RESOLVER_STAGED' sh '$ROOT_STOP_STAGED'"
 fi
 
 echo "Stopping VirGL (app uid; Pulse stays running)..."

@@ -33,7 +33,13 @@ class BaseInstallService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (intent == null) {
+            // Defensive: only a sticky restart delivers a null intent, and the install
+            // runner died with the old process, so there is nothing to keep alive.
+            stopInstallForeground()
+            return START_NOT_STICKY
+        }
+        when (intent.action) {
             ACTION_STOP -> {
                 stopInstallForeground()
                 return START_NOT_STICKY
@@ -52,17 +58,27 @@ class BaseInstallService : Service() {
                     val percent = intent.getIntExtra(EXTRA_PERCENT, 0)
                     notifyProgress(title, text, percent)
                 }
-                return START_STICKY
+                return START_NOT_STICKY
             }
             else -> {
-                // ACTION_START or null
-                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Installing…"
-                val text = intent?.getStringExtra(EXTRA_TEXT) ?: "Base desktop setup"
-                val percent = intent?.getIntExtra(EXTRA_PERCENT, 0) ?: 0
+                // ACTION_START. Not sticky: after process death no runner exists, so a
+                // restarted service would only show a false "Installing…" notification.
+                val title = intent.getStringExtra(EXTRA_TITLE) ?: "Installing…"
+                val text = intent.getStringExtra(EXTRA_TEXT) ?: "Base desktop setup"
+                val percent = intent.getIntExtra(EXTRA_PERCENT, 0)
                 enterForeground(title, text, percent)
-                return START_STICKY
+                return START_NOT_STICKY
             }
         }
+    }
+
+    /**
+     * Android 15+ caps `dataSync` foreground services at 6 h per day; the system calls this
+     * when the cap is hit and crashes the app unless the service stops itself.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "dataSync FGS time limit reached; stopping install keep-alive")
+        stopInstallForeground()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -121,6 +137,8 @@ class BaseInstallService : Service() {
             this,
             NOTIF_ID,
             Intent(this, MainActivity::class.java).apply {
+                // Not a plain launch (no auto-start); onboarding restores its own screen.
+                putExtra(LaunchTargets.EXTRA_TARGET_PAGE, LaunchTargets.PAGE_INSTALL)
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
@@ -176,6 +194,9 @@ class BaseInstallService : Service() {
 
         private val running = AtomicBoolean(false)
 
+        /** Set by [start] until [stop]; covers the window before [onCreate] sets [running]. */
+        private val startRequested = AtomicBoolean(false)
+
         fun isRunning(): Boolean = running.get()
 
         fun start(
@@ -191,6 +212,7 @@ class BaseInstallService : Service() {
                 putExtra(EXTRA_PERCENT, percent)
             }
             ContextCompat.startForegroundService(context, intent)
+            startRequested.set(true)
         }
 
         fun update(context: Context, title: String, text: String, percent: Int) {
@@ -210,7 +232,17 @@ class BaseInstallService : Service() {
         }
 
         fun stop(context: Context) {
-            if (!running.get()) return
+            // A start() whose service is not created yet must still be stopped: ACTION_STOP is
+            // queued behind ACTION_START, so startForeground() runs first (stopping a service
+            // started with startForegroundService() before that crashes the app).
+            val requested = startRequested.getAndSet(false)
+            if (!running.get() && !requested) {
+                try {
+                    context.stopService(Intent(context, BaseInstallService::class.java))
+                } catch (_: Exception) {
+                }
+                return
+            }
             try {
                 val intent = Intent(context, BaseInstallService::class.java).apply {
                     action = ACTION_STOP

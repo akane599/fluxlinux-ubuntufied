@@ -79,16 +79,45 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         handleScriptCallback(intent)
-        if (intent.getStringExtra("EXTRA_TARGET_PAGE") == "terminal") {
-            // FGS notification tap → jump to in-app terminal (bottom-nav tab)
-            setIntent(intent)
-            lifecycleScope.launch { }
-            currentScreenRef?.value = Screen.HOME
-            currentTabRef?.value = BottomTab.TERMINAL
-        } else if (intent.getStringExtra("EXTRA_TARGET_PAGE") == "home" || intent.getStringExtra("target_page") == "home") {
-            setIntent(intent)
-            currentScreenRef?.value = Screen.HOME
-            currentTabRef?.value = BottomTab.HOME
+        routeTargetPage(intent)
+    }
+
+    /**
+     * Applies a notification's (or termux-x11's) target page: Terminal tab or Home.
+     * Returns false when the tab state is not composed yet. Never skips onboarding.
+     */
+    private fun routeTargetPage(intent: android.content.Intent): Boolean {
+        val page = com.ivarna.fluxlinux.core.service.LaunchTargets.pageFor(
+            intent.getStringExtra(com.ivarna.fluxlinux.core.service.LaunchTargets.EXTRA_TARGET_PAGE),
+            intent.getStringExtra(com.ivarna.fluxlinux.core.service.LaunchTargets.EXTRA_TARGET_PAGE_ALIAS),
+        )
+        if (page == com.ivarna.fluxlinux.core.service.LaunchTargets.Page.NONE) return true
+        if (!StateManager.isOnboardingComplete(this)) return true
+        val screenRef = currentScreenRef ?: return false
+        val tabRef = currentTabRef ?: return false
+        setIntent(intent)
+        screenRef.value = Screen.HOME
+        tabRef.value = if (page == com.ivarna.fluxlinux.core.service.LaunchTargets.Page.TERMINAL) {
+            BottomTab.TERMINAL
+        } else {
+            BottomTab.HOME
+        }
+        return true
+    }
+
+    /**
+     * Cold start from a notification: the tab state lives in composition, so route after the
+     * first frame. The first post runs once the window is attached (initial composition done);
+     * the nested post runs after Compose's first effects, which would otherwise reset the tab.
+     */
+    private fun routeTargetPageAfterFirstFrame(intent: android.content.Intent, attemptsLeft: Int = 5) {
+        val decor = window.decorView
+        decor.post {
+            decor.post {
+                if (!isDestroyed && !routeTargetPage(intent) && attemptsLeft > 1) {
+                    routeTargetPageAfterFirstFrame(intent, attemptsLeft - 1)
+                }
+            }
         }
     }
 
@@ -166,15 +195,25 @@ class MainActivity : ComponentActivity() {
                      StateManager.triggerRefresh()
                  } else {
                      // Legacy / Standalone handling
-                     if (scriptName.startsWith("distro_install_")) {
-                         val distroId = scriptName.removePrefix("distro_install_")
-                         StateManager.setDistroInstalled(this, distroId, true)
-                         android.widget.Toast.makeText(this, "$distroId Installed! ✅", android.widget.Toast.LENGTH_LONG).show()
-                     } else if (scriptName.startsWith("distro_uninstall_")) {
-                         val distroId = scriptName.removePrefix("distro_uninstall_")
+                     // The callback is unauthenticated: only act on a known distro id.
+                     val knownIds = com.ivarna.fluxlinux.core.data.DistroRepository.supportedDistros.map { it.id }
+                     val installedId = com.ivarna.fluxlinux.core.service.LaunchTargets.callbackDistroId(
+                         scriptName, "distro_install_", knownIds,
+                     )
+                     val uninstalledId = com.ivarna.fluxlinux.core.service.LaunchTargets.callbackDistroId(
+                         scriptName, "distro_uninstall_", knownIds,
+                     )
+                     if (installedId != null) {
+                         StateManager.setDistroInstalled(this, installedId, true)
+                         android.widget.Toast.makeText(this, "$installedId Installed! ✅", android.widget.Toast.LENGTH_LONG).show()
+                     } else if (uninstalledId != null) {
                          com.ivarna.fluxlinux.core.terminal.TerminalLauncher
-                             .refreshInstalledAfterUninstall(this, distroId)
-                         android.widget.Toast.makeText(this, "$distroId Uninstalled! 🗑️", android.widget.Toast.LENGTH_LONG).show()
+                             .refreshInstalledAfterUninstall(this, uninstalledId)
+                         android.widget.Toast.makeText(this, "$uninstalledId Uninstalled! 🗑️", android.widget.Toast.LENGTH_LONG).show()
+                     } else if (scriptName.startsWith("distro_install_") ||
+                         scriptName.startsWith("distro_uninstall_")
+                     ) {
+                         android.util.Log.w("FluxLinux", "Ignored callback for unknown distro: $scriptName")
                      } else {
                          // Generic Script
                          StateManager.setScriptStatus(this, scriptName, true)
@@ -188,7 +227,9 @@ class MainActivity : ComponentActivity() {
             } else {
                  // Component failed
                  android.widget.Toast.makeText(this, "Task '$scriptName' failed! ❌", android.widget.Toast.LENGTH_LONG).show()
-                 com.ivarna.fluxlinux.core.utils.InstallationQueueManager.clear() // Stop queue on failure
+                 // Stop the queue only for the task actually running, not on any failure link.
+                 val queue = com.ivarna.fluxlinux.core.utils.InstallationQueueManager
+                 if (queue.currentTask?.id == scriptName) queue.clear()
             }
         }
     }
@@ -225,7 +266,9 @@ class MainActivity : ComponentActivity() {
             component.scriptName.contains("setup_customization")
 
     /**
-     * Load a component script and prepend flux_gpu_common.sh for hw_accel.
+     * Load a component script and prepend its helper library
+     * (flux_gpu_common.sh for hw_accel, flux_guest_common.sh for family
+     * scripts) — see [com.ivarna.fluxlinux.core.install.GuestComponentPayload].
      * [extraEnv] is already resolved (no FLUX_GPU=auto).
      */
     private fun loadGuestComponentScript(
@@ -234,22 +277,12 @@ class MainActivity : ComponentActivity() {
         extraEnv: Map<String, String>
     ): String? {
         val scriptManager = com.ivarna.fluxlinux.core.data.ScriptManager(ctx)
-        val envBlock = extraEnv.entries.joinToString("\n") {
-            "export ${it.key}=\"${it.value}\""
-        }
-        val base = scriptManager.getScriptContent(component.scriptName)
-        val common = if (component.id == "hw_accel") {
-            runCatching {
-                scriptManager.getScriptContent("common/setup/flux_gpu_common.sh")
-            }.getOrDefault("")
-        } else {
-            ""
-        }
-        return buildString {
-            if (extraEnv.isNotEmpty()) append(envBlock).append("\n\n")
-            if (common.isNotBlank()) append(common).append("\n\n")
-            append(base)
-        }
+        return com.ivarna.fluxlinux.core.install.GuestComponentPayload.build(
+            componentId = component.id,
+            scriptName = component.scriptName,
+            extraEnv = extraEnv,
+            readScript = scriptManager::getScriptContent,
+        )
     }
 
     /**
@@ -536,8 +569,8 @@ class MainActivity : ComponentActivity() {
         val action = intent.action
         if (action != null && action != android.content.Intent.ACTION_MAIN) return false
         if (intent.data != null) return false
-        return intent.getStringExtra("EXTRA_TARGET_PAGE") == null &&
-            intent.getStringExtra("target_page") == null
+        return intent.getStringExtra(com.ivarna.fluxlinux.core.service.LaunchTargets.EXTRA_TARGET_PAGE) == null &&
+            intent.getStringExtra(com.ivarna.fluxlinux.core.service.LaunchTargets.EXTRA_TARGET_PAGE_ALIAS) == null
     }
 
     /** Auto-start runs at most once per cold launch (also guarded by rememberSaveable). */
@@ -580,6 +613,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             // Read before the callback dispatch, which may rewrite the intent to MAIN.
             coldLaunchAutoStart = isPlainLaunch(intent)
+            intent?.let(::routeTargetPageAfterFirstFrame)
             dispatchLegacyTermuxCallback(intent)
         }
         requestNotificationPermissionIfNeeded()
@@ -629,14 +663,15 @@ class MainActivity : ComponentActivity() {
                     permission = "com.termux.permission.RUN_COMMAND"
                 )
 
-                // Navigation state
-                var currentScreen by remember { 
-                    mutableStateOf(if (onboardingComplete) Screen.HOME else Screen.ONBOARDING) 
+                // Navigation state. Saveable (H2): rotation / uiMode / split-screen must not
+                // drop the user back to Welcome or Home in the middle of an install.
+                var currentScreen by rememberSaveable {
+                    mutableStateOf(if (onboardingComplete) Screen.HOME else Screen.ONBOARDING)
                 }
                 currentScreenRef = remember { kotlinx.coroutines.flow.MutableStateFlow(currentScreen) }
                 LaunchedEffect(currentScreen) { currentScreenRef?.value = currentScreen }
                 
-                var currentTab by remember { mutableStateOf(BottomTab.HOME) }
+                var currentTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
                 currentTabRef = remember { kotlinx.coroutines.flow.MutableStateFlow(currentTab) }
                 LaunchedEffect(currentTab) { currentTabRef?.value = currentTab }
                 // FGS / external intent may flip tab via currentTabRef
@@ -732,9 +767,18 @@ class MainActivity : ComponentActivity() {
                 }
                 
                 // Selected Distro for Wizard/Settings
-                var selectedDistro by remember { mutableStateOf<com.ivarna.fluxlinux.core.data.Distro?>(null) }
+                // Saved by id so a restored INSTALL_WIZARD / DISTRO_SETTINGS still has its distro.
+                var selectedDistro by rememberSaveable(
+                    stateSaver = androidx.compose.runtime.saveable.Saver<com.ivarna.fluxlinux.core.data.Distro?, String>(
+                        save = { it?.id },
+                        restore = { id ->
+                            com.ivarna.fluxlinux.core.data.DistroRepository.supportedDistros
+                                .firstOrNull { it.id == id }
+                        },
+                    ),
+                ) { mutableStateOf<com.ivarna.fluxlinux.core.data.Distro?>(null) }
                 // Selected target id for Chroot/PRoot storage detail
-                var storageTargetId by remember { mutableStateOf<String?>(null) }
+                var storageTargetId by rememberSaveable { mutableStateOf<String?>(null) }
                 
                 // Refresh key to force UI update on resume
                 // Collected from StateManager for remote triggers too

@@ -229,7 +229,7 @@ object HostScriptDeployer {
 
     /**
      * Copy missing Pulse runtime `.so` from flavor assets without re-extracting
-     * the bootstrap (preserves proot containers). Also drop default.pa.d TCP/AAudio.
+     * the bootstrap (preserves proot containers). Also drop default.pa.d AAudio + guest socket.
      *
      * Always chmod 0755: [File.setExecutable] is a no-op on some Android 16
      * file trees, and a mode-600 `.so` cannot be mmap'd PROT_EXEC by
@@ -271,10 +271,17 @@ object HostScriptDeployer {
             ".nofail\n" +
                 "load-module module-aaudio-sink\n" +
                 "load-module module-sles-sink\n" +
-                "load-module module-native-protocol-tcp " +
-                "auth-ip-acl=127.0.0.1 auth-anonymous=1 listen=127.0.0.1\n"
+                pulseGuestSocketLine(PulseHost.hostSocketPath()) + "\n"
         )
     }
+
+    /**
+     * Guest socket in the app-private shared tmp — never TCP: 127.0.0.1:4713 is
+     * reachable (and squattable) by any app. Anonymous auth is scoped by the path,
+     * which only this uid and root (chroot) can reach.
+     */
+    internal fun pulseGuestSocketLine(socketPath: String): String =
+        "load-module module-native-protocol-unix socket=$socketPath auth-anonymous=1"
 
     /** 0755 so the untrusted_app linker can PROT_EXEC the overlay `.so`. */
     internal fun chmodPulseLib(dest: File) {

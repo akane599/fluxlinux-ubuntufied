@@ -26,22 +26,26 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.install.DistroInstallProfile
-import com.ivarna.fluxlinux.core.install.OnboardingInstallRunner
+import com.ivarna.fluxlinux.core.install.InstallController
 import com.ivarna.fluxlinux.ui.components.GlassScaffold
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
 import com.ivarna.fluxlinux.ui.install.InstallThemePickRow
@@ -52,7 +56,7 @@ import dev.chrisbanes.haze.materials.HazeMaterials
 
 /**
  * Thin install wizard: XFCE + customization only (no feature modules).
- * Uses [OnboardingInstallRunner] for both proot and chroot.
+ * Uses the process-scoped [InstallController] for both proot and chroot.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -64,46 +68,31 @@ fun InstallConfigScreen(
 ) {
     val context = LocalContext.current
     val appCtx = context.applicationContext
-    var selectedTheme by remember { mutableStateOf("dark") }
-    var phase by remember { mutableStateOf(InstallPhase.OPTIONS) }
-    var percent by remember { mutableIntStateOf(0) }
-    var phaseLabel by remember { mutableStateOf("") }
-    var detail by remember { mutableStateOf("") }
-    var logText by remember { mutableStateOf("") }
-    var failed by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showLog by remember { mutableStateOf(true) }
-    val runner = remember { OnboardingInstallRunner(appCtx) }
+    // H2: process-scoped install; leaving this screen never cancels it (only Back/Cancel does).
+    val installer = remember { InstallController.get(appCtx) }
+    val install by installer.state.collectAsState()
+    var selectedTheme by rememberSaveable { mutableStateOf("dark") }
+    var showLog by rememberSaveable { mutableStateOf(true) }
+    val mine = install.isActiveFor(distro.id)
+    val failed = mine && install.status == InstallController.Status.Failed
+    val phase = when {
+        !mine -> InstallPhase.OPTIONS
+        install.status == InstallController.Status.Succeeded -> InstallPhase.DONE
+        else -> InstallPhase.RUNNING
+    }
 
-    fun startInstall() {
-        // Generation cancel inside runner; single instance avoids parallel jobs
-        failed = false
-        errorMessage = null
-        percent = 0
-        phaseLabel = "Starting…"
-        detail = ""
-        logText = ""
-        phase = InstallPhase.RUNNING
-        runner.start(distro.id, selectedTheme) { progress ->
-            percent = progress.overallPercent
-            phaseLabel = progress.phaseLabel
-            detail = progress.detail
-            progress.logLine?.let { line ->
-                logText = (logText + line + "\n").takeLast(12_000)
-            }
-            if (progress.failed) {
-                failed = true
-                errorMessage = progress.errorMessage ?: progress.detail
-            }
-            if (progress.finished && !progress.failed) {
-                phase = InstallPhase.DONE
-                Toast.makeText(context, "Base desktop installed", Toast.LENGTH_SHORT).show()
-            }
+    // One success toast per run, also across recreation.
+    var toastedRun by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(install.runId, install.status) {
+        if (phase == InstallPhase.DONE && toastedRun != install.runId) {
+            toastedRun = install.runId
+            Toast.makeText(context, context.getString(R.string.install_base_desktop_done), Toast.LENGTH_SHORT).show()
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { runner.cancel() }
+    fun startInstall() {
+        // One process-wide install at a time; a new start supersedes the previous run.
+        installer.start(distro.id, selectedTheme)
     }
 
     GlassScaffold(
@@ -125,7 +114,10 @@ fun InstallConfigScreen(
                     IconButton(
                         onClick = {
                             if (phase == InstallPhase.RUNNING && !failed) {
-                                runner.cancel()
+                                // Explicit user cancel.
+                                installer.cancel()
+                            } else if (mine) {
+                                installer.clearFinished()
                             }
                             onBack()
                         }
@@ -277,16 +269,19 @@ fun InstallConfigScreen(
                 Spacer(Modifier.height(80.dp))
             }
             InstallPhase.RUNNING, InstallPhase.DONE -> InstallProgressPanel(
-                percent = percent,
-                phaseLabel = phaseLabel,
-                detail = detail,
-                logText = logText,
+                percent = install.percent,
+                phaseLabel = install.phaseLabel.ifBlank { stringResource(R.string.install_starting) },
+                detail = install.detail,
+                logText = install.logText,
                 failed = failed,
-                errorMessage = errorMessage,
+                errorMessage = install.errorMessage,
                 showLog = showLog,
                 onToggleLog = { showLog = !showLog },
                 onRetry = { startInstall() },
-                onDone = onInstallComplete,
+                onDone = {
+                    installer.clearFinished()
+                    onInstallComplete()
+                },
                 isDone = phase == InstallPhase.DONE
             )
         }

@@ -988,7 +988,7 @@ private fun LeftoverRowCard(
             // Start disclaimer / conflict banner
             if (embeddedDesktopActive) {
                 Text(
-                    "Stop the FluxLinux desktop first. Leftover Termux:X11 and embedded XFCE should not run together (Pulse TCP 127.0.0.1:4713).",
+                    "Stop the FluxLinux desktop first. Leftover Termux:X11 and embedded XFCE should not run together.",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.error
                 )

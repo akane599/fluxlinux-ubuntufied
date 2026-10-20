@@ -7,6 +7,7 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import com.ivarna.fluxlinux.core.data.terminalComponentFor
+import com.ivarna.fluxlinux.core.install.DistroInstallProfile
 import com.ivarna.fluxlinux.core.service.DesktopSessionService
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.PhantomProcessFixer
@@ -31,8 +32,11 @@ import kotlinx.coroutines.flow.update
  *
  * Long-lived start uses [ShellCommandRunner.runStreamedCancelable] so other
  * install/script runners are never blocked. X11 opens only after a readiness
- * marker (e.g. `X server PID=`), not decorative banners. Desktop stdout is
+ * marker ([isDesktopReadyLine]), not decorative banners. Desktop stdout is
  * captured to [GuiDesktopLog] for VIEW LOGS.
+ *
+ * Start/stop ordering lives in [DesktopRunState]: callbacks from a superseded start or
+ * stop are ignored, and a start waits for a running stop script instead of cancelling it.
  */
 object DesktopLauncher {
 
@@ -59,7 +63,13 @@ object DesktopLauncher {
     private val _ui = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _ui.asStateFlow()
 
-    @Volatile private var guiShellJob: ShellJob? = null
+    /** Guest-side readiness line printed by start_gui.sh once the DE is running. */
+    internal const val GUEST_READY_MARKER = "FLUX_DESKTOP_READY"
+
+    private val runState = DesktopRunState()
+
+    /** Only ever the start script; stop scripts run untracked so a start never cancels them. */
+    @Volatile private var startJob: ShellJob? = null
     @Volatile private var guiUserStopping: Boolean = false
     @Volatile private var guiX11Launched: Boolean = false
     @Volatile private var startInFlight: Boolean = false
@@ -100,6 +110,9 @@ object DesktopLauncher {
 
     fun isSessionActive(): Boolean = _ui.value.phase != Phase.Idle || startInFlight
 
+    /** A start has been claimed and has not yet failed or been stopped. */
+    internal fun isStartInFlight(): Boolean = startInFlight
+
     /**
      * @param desktop "xfce4" or "kde" (FLUX_DESKTOP for the start_gui*.sh scripts)
      * @param gpuRuntime null = installed driver; "software" = force llvmpipe (FLUX_GPU_RUNTIME)
@@ -130,7 +143,9 @@ object DesktopLauncher {
         }
 
         // Claim slot before async prepareHost
+        val gen = runState.beginStart()
         startInFlight = true
+        startResultDelivered.set(false)
         desktopType = desktop
         this.gpuRuntime = gpuRuntime
         _ui.update {
@@ -141,9 +156,25 @@ object DesktopLauncher {
             )
         }
 
+        // Every continuation below (including the chroot probe thread) goes through these
+        // generation-bound locals, so a start superseded by stop() cannot act on a newer one.
+        fun continueStart(
+            appCtx: Context,
+            id: String,
+            launchMethod: String,
+            installProfile: DistroInstallProfile?,
+            callback: ((Boolean) -> Unit)?,
+        ) = continueStartFor(gen, appCtx, id, launchMethod, installProfile, callback)
+        fun finishStart(
+            appCtx: Context,
+            id: String,
+            ok: Boolean,
+            error: String?,
+            callback: ((Boolean) -> Unit)?,
+        ) = finishStartFor(gen, appCtx, id, ok, error, callback)
+
         TerminalLauncher.prepareHost(app) { ok ->
             if (!ok) {
-                startInFlight = false
                 toast(app, "Host not ready — open Settings to initialize")
                 finishStart(app, distroId, false, "Host not ready", onResult)
                 return@prepareHost
@@ -178,7 +209,6 @@ object DesktopLauncher {
             } else {
                 val prootName = profile?.prootName ?: "debian"
                 if (!TerminalLauncher.isProotInstalled(app, prootName)) {
-                    startInFlight = false
                     toast(app, "Distro not installed. Complete onboarding first.")
                     finishStart(app, distroId, false, "Distro not installed", onResult)
                     return@prepareHost
@@ -189,48 +219,65 @@ object DesktopLauncher {
         }
     }
 
-    private fun continueStart(
+    /** Launches start [gen] once no stop script is running (M5: wait, never cancel the stop). */
+    private fun continueStartFor(
+        gen: Long,
         app: Context,
         distroId: String,
         method: String,
-        profile: com.ivarna.fluxlinux.core.install.DistroInstallProfile?,
-        onResult: ((Boolean) -> Unit)?
+        profile: DistroInstallProfile?,
+        onResult: ((Boolean) -> Unit)?,
     ) {
+        if (!runState.isCurrent(gen)) return
+        if (runState.isStopRunning()) {
+            appendLive("Waiting for the previous desktop to finish stopping…")
+        }
+        runState.runAfterStops(gen) {
+            launchStart(gen, app, distroId, method, profile, onResult)
+        }
+    }
+
+    private fun launchStart(
+        gen: Long,
+        app: Context,
+        distroId: String,
+        method: String,
+        profile: DistroInstallProfile?,
+        onResult: ((Boolean) -> Unit)?,
+    ) {
+        if (!runState.isCurrent(gen)) return
         val currentSession = DesktopSessionQuery.current(app, _ui.value)
         if (currentSession != null && currentSession.distroId != distroId) {
-            startInFlight = false
             toast(app, "Stop ${currentSession.distroName} ${currentSession.type} first")
-            onResult?.invoke(false)
+            finishStartFor(gen, app, distroId, false, "Another desktop is active", onResult)
             return
         }
 
         val scriptName = if (method == "chroot") "start_gui_chroot.sh" else "start_gui.sh"
         val script = File(TermuxHostPaths.HOME, scriptName)
         if (!script.isFile) {
-            startInFlight = false
             GuiDesktopLog.header(app, "START", scriptName, method)
             GuiDesktopLog.append(app, "ERROR: missing host script ${script.absolutePath}")
             pushLog(app, forceShow = true)
             toast(app, "Desktop scripts missing — re-run host initialize")
-            finishStart(app, distroId, false, "Missing $scriptName", onResult)
+            finishStartFor(gen, app, distroId, false, "Missing $scriptName", onResult)
             return
         }
         if (method == "chroot") {
             val guestName = profile?.chrootStartGuiScript ?: "start_debian13_gui.sh"
             val guest = File(TermuxHostPaths.HOME, guestName)
             if (!guest.isFile) {
-                startInFlight = false
                 toast(app, "Chroot desktop launcher missing — re-run host initialize")
-                finishStart(app, distroId, false, "Missing $guestName", onResult)
+                finishStartFor(gen, app, distroId, false, "Missing $guestName", onResult)
                 return
             }
         }
 
-        guiShellJob?.cancel()
+        // Only a leftover start job from an older generation; a running stop is never cancelled.
+        startJob?.cancel()
         guiUserStopping = false
         guiX11Launched = false
         healthyLineSeen.set(false)
-        startResultDelivered.set(false)
 
         GuiDesktopLog.clear(app)
         GuiDesktopLog.header(app, "START", scriptName, method)
@@ -274,25 +321,26 @@ object DesktopLauncher {
         envMap["FLUX_DESKTOP"] = desktopType
         gpuRuntime?.let { envMap["FLUX_GPU_RUNTIME"] = it }
 
-        guiShellJob = ShellCommandRunner.runStreamedCancelable(
+        startJob = ShellCommandRunner.runStreamedCancelable(
             app,
             args,
             envMap = envMap.takeIf { it.isNotEmpty() },
             onLine = { line ->
                 GuiDesktopLog.append(app, line)
                 appendLive(line)
-                if (isDesktopReadyLine(line)) {
-                    onHealthyLine(app, distroId, onResult)
+                if (runState.isCurrent(gen) && isDesktopReadyLine(line, method)) {
+                    onHealthyLine(gen, app, distroId, onResult)
                 }
             },
             onDone = { code ->
                 GuiDesktopLog.append(app, "[exit $code]")
                 appendLive("[exit $code]")
                 when {
-                    code == -1 || guiUserStopping -> {
-                        // User stop owns flip to idle
+                    !runState.isCurrent(gen) || guiUserStopping -> {
+                        // Superseded by stop() or a newer start: they own the state.
                     }
                     code != 0 -> {
+                        // -1 here is a launch failure: our own cancels always bump the generation.
                         Log.w(TAG, "Desktop start failed exit=$code")
                         if (code == 137) {
                             toast(app, "Desktop killed by Android (exit 137). Disable the phantom process killer: Settings > Process killer fix")
@@ -316,6 +364,7 @@ object DesktopLauncher {
     fun stop(ctx: Context, distroId: String, onDone: (() -> Unit)? = null) {
         val app = ctx.applicationContext
         val method = methodFor(distroId)
+        val stopGen = runState.beginStop()
         guiUserStopping = true
         startInFlight = false
 
@@ -327,7 +376,8 @@ object DesktopLauncher {
             Log.w(TAG, "ACTION_STOP failed", e)
         }
         stopFgs(app)
-        guiShellJob?.cancel()
+        startJob?.cancel()
+        startJob = null
 
         StateManager.setGuiRunning(app, distroId, false)
         StateManager.setGuiRunningType(app, distroId, "")
@@ -342,14 +392,7 @@ object DesktopLauncher {
         if (!script.isFile) {
             GuiDesktopLog.append(app, "WARN: stop script missing ${script.absolutePath}")
             appendLive("WARN: stop script missing")
-            _ui.update {
-                it.copy(
-                    phase = Phase.Idle,
-                    displayReady = false,
-                    logsAvailable = GuiDesktopLog.hasContent(app),
-                    logText = GuiDesktopLog.read(app)
-                )
-            }
+            finishStop(app, stopGen)
             toast(app, "Stopping desktop…")
             main.post { onDone?.invoke() }
             return
@@ -365,7 +408,8 @@ object DesktopLauncher {
         val launchStop = {
             val envMap = HashMap<String, String>()
             RootShell.cachedBusyBox()?.let { envMap["FLUX_BB"] = it }
-            guiShellJob = ShellCommandRunner.runStreamedCancelable(
+            // Not stored or cancelled: a start waits for it via runState instead (M5).
+            ShellCommandRunner.runStreamedCancelable(
                 app,
                 arrayOf(bash, script.absolutePath, stopArg),
                 envMap = envMap.takeIf { it.isNotEmpty() },
@@ -376,14 +420,7 @@ object DesktopLauncher {
                 onDone = { code ->
                     GuiDesktopLog.append(app, "[exit $code]")
                     appendLive("[exit $code]")
-                    _ui.update {
-                        it.copy(
-                            phase = Phase.Idle,
-                            displayReady = false,
-                            logsAvailable = GuiDesktopLog.hasContent(app),
-                            logText = GuiDesktopLog.read(app)
-                        )
-                    }
+                    finishStop(app, stopGen)
                     onDone?.invoke()
                 }
             )
@@ -407,6 +444,25 @@ object DesktopLauncher {
         }
     }
 
+    /**
+     * Stop [stopGen] finished. Writes Idle only when nothing started since (M5: a stale stop
+     * used to overwrite a new start with Idle), then releases a start that waited for it.
+     */
+    private fun finishStop(app: Context, stopGen: Long) {
+        val end = runState.endStop(stopGen)
+        if (end.isLatest) {
+            _ui.update {
+                it.copy(
+                    phase = Phase.Idle,
+                    displayReady = false,
+                    logsAvailable = GuiDesktopLog.hasContent(app),
+                    logText = GuiDesktopLog.read(app),
+                )
+            }
+        }
+        end.resume?.invoke()
+    }
+
     /** Re-open the X11 surface without restarting the DE. */
     fun reopenDisplay(ctx: Context) {
         // Prefer Activity context so NEW_TASK is not required (BACK returns to Home).
@@ -418,16 +474,18 @@ object DesktopLauncher {
     // ── private ────────────────────────────────────────────────────────────
 
     /**
-     * True only for host/script readiness markers — not banner / early progress lines.
-     * Matches `start_gui.sh` / `start_gui_chroot.sh` / chroot guest stage.
+     * True only for readiness markers, not banners or progress lines.
+     *
+     * PRoot keys off the guest-side [GUEST_READY_MARKER] that start_gui.sh prints once the DE
+     * has been exec'd as flux and is still alive (M12): the host X socket line comes before the
+     * DE is even checked. The chroot scripts still announce only the host X socket, so their
+     * legacy markers stay accepted for chroot until they print the guest marker too.
      */
-    internal fun isDesktopReadyLine(line: String): Boolean {
+    internal fun isDesktopReadyLine(line: String, method: String): Boolean {
         val t = line.trim()
-        if (t.isEmpty()) return false
-        return t.contains("X server PID=") ||
-            t.contains("host X0 socket ready") ||
-            t.contains("FLUX_DESKTOP_READY") ||
-            t.contains("FLUXLINUX_DESKTOP_READY")
+        if (t == GUEST_READY_MARKER || t == "FLUXLINUX_DESKTOP_READY") return true
+        if (method != "chroot") return false
+        return t.contains("X server PID=") || t.contains("host X0 socket ready")
     }
 
     private fun deliverStartResult(onResult: ((Boolean) -> Unit)?, ok: Boolean) {
@@ -436,8 +494,13 @@ object DesktopLauncher {
         }
     }
 
-    private fun onHealthyLine(app: Context, distroId: String, onResult: ((Boolean) -> Unit)?) {
-        if (guiUserStopping) return
+    private fun onHealthyLine(
+        gen: Long,
+        app: Context,
+        distroId: String,
+        onResult: ((Boolean) -> Unit)?,
+    ) {
+        if (guiUserStopping || !runState.isCurrent(gen)) return
         // Only first readiness marker flips RUNNING / prefs / X11.
         val first = healthyLineSeen.compareAndSet(false, true)
         if (!first) return
@@ -460,7 +523,7 @@ object DesktopLauncher {
             guiX11Launched = true
             // Short delay so X server process can bind socket before surface open
             main.postDelayed({
-                if (guiUserStopping) return@postDelayed
+                if (guiUserStopping || !runState.isCurrent(gen)) return@postDelayed
                 if (_ui.value.phase == Phase.Idle) return@postDelayed
                 openX11(app)
             }, 400)
@@ -484,14 +547,18 @@ object DesktopLauncher {
         }
     }
 
-    private fun finishStart(
+    /** Early end of start [gen]; a stale generation is ignored (its stop owns the state). */
+    private fun finishStartFor(
+        gen: Long,
         app: Context,
         distroId: String,
         ok: Boolean,
         error: String?,
-        onResult: ((Boolean) -> Unit)?
+        onResult: ((Boolean) -> Unit)?,
     ) {
+        if (!runState.isCurrent(gen)) return
         if (!ok) {
+            startInFlight = false
             _ui.update {
                 it.copy(
                     phase = Phase.Idle,

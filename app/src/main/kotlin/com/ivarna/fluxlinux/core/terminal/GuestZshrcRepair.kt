@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.ivarna.fluxlinux.core.root.ChrootPaths
 import java.io.File
+import java.nio.file.Files
 
 /**
  * One-shot repair for guest `~/.zshrc` that hard-sources missing oh-my-zsh or
@@ -188,38 +189,9 @@ fi
         val needsPmWrap = !isApkGuest && isGlibcGuest(distroId)
         val ubuntuPlugins = ZshPluginSet.appliesTo(distroId)
         try {
-            if (zshrc.isFile) {
-                val text = zshrc.readText()
-                if (needsRepair(text)) {
-                    if (!zshrc.canWrite()) {
-                        Log.w(TAG, "zshrc needs repair but not writable: ${zshrc.absolutePath}")
-                    } else {
-                        zshrc.writeText(profileFor(isApkGuest, needsPmWrap, ubuntuPlugins))
-                        Log.i(TAG, "Repaired defensive .zshrc at ${zshrc.absolutePath}")
-                    }
-                } else if (isApkGuest && !text.contains("apk() {") && zshrc.canWrite()) {
-                    zshrc.appendText("\n$ALPINE_APK_WRAPPER")
-                    Log.i(TAG, "Appended apk() wrapper to ${zshrc.absolutePath}")
-                } else if (needsPmWrap && !text.contains("dnf() {") &&
-                    !text.contains("xbps-install() {") &&
-                    !text.contains("zypper() {") &&
-                    !text.contains("apt-get() {") &&
-                    !text.contains("pacman() {") &&
-                    zshrc.canWrite()
-                ) {
-                    zshrc.appendText("\n$GLIBC_PM_WRAPPER")
-                    Log.i(TAG, "Appended glibc PM wrappers to ${zshrc.absolutePath}")
-                }
-            } else {
-                // Create missing Flux profile (Alpine used to never write .zshrc)
-                val home = zshrc.parentFile ?: return
-                if (!home.isDirectory) return
-                if (!home.canWrite() && !zshrc.canWrite()) {
-                    Log.w(TAG, "cannot create .zshrc (home not writable): ${home.absolutePath}")
-                } else {
-                    zshrc.writeText(profileFor(isApkGuest, needsPmWrap, ubuntuPlugins))
-                    Log.i(TAG, "Created defensive .zshrc at ${zshrc.absolutePath}")
-                }
+            when (val r = repairZshrcFile(zshrc, isApkGuest, needsPmWrap, ubuntuPlugins)) {
+                ZshrcRepairResult.UNCHANGED -> Unit
+                else -> Log.i(TAG, "zshrc ${r.name.lowercase()}: ${zshrc.absolutePath}")
             }
             ensureZprofile(zshrc.parentFile)
             // Prefer zsh login shell when binary exists (Alpine often left /bin/bash)
@@ -234,6 +206,97 @@ fi
         } catch (e: Exception) {
             Log.w(TAG, "zshrc repair failed: ${e.message}")
         }
+    }
+
+    /** Marks the guard block appended to a non-Flux `.zshrc` (never rewritten). */
+    internal const val GUARD_MARKER = "# flux-zsh-guard v1"
+
+    private val GUARD_BLOCK = """
+
+$GUARD_MARKER (FluxLinux proot/chroot safety; your settings above are untouched)
+unset PROOT_TMP_DIR
+export TMPDIR="${'$'}{TMPDIR:-/tmp}"
+setopt no_monitor
+""".trimStart('\n')
+
+    /**
+     * Lines only Flux-written profiles carry (current and older
+     * setup_customization_* / [DEFENSIVE_ZSHRC] templates). A `.zshrc` without
+     * any of them is the user's (or the distro's) and is never replaced.
+     */
+    internal val FLUX_PROFILE_MARKERS = listOf(
+        "# Guest PATH only — never inherit host PREFIX/bin",
+        "# PATH setup - local bin, npm global modules",
+        "# Fix XDG_RUNTIME_DIR (not set in PRoot/chroot",
+        "# Background visuals",
+        "flux-ensure-locale",
+        ZshPluginSet.MARKER,
+    )
+
+    internal fun isFluxProfile(text: String): Boolean = FLUX_PROFILE_MARKERS.any { text.contains(it) }
+
+    internal enum class ZshrcRepairResult {
+        UNCHANGED,
+        SKIPPED_SYMLINK,
+        NOT_WRITABLE,
+        CREATED,
+        REWRITTEN,
+        GUARD_APPENDED,
+        WRAPPER_APPENDED,
+    }
+
+    /**
+     * File part of the profile repair (M8). Symlinked `.zshrc` / backup paths
+     * (dotfile managers) are never followed. Any change to an existing file is
+     * preceded by a copy to `.zshrc` + [ZshPluginSet.BACKUP_SUFFIX]. Only a
+     * Flux-written profile is replaced wholesale; a foreign one that needs
+     * repair only gets [GUARD_BLOCK] appended once.
+     */
+    internal fun repairZshrcFile(
+        zshrc: File,
+        isApkGuest: Boolean,
+        needsPmWrap: Boolean,
+        ubuntuPlugins: Boolean,
+    ): ZshrcRepairResult {
+        val backup = File(zshrc.parentFile, zshrc.name + ZshPluginSet.BACKUP_SUFFIX)
+        if (Files.isSymbolicLink(zshrc.toPath()) || Files.isSymbolicLink(backup.toPath())) {
+            return ZshrcRepairResult.SKIPPED_SYMLINK
+        }
+        if (!zshrc.exists()) {
+            // Create missing Flux profile (Alpine used to never write .zshrc)
+            val home = zshrc.parentFile ?: return ZshrcRepairResult.UNCHANGED
+            if (!home.isDirectory) return ZshrcRepairResult.UNCHANGED
+            if (!home.canWrite()) return ZshrcRepairResult.NOT_WRITABLE
+            zshrc.writeText(profileFor(isApkGuest, needsPmWrap, ubuntuPlugins))
+            return ZshrcRepairResult.CREATED
+        }
+        if (!zshrc.isFile) return ZshrcRepairResult.UNCHANGED
+        val text = zshrc.readText()
+        val needsApkWrap = isApkGuest && !text.contains("apk() {")
+        val needsGlibcWrap = needsPmWrap && !text.contains("dnf() {") &&
+            !text.contains("xbps-install() {") &&
+            !text.contains("zypper() {") &&
+            !text.contains("apt-get() {") &&
+            !text.contains("pacman() {")
+        val repair = needsRepair(text)
+        val fluxProfile = isFluxProfile(text)
+        val action = when {
+            repair && fluxProfile -> ZshrcRepairResult.REWRITTEN
+            repair && !text.contains(GUARD_MARKER) -> ZshrcRepairResult.GUARD_APPENDED
+            repair -> ZshrcRepairResult.UNCHANGED
+            needsApkWrap || needsGlibcWrap -> ZshrcRepairResult.WRAPPER_APPENDED
+            else -> ZshrcRepairResult.UNCHANGED
+        }
+        if (action == ZshrcRepairResult.UNCHANGED) return action
+        if (!zshrc.canWrite()) return ZshrcRepairResult.NOT_WRITABLE
+        backup.writeText(text)
+        when (action) {
+            ZshrcRepairResult.REWRITTEN ->
+                zshrc.writeText(profileFor(isApkGuest, needsPmWrap, ubuntuPlugins))
+            ZshrcRepairResult.GUARD_APPENDED -> zshrc.appendText("\n$GUARD_BLOCK")
+            else -> zshrc.appendText("\n" + if (needsApkWrap) ALPINE_APK_WRAPPER else GLIBC_PM_WRAPPER)
+        }
+        return action
     }
 
     internal val LOCALE_PROFILE = """

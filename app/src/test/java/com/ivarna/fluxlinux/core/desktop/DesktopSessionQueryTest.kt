@@ -53,6 +53,22 @@ class DesktopSessionQueryTest {
     }
 
     @Test
+    fun idleUi_withStartInFlight_returnsStartingSession() {
+        // M5: a claimed start blocks a second start even if the phase reads Idle.
+        val ui = DesktopLauncher.UiState(phase = DesktopLauncher.Phase.Idle, distroId = "ubuntu")
+        val session = DesktopSessionQuery.current(ctx, ui, startInFlight = true)
+        assertNotNull(session)
+        assertEquals("ubuntu", session!!.distroId)
+        assertEquals(DesktopSession.Phase.Starting, session.phase)
+    }
+
+    @Test
+    fun idleUi_withoutStartInFlight_ignoresLeftoverDistroId() {
+        val ui = DesktopLauncher.UiState(phase = DesktopLauncher.Phase.Idle, distroId = "ubuntu")
+        assertNull(DesktopSessionQuery.current(ctx, ui, startInFlight = false))
+    }
+
+    @Test
     fun idleUi_and_kdePref_returnsKdeSession() {
         StateManager.setGuiRunning(ctx, "debian", true)
         StateManager.setGuiRunningType(ctx, "debian", "kde")
