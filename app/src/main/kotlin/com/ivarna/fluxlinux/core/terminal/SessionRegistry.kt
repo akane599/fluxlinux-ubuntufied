@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * SessionRegistry — owns open terminal tabs, view attachment, session client,
@@ -33,11 +34,17 @@ object SessionRegistry {
         val title: String,
         val method: String,    // "proot" | "chroot" | "host"
         val onFinished: (() -> Unit)? = null,
-        /** Always fired when the process exits (any status, including signal). */
+        /** Fired once: when the process exits (any status, incl. signal) or its running tab is closed. */
         val onClosed: ((exitStatus: Int) -> Unit)? = null,
         val distroId: String? = null,
         val iconRes: Int? = null,
-    )
+    ) {
+        /** [onClosed] fires once: process exit or forced close, whichever comes first (L2). */
+        internal val closedFired = AtomicBoolean(false)
+    }
+
+    /** onClosed status for a tab closed while its process ran (SIGKILL, as JNI.waitFor reports it). */
+    const val CLOSED_EXIT_STATUS = -9
 
     /**
      * Mutated on the main thread; read from Dispatchers.IO too (e.g.
@@ -125,6 +132,7 @@ object SessionRegistry {
     fun closeSession(ctx: Context, index: Int) {
         if (index < 0 || index >= sessionsList.size) return
         val managed = sessionsList[index]
+        val wasRunning = managed.session?.isRunning == true
         killIfStarted(managed)
         sessionsList.removeAt(index)
         _revision.value++
@@ -134,6 +142,8 @@ object SessionRegistry {
         // the same shell moved down one slot (M7).
         if (active == index || next != active) switchSession(next)
         updateService(ctx)
+        // Removed above, so a later process exit no longer finds it (L2).
+        if (wasRunning) fireClosed(managed, CLOSED_EXIT_STATUS)
     }
 
     /**
@@ -149,11 +159,14 @@ object SessionRegistry {
     }
 
     fun closeAll(ctx: Context) {
-        for (m in sessionsList) killIfStarted(m)
+        val closing = sessionsList.toList()
+        val running = closing.filter { it.session?.isRunning == true }
+        closing.forEach(::killIfStarted)
         sessionsList.clear()
         _revision.value++
         _activeIndex.value = -1
         updateService(ctx)
+        running.forEach { fireClosed(it, CLOSED_EXIT_STATUS) }
     }
 
     /**
@@ -164,6 +177,15 @@ object SessionRegistry {
         try {
             managed.session?.takeIf { it.pid > 0 }?.finishIfRunning()
         } catch (_: Exception) {
+        }
+    }
+
+    private fun fireClosed(managed: ManagedSession, exitStatus: Int) {
+        if (!managed.closedFired.compareAndSet(false, true)) return
+        try {
+            managed.onClosed?.invoke(exitStatus)
+        } catch (e: Exception) {
+            Log.w(TAG, "onClosed failed: ${e.message}")
         }
     }
 
@@ -212,11 +234,7 @@ object SessionRegistry {
                 }
                 // Uninstall must refresh cards even when toybox/su dies with
                 // SIGSEGV after the script already removed the rootfs.
-                try {
-                    managed?.onClosed?.invoke(session.exitStatus)
-                } catch (e: Exception) {
-                    Log.w(TAG, "onClosed failed: ${e.message}")
-                }
+                managed?.let { fireClosed(it, session.exitStatus) }
             }
             // T3: clipboard parity (nativecode) — copy puts text on the system
             // clipboard; paste reads it and feeds the terminal emulator.
