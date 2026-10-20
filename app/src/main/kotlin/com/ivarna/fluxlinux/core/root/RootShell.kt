@@ -270,37 +270,70 @@ object RootShell {
         }
     }
 
+    /** Serialises su discovery so concurrent callers never raise parallel grant prompts (L7). */
+    private val suResolveLock = Any()
+
+    /** Outcome of one su probe; [TIMEOUT] usually means a grant dialog is still pending. */
+    internal enum class SuProbe { OK, DENIED, TIMEOUT }
+
     /**
      * Discover a working su invocation. Tries absolute paths without File.exists(),
      * plus `sh -c` wrappers. Caches the first success. Background thread only.
+     *
+     * Single-flight: concurrent callers wait for the in-flight discovery and reuse its result.
+     * A probe timeout stops the walk (the root manager is most likely showing a grant dialog;
+     * trying the next binary would only raise another prompt). Nothing is cached on failure,
+     * so the next call after the user answers probes again.
      */
     fun resolveSuInvocation(): List<String>? {
         cachedSuInvocation?.let { return it }
+        synchronized(suResolveLock) {
+            cachedSuInvocation?.let { return it }
+            val found = walkSuTrials(SU_TRIALS, ::trySuProbe)
+            if (found != null) {
+                cachedSuInvocation = found
+                Log.i(TAG, "resolveSuInvocation OK: $found")
+            } else {
+                Log.w(TAG, "resolveSuInvocation: no working su")
+            }
+            return found
+        }
+    }
 
-        val trials: List<List<String>> = listOf(
-            // Direct (KernelSU / Magisk common)
-            listOf("/system/bin/su", "-c"),
-            listOf("/system/xbin/su", "-c"),
-            listOf("/sbin/su", "-c"),
-            listOf("/debug_ramdisk/su", "-c"),
-            listOf("su", "-c"),
-            // Magisk sometimes wants uid first: su 0 -c 'cmd'
-            listOf("/system/bin/su", "0", "-c"),
-            listOf("su", "0", "-c"),
-            // sh -c wrapper form
-            listOf("/system/bin/sh", "-c", "SU_WRAP:/system/bin/su"),
-            listOf("/system/bin/sh", "-c", "SU_WRAP:su"),
-            listOf("/system/bin/sh", "-c", "SU_WRAP:/debug_ramdisk/su")
-        )
+    private val SU_TRIALS: List<List<String>> = listOf(
+        // Direct (KernelSU / Magisk common)
+        listOf("/system/bin/su", "-c"),
+        listOf("/system/xbin/su", "-c"),
+        listOf("/sbin/su", "-c"),
+        listOf("/debug_ramdisk/su", "-c"),
+        listOf("su", "-c"),
+        // Magisk sometimes wants uid first: su 0 -c 'cmd'
+        listOf("/system/bin/su", "0", "-c"),
+        listOf("su", "0", "-c"),
+        // sh -c wrapper form
+        listOf("/system/bin/sh", "-c", "SU_WRAP:/system/bin/su"),
+        listOf("/system/bin/sh", "-c", "SU_WRAP:su"),
+        listOf("/system/bin/sh", "-c", "SU_WRAP:/debug_ramdisk/su"),
+    )
 
+    /**
+     * Pure trial walk: first [SuProbe.OK] wins, [SuProbe.DENIED] moves on,
+     * [SuProbe.TIMEOUT] stops the walk with null.
+     */
+    internal fun walkSuTrials(
+        trials: List<List<String>>,
+        probe: (List<String>) -> SuProbe,
+    ): List<String>? {
         for (trial in trials) {
-            if (trySuProbe(trial)) {
-                cachedSuInvocation = trial
-                Log.i(TAG, "resolveSuInvocation OK: $trial")
-                return trial
+            when (probe(trial)) {
+                SuProbe.OK -> return trial
+                SuProbe.DENIED -> continue
+                SuProbe.TIMEOUT -> {
+                    Log.w(TAG, "su probe timed out on $trial; not trying further binaries")
+                    return null
+                }
             }
         }
-        Log.w(TAG, "resolveSuInvocation: no working su")
         return null
     }
 
@@ -580,7 +613,7 @@ object RootShell {
         return invocation + cmd
     }
 
-    private fun trySuProbe(invocation: List<String>): Boolean {
+    private fun trySuProbe(invocation: List<String>): SuProbe {
         return try {
             val args = buildSuArgs(invocation, "id")
             Log.d(TAG, "trySuProbe: $args")
@@ -595,7 +628,7 @@ object RootShell {
             if (!finished) {
                 pb.destroyForcibly()
                 Log.w(TAG, "trySuProbe timeout: $args")
-                return false
+                return SuProbe.TIMEOUT
             }
             val out = try {
                 outFuture.get(1, TimeUnit.SECONDS)
@@ -604,10 +637,10 @@ object RootShell {
             }
             val code = pb.exitValue()
             Log.d(TAG, "trySuProbe exit=$code out=${out.trim().take(120)}")
-            code == 0 && out.contains("uid=0")
+            if (code == 0 && out.contains("uid=0")) SuProbe.OK else SuProbe.DENIED
         } catch (e: Exception) {
             Log.w(TAG, "trySuProbe fail: ${e.message}")
-            false
+            SuProbe.DENIED
         }
     }
 
