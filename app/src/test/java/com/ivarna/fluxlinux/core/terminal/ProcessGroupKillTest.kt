@@ -90,6 +90,37 @@ class ProcessGroupKillTest {
         assertEquals(pid, pgid)
     }
 
+    @Test
+    fun earlySigterm_atAnyPoint_neverOrphansTheJob() {
+        assumeTrue(File(bash).canExecute() && File("/proc/self").isDirectory)
+        val dir = java.nio.file.Files.createTempDirectory("flux-early-term").toFile()
+        try {
+            // TERM lands at varying points: before/while the trap is set, around the
+            // fork, before `pid=$!`, during `wait`. No case may leave the job running.
+            for (i in 0 until 60) {
+                val pidFile = File(dir, "job$i.pid")
+                val proc = ProcessBuilder(
+                    *ProcessGroupLauncher.wrap(
+                        bash,
+                        arrayOf("sh", "-c", "echo \$\$ > '${pidFile.absolutePath}'; exec sleep 30"),
+                    ),
+                ).redirectErrorStream(true).start()
+                val delayMs = (i % 6).toLong()
+                if (delayMs > 0) Thread.sleep(delayMs)
+                proc.destroy() // SIGTERM to the wrapper only
+                assertTrue("wrapper did not exit (run $i)", proc.waitFor(5, TimeUnit.SECONDS))
+                // Once the wrapper is gone the group was killed, so the job may not
+                // write its pid any more; a pid present now must be dead.
+                val pid = pidFile.takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull()
+                if (pid != null) {
+                    assertTrue("job $pid survived an early SIGTERM (run $i, ${delayMs}ms)", waitDead(pid, 3_000))
+                }
+            }
+        } finally {
+            com.ivarna.fluxlinux.core.system.SafeFiles.deleteTree(dir)
+        }
+    }
+
     private fun isAlive(pid: Int): Boolean {
         val stat = File("/proc/$pid/stat")
         if (!stat.exists()) return false
