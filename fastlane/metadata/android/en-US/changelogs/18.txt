@@ -1,0 +1,4 @@
+- Fresh installs no longer stall for minutes at "Unpacking papirus-icon-theme"
+- Bundled theme/icon/cursor archives are always unpacked inside Ubuntu
+- PRoot setup skips the huge Papirus package; Adwaita icons are the fallback
+- Releases now also include a debug APK for diagnosis
