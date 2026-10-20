@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
+    <!--
+      Device-local rootfs state is excluded (see backup_rules.xml): StateManager
+      (fluxlinux_state), GuestRepairCache (flux_guest_repairs) and the GPU driver
+      prefs (fluxlinux_gpu_driver).
+    -->
     <cloud-backup>
         <include domain="sharedpref" path="."/>
+        <exclude domain="sharedpref" path="fluxlinux_state.xml"/>
+        <exclude domain="sharedpref" path="flux_guest_repairs.xml"/>
+        <exclude domain="sharedpref" path="fluxlinux_gpu_driver.xml"/>
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="."/>
+        <exclude domain="sharedpref" path="fluxlinux_state.xml"/>
+        <exclude domain="sharedpref" path="flux_guest_repairs.xml"/>
+        <exclude domain="sharedpref" path="fluxlinux_gpu_driver.xml"/>
     </device-transfer>
 </data-extraction-rules>
