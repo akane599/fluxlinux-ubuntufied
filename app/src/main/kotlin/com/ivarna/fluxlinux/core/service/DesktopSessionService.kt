@@ -25,6 +25,12 @@ class DesktopSessionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent == null) {
+            // Defensive: a null intent only comes from a sticky restart after process death,
+            // when the desktop died with the old process. Never show a false "active" notice.
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val notification = createNotification()
         try {
             if (Build.VERSION.SDK_INT >= 34) {
@@ -44,7 +50,8 @@ class DesktopSessionService : Service() {
                 Log.e(TAG, "fallback startForeground failed", e2)
             }
         }
-        return START_STICKY
+        // Not sticky: the guest desktop runs in this process tree and dies with it.
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

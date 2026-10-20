@@ -284,6 +284,12 @@ class InstallServerService : Service() {
         stopSelf()
     }
 
+    /** Android 15+ `dataSync` 6 h cap: stop instead of letting the system crash the app. */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "dataSync FGS time limit reached; stopping")
+        doStop()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         running.set(false)

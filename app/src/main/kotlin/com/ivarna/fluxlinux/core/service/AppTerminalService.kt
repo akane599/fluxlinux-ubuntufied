@@ -43,7 +43,8 @@ class AppTerminalService : Service() {
                 Log.e(TAG, "fallback startForeground failed", e2)
             }
         }
-        return START_STICKY
+        // Not sticky: terminal sessions live in this process and die with it.
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
