@@ -901,9 +901,26 @@ else
     _flux_safe_rm_tree "$POKEMON_TEMP"
 fi
 
-echo "FluxLinux: Configuring .zshrc..."
 ZSHRC="$USER_HOME/.zshrc"
-cat > "$ZSHRC" << 'ZSHEOF'
+# Re-runs must not clobber a user's shell config: write only when .zshrc is
+# missing or not yet Flux-managed (no flux-zsh-plugins marker), never through
+# a symlink (dotfile managers), and keep the replaced file as .zshrc.flux-bak.
+_flux_zshrc_needs_write() {
+    [ -L "$ZSHRC" ] && return 1
+    [ -f "$ZSHRC" ] || return 0
+    ! grep -qF '# flux-zsh-plugins' "$ZSHRC" 2>/dev/null
+}
+if [ -L "$ZSHRC" ]; then
+    echo "FluxLinux: .zshrc is a symlink — leaving it untouched"
+elif ! _flux_zshrc_needs_write; then
+    echo "FluxLinux: .zshrc already Flux-managed — leaving it untouched"
+else
+echo "FluxLinux: Configuring .zshrc..."
+if [ -f "$ZSHRC" ] && [ ! -L "$ZSHRC.flux-bak" ]; then
+    cp -f "$ZSHRC" "$ZSHRC.flux-bak" 2>/dev/null || true
+fi
+ZSHRC_NEW="$ZSHRC.flux-new.$$"
+cat > "$ZSHRC_NEW" << 'ZSHEOF'
 # Guest PATH only — never inherit host PREFIX/bin (nested proot glue errors).
 export PATH="$HOME/.local/bin:/opt/nodejs/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -957,7 +974,7 @@ if [ -f "$ZSH/oh-my-zsh.sh" ]; then
 ZSHEOF
 if _flux_is_ubuntu; then
     # Verbatim copy of ZshPluginSet.managedBlock() — ZshPluginSetTest enforces it.
-    cat >> "$ZSHRC" << 'ZSHEOF'
+    cat >> "$ZSHRC_NEW" << 'ZSHEOF'
   # flux-zsh-plugins v1: managed by FluxLinux (ZshPluginSet.kt). Edit freely; Flux never rewrites it.
   _flux_zc="${ZSH_CUSTOM:-$ZSH/custom}"
   plugins=()
@@ -986,12 +1003,12 @@ if _flux_is_ubuntu; then
   fi
 ZSHEOF
 else
-    cat >> "$ZSHRC" << 'ZSHEOF'
+    cat >> "$ZSHRC_NEW" << 'ZSHEOF'
   plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
   source "$ZSH/oh-my-zsh.sh"
 ZSHEOF
 fi
-cat >> "$ZSHRC" << 'ZSHEOF'
+cat >> "$ZSHRC_NEW" << 'ZSHEOF'
 fi
 
 # Package managers need root. NOPASSWD sudo is configured for flux.
@@ -1022,7 +1039,9 @@ if command -v sudo >/dev/null 2>&1; then
   fi
 fi
 ZSHEOF
+mv -f "$ZSHRC_NEW" "$ZSHRC"
 _flux_chown "$CUSTOM_USER:$CUSTOM_GROUP" "$ZSHRC"
+fi
 ZPROFILE="$USER_HOME/.zprofile"
 if [ ! -f "$ZPROFILE" ]; then
     printf '%s\n' '[[ -o interactive ]] || { [ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc"; }' \
