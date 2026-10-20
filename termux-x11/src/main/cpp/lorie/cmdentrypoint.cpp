@@ -611,7 +611,8 @@ Java_com_termux_x11_CmdEntryPoint_connected(__unused JNIEnv *env, __unused jclas
 extern "C" JNIEXPORT void JNICALL
 Java_com_termux_x11_CmdEntryPoint_listenForConnections(JNIEnv *env, jobject thiz) {
     int server_fd, client, count;
-    struct sockaddr_in address = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr = { .s_addr = INADDR_ANY } };
+    // Loopback only: the wake-up poke comes from our own activity (requestConnection, 127.0.0.1).
+    struct sockaddr_in address = { .sin_family = AF_INET, .sin_port = htons(PORT), .sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) } };
     int addrlen = sizeof(address);
     jmethodID sendBroadcast = env->GetMethodID(env->GetObjectClass(thiz), "sendBroadcast", "()V");
     uint8_t buffer[512] = {0};
@@ -620,7 +621,7 @@ Java_com_termux_x11_CmdEntryPoint_listenForConnections(JNIEnv *env, jobject thiz
     // Even in the case if it will fail for some reason everything will work fine
     // But connection will be delayed a bit
 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         log(ERROR, "Socket creation failed: %s", strerror(errno));
         return;
     }
@@ -646,11 +647,22 @@ Java_com_termux_x11_CmdEntryPoint_listenForConnections(JNIEnv *env, jobject thiz
             continue;
         }
 
-        if ((count = read(client, buffer, sizeof(buffer))) > 0) {
-            if (!memcmp(buffer, MAGIC, min(count, sizeof(MAGIC)))) {
-                log(DEBUG, "New client connection!\n");
-                env->CallVoidMethod(thiz, sendBroadcast);
-            }
+        // A silent peer must not wedge the listener, and the whole magic must match (a single
+        // matching byte used to be enough).
+        struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        count = 0;
+        while (count < (int) sizeof(MAGIC) - 1) {
+            ssize_t n = read(client, buffer + count, sizeof(buffer) - count);
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n <= 0)
+                break;
+            count += (int) n;
+        }
+        if (count >= (int) sizeof(MAGIC) - 1 && !memcmp(buffer, MAGIC, sizeof(MAGIC) - 1)) {
+            log(DEBUG, "New client connection!\n");
+            env->CallVoidMethod(thiz, sendBroadcast);
         }
         close(client);
     }
