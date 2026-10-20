@@ -3,7 +3,7 @@
   "tool": "codebase-mapper",
   "version": "2.15.10",
   "mappedAt": "2026-10-20",
-  "gitCommit": "2a80947edffef1d66d296fb3e834bbbe5f0b2d73",
+  "gitCommit": "18228325b37f5faabe34e2d6775c4ff9fb9e2110",
   "documents": [
     "architecture.md",
     "build-and-release.md",
@@ -15,11 +15,11 @@
   ],
   "hashes": {
     "INDEX.md": "36a7f61e3addec894e2c5a4923be1078ea635d97d90c0ab043e18e15bc26f294",
-    "architecture.md": "c2d0036eed3c92cd42bc2423ed522c202057a5d63776ee6792f2681a93a30563",
+    "architecture.md": "2b38e6462c23ad99e1fd73b5392fecdb4967eac4f803ca0ea2a31122163519c4",
     "build-and-release.md": "dcb81f11f8054ee9aea72a87cc809c35e0ab13a35d2d5c25478571c55d1cefa9",
     "entry-points.md": "811c37c26be89719b310eb21b8f419dd390b0f85f4f2b5ff02514252721990a4",
     "modules.md": "aaead4fd8f1f5614eced373e862105d4e52b8b2802799e71186782fd5b3c9d66",
-    "native-bootstrap.md": "7501f30acc729328a3b1a56370656d19588520ed62144ccdc92ec0dfce4b1fb0",
+    "native-bootstrap.md": "cd7b73930c070a1cc10126df441aca16ef4102385e7ae951528254ae04c0145e",
     "onboarding.md": "81b4309a2e5f5e071422988dc104c0eec7142ec5dfe096ce7e3bbb7676468433",
     "patterns.md": "bde772b6e11fe1ac2c4a5bbe0c9f73b5a9577de99e9f45c9e5e31f84feb59b7a"
   }
