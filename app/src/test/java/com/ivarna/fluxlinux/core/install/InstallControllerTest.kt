@@ -138,6 +138,31 @@ class InstallControllerTest {
     }
 
     @Test
+    fun hostRepair_refusedWhileAnInstallRuns_orAnExtractionIsBusy() {
+        val engine = FakeEngine()
+        val c = InstallController(engine)
+        assertTrue(InstallController.hostRepairAllowed(c.state.value, extracting = false))
+        assertFalse(InstallController.hostRepairAllowed(c.state.value, extracting = true))
+
+        c.start("debian", "dark") // e.g. Distro Settings reinstall, then Back to Home
+        assertFalse(InstallController.hostRepairAllowed(c.state.value, extracting = false))
+
+        engine.sinks[0](progress(100, finished = true))
+        assertTrue(InstallController.hostRepairAllowed(c.state.value, extracting = false))
+    }
+
+    @Test
+    fun homeRepair_checksTheGuardAtTapAndBeforeExtracting() {
+        val src = repoFile("src/main/kotlin/com/ivarna/fluxlinux/ui/screens/HomeScreen.kt").readText()
+        val repair = src.substringAfter("fun repairHost()").substringBefore("\n    }\n")
+        assertTrue(src.contains("InstallController.hostRepairAllowed("))
+        val tap = repair.indexOf("if (!repairAllowed())")
+        val onExecutor = repair.indexOf("if (!repairAllowed())", tap + 1)
+        val extract = repair.indexOf("ensureExtracted(app, force = true)")
+        assertTrue(repair, tap in 0 until onExecutor && onExecutor < extract)
+    }
+
+    @Test
     fun screens_doNotCancelOnDispose() {
         // Contract: no composition-scoped runner and no cancel-on-dispose remain.
         for (rel in listOf(
