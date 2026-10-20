@@ -1,5 +1,5 @@
 # Onboarding
-*Last Updated: 2026-10-19*
+*Last Updated: 2026-10-20*
 
 ## Fresh checkout → green build
 1. JDK 17+, Android SDK (`ANDROID_HOME`), NDK 29.0.14206865, CMake 3.22.1, plus python3, bison and patch for the X server build.
@@ -17,8 +17,10 @@ Sidequest worktrees are set up automatically. `bootstrap.tar` is copied in throu
 |---|---|
 | Add or change a distro | `core/install/DistroInstallProfile.kt` (pins), `core/data/DistroRepository.kt`, `app/src/main/assets/scripts/<distro>/`, release tag `rootfs`, `scripts/verify_rootfs_shas.sh` |
 | Change how proot/chroot is invoked | `core/terminal/{Proot,Chroot,Linux}CommandBuilder.kt` (tests next to them) |
-| Desktop start/stop bugs | `core/desktop/DesktopLauncher.kt`, `assets/scripts/debian/proot/start/start_gui.sh`, `assets/scripts/chroot/start_gui_chroot.sh` (deployed by `HostScriptDeployer`), `core/utils/EmbeddedX11.kt` |
-| Audio | `core/terminal/PulseHost.kt`, `assets/scripts/host/start_pulse_host.sh` |
+| Desktop start/stop bugs | `core/desktop/DesktopLauncher.kt`, `assets/scripts/debian/proot/start/start_gui.sh`, `assets/scripts/chroot/start_gui_chroot.sh` (deployed by `HostScriptDeployer`), `core/desktop/DesktopRunState.kt` (ordering), readiness marker `FLUX_DESKTOP_READY` |
+| Audio | `core/terminal/PulseHost.kt`, `assets/scripts/host/start_pulse_host.sh` (unix socket `pulse-native`, no TCP) |
+| Install / uninstall busy handling | `core/install/InstallController.kt`, `core/terminal/UninstallSessionFactory.kt` |
+| Chroot mount/stop/uninstall | `assets/scripts/chroot/fluxlinux_chroot.sh` (mount lock; the same block is copied into `stop_*_gui.sh` and `uninstall_*_chroot.sh`), `core/root/{RootShell,ChrootPaths,BusyBoxPaths}.kt` |
 | New screen | Add a `Screen` enum value and `when` branch in `MainActivity.kt`, put the screen in `ui/screens/`, and handle back in the back chain |
 | Host package set change | `native/package-lists/`, then rebuild debs with `scripts/build_packages_for_appid.sh` (needs `native/termux-packages`) |
 | Release | `.agent/workflows/fdroid-update.md`, plus the commit-identity live-rule |

@@ -18,12 +18,12 @@
 Flavor source sets hold only assets and jniLibs; there are no Kotlin differences. Task names are flavor-qualified (`:app:assembleIvarnaDebug`); there is no plain `assembleDebug`.
 
 ## Reproducible builds
-- Archives use no timestamps and a fixed file order.
+- Archives use no timestamps and a fixed file order. `scripts/assemble_bootstrap.py` builds `bootstrap.tar` with sorted entries, fixed mtime/uid/gid and pinned 0700/0600 modes, so it does not depend on the builder's umask.
 - `app/fix-baseline-profiles.gradle` disables ART/startup profiles.
 - `dependenciesInfo` is off. Release excludes `META-INF/**` and `*.prof`, except that `vcsInfo` embeds `META-INF/version-control-info.textproto` when `.git/HEAD` is a real dir. A linked worktree logs a warning and omits it, so cut releases from the main checkout.
 - Release signs only if the root `keystore.properties` exists (gitignored; never read it). This fork signs with its own key in `~/.config/fluxlinux-ubuntufied/signing/`. R8 minify and shrink are on.
 - Size (v2.1.0, about 65 MB ivarna release):
-  - `bootstrap.tar` is deflated in the APK (`noCompress` is only `xz`).
+  - `bootstrap.tar` is deflated in the APK (`noCompress` is only `xz`); `verify_apk_host_assets.sh` accepts Deflated or Stored.
   - Native libs are stripped with NDK `29.0.14206865`.
   - `resourceConfigurations = ["en"]`.
 
