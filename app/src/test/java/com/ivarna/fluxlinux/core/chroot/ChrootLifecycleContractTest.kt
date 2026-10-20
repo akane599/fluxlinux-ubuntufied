@@ -78,6 +78,28 @@ class ChrootLifecycleContractTest {
     }
 
     @Test
+    fun chrootScripts_neverSourceOrRunBusyBoxFromDataLocalTmp() {
+        val names = listOf(
+            "fluxlinux_chroot.sh",
+            "setup_guest_chroot.sh", "setup_debian13_chroot.sh", "setup_alpine_chroot.sh",
+            "start_guest_gui.sh", "start_debian13_gui.sh", "start_alpine_gui.sh",
+            "stop_guest_gui.sh", "stop_debian13_gui.sh", "stop_alpine_gui.sh",
+            "uninstall_guest_chroot.sh", "uninstall_debian13_chroot.sh", "uninstall_alpine_chroot.sh",
+        )
+        for (name in names) {
+            val src = chrootScript(name)
+            assertFalse("$name: legacy pinned busybox", src.contains("/data/local/tmp/flux_busybox"))
+            assertFalse("$name: legacy resolver", src.contains("/data/local/tmp/fluxlinux_resolve_bb.sh"))
+            assertFalse(
+                "$name: helper default in /data/local/tmp",
+                src.contains("HELPER=\"\${HELPER:-/data/local/tmp/") ||
+                    src.contains("HELPER=\"/data/local/tmp/fluxlinux_chroot.sh\"") ||
+                    src.contains("HELPER=/data/local/tmp/fluxlinux_chroot.sh"),
+            )
+        }
+    }
+
+    @Test
     fun setupClearsStaleUninstallingMarkerWhenConfigured() {
         val src = chrootScript("setup_guest_chroot.sh")
         assertTrue(src.contains("rm -f \"\$GUESTPATH/.flux_uninstalling\""))

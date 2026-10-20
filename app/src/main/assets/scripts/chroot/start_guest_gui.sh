@@ -26,9 +26,10 @@ echo "========================================"
 _rr=""
 for _c in \
   "${FLUX_RESOLVE_BB:-}" \
-  "$(dirname "$0")/resolve_bb.sh" \
-  /data/local/tmp/fluxlinux_resolve_bb.sh
+  "$(dirname "$0")/resolve_bb.sh"
 do
+  # M14: never source anything from shell-writable /data/local/tmp.
+  case "$_c" in /data/local/tmp/*) continue ;; esac
   [ -n "$_c" ] && [ -f "$_c" ] && _rr="$_c" && break
 done
 if [ -n "$_rr" ]; then
@@ -39,10 +40,8 @@ fi
 if [ -z "${BB:-}" ]; then
   # sidecar missing (desktop/uninstall/staged setup) — same B1 walk as resolve_bb
   if [ -n "${FLUX_BB:-}" ] && [ -x "$FLUX_BB" ] &&
-     "$FLUX_BB" --list >/dev/null 2>&1; then BB="$FLUX_BB"; fi
-  if [ -z "${BB:-}" ] && [ -x /data/local/tmp/flux_busybox ] &&
-     /data/local/tmp/flux_busybox --list >/dev/null 2>&1; then
-    BB=/data/local/tmp/flux_busybox
+     "$FLUX_BB" --list >/dev/null 2>&1; then
+    case "$FLUX_BB" in /data/local/tmp/*) ;; *) BB="$FLUX_BB" ;; esac
   fi
   if [ -z "${BB:-}" ]; then
     for path in \
@@ -96,7 +95,8 @@ if command -v chcon >/dev/null 2>&1; then
 fi
 restorecon -RF "$TARGET_PREFIX/tmp" 2>/dev/null || true
 
-HELPER="${HELPER:-/data/local/tmp/fluxlinux_chroot.sh}"
+# M14: the verified helper sits next to this script in the root-only stage.
+HELPER="${HELPER:-$(dirname "$0")/fluxlinux_chroot.sh}"
 echo "[1/5] Mounts (SSOT if available)..."
 # Wait for host Loader to create X0 before --x11 bind
 mkdir -p "$TARGET_PREFIX/tmp/.X11-unix" 2>/dev/null || true

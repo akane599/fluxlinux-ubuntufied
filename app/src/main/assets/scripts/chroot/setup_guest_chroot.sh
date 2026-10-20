@@ -267,35 +267,9 @@ configure_guest_chroot() {
     rm -f "$GUESTPATH/.flux_uninstalling" 2>/dev/null || true
     success "$DISTRO_LABEL environment configured (rootfs + user; XFCE via family phase)!"
 
-    HELPER="/data/local/tmp/fluxlinux_chroot.sh"
-    progress "Installing chroot SSOT helper at $HELPER..."
-    HELPER_SRC=""
-    for cand in \
-        "/data/data/${PKG}/files/home/fluxlinux_chroot.sh" \
-        "/data/data/${PKG}/files/staged_scripts/fluxlinux_chroot.sh" \
-        "$(dirname "$0")/fluxlinux_chroot.sh"
-    do
-        if [ -f "$cand" ]; then
-            HELPER_SRC="$cand"
-            break
-        fi
-    done
-    if [ -n "$HELPER_SRC" ]; then
-        cp -f "$HELPER_SRC" "$HELPER"
-        chmod 755 "$HELPER"
-        success "SSOT helper installed from $HELPER_SRC"
-    else
-        error "fluxlinux_chroot.sh not found — app will stage on first session"
-    fi
-
-    for s in start_guest_gui.sh stop_guest_gui.sh; do
-        src="/data/data/${PKG}/files/home/$s"
-        if [ -f "$src" ]; then
-            cp -f "$src" "/data/local/tmp/$s"
-            chmod +x "/data/local/tmp/$s"
-            success "Staged $s"
-        fi
-    done
+    # M14: the app stages fluxlinux_chroot.sh, resolve_bb.sh and the GUI scripts into
+    # the root-only, SHA-256-verified stage (/data/adb/fluxlinux/<pkg>). Nothing that
+    # root later executes is copied to shell-writable /data/local/tmp any more.
 
     cleanup_mounts
     success "FluxLinux: $DISTRO_LABEL Chroot Setup Complete!"
@@ -318,9 +292,10 @@ main() {
 _rr=""
 for _c in \
   "${FLUX_RESOLVE_BB:-}" \
-  "$(dirname "$0")/resolve_bb.sh" \
-  /data/local/tmp/fluxlinux_resolve_bb.sh
+  "$(dirname "$0")/resolve_bb.sh"
 do
+  # M14: never source anything from shell-writable /data/local/tmp.
+  case "$_c" in /data/local/tmp/*) continue ;; esac
   [ -n "$_c" ] && [ -f "$_c" ] && _rr="$_c" && break
 done
 if [ -n "$_rr" ]; then
@@ -331,10 +306,8 @@ fi
 if [ -z "${BB:-}" ]; then
   # sidecar missing (desktop/uninstall/staged setup) — same B1 walk as resolve_bb
   if [ -n "${FLUX_BB:-}" ] && [ -x "$FLUX_BB" ] &&
-     "$FLUX_BB" --list >/dev/null 2>&1; then BB="$FLUX_BB"; fi
-  if [ -z "${BB:-}" ] && [ -x /data/local/tmp/flux_busybox ] &&
-     /data/local/tmp/flux_busybox --list >/dev/null 2>&1; then
-    BB=/data/local/tmp/flux_busybox
+     "$FLUX_BB" --list >/dev/null 2>&1; then
+    case "$FLUX_BB" in /data/local/tmp/*) ;; *) BB="$FLUX_BB" ;; esac
   fi
   if [ -z "${BB:-}" ]; then
     for path in \

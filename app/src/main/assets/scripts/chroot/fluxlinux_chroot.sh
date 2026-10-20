@@ -61,9 +61,10 @@ require_root() {
 # Shared resolver (sidecar). Helper stays single-file if only this script was copied.
 _rr=""
 for _c in \
-  "$(dirname "$0")/resolve_bb.sh" \
-  /data/local/tmp/fluxlinux_resolve_bb.sh
+  "$(dirname "$0")/resolve_bb.sh"
 do
+  # M14: never source anything from shell-writable /data/local/tmp.
+  case "$_c" in /data/local/tmp/*) continue ;; esac
   [ -n "$_c" ] && [ -f "$_c" ] && _rr="$_c" && break
 done
 _RESOLVE_BB_SOURCED=0
@@ -78,7 +79,7 @@ if [ "$_RESOLVE_BB_SOURCED" != "1" ]; then
 
   bb_ok() {
     [ -n "${1:-}" ] && [ -x "$1" ] || return 1
-    case "$1" in *com.termux*|*fluxlinux*|*nativecode*) return 1 ;; esac
+    case "$1" in *com.termux*|*fluxlinux*|*nativecode*|/data/local/tmp/*) return 1 ;; esac
     bb_has "$1" chroot && bb_has "$1" mount
   }
 
@@ -86,8 +87,6 @@ if [ "$_RESOLVE_BB_SOURCED" != "1" ]; then
     BB=""
     if [ -n "${FLUX_BB:-}" ] && bb_ok "$FLUX_BB"; then
       BB="$FLUX_BB"
-    elif bb_ok /data/local/tmp/flux_busybox; then
-      BB=/data/local/tmp/flux_busybox
     else
       for path in \
         /data/adb/ksu/bin/busybox \
@@ -121,13 +120,8 @@ if [ "$_RESOLVE_BB_SOURCED" != "1" ]; then
         done
       fi
     fi
+    # M14: BusyBox is used in place; never copied to a shell-writable dir.
     [ -n "$BB" ] || return 1
-    if [ "$BB" != /data/local/tmp/flux_busybox ]; then
-      cp -f "$BB" /data/local/tmp/flux_busybox 2>/dev/null \
-        && chmod 755 /data/local/tmp/flux_busybox 2>/dev/null \
-        && bb_ok /data/local/tmp/flux_busybox \
-        && BB=/data/local/tmp/flux_busybox || true
-    fi
     return 0
   }
 fi

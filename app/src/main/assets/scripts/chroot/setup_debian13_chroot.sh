@@ -302,8 +302,8 @@ configure_debian_chroot() {
     cat <<EOF > "$LAUNCH_SCRIPT"
 #!/system/bin/sh
 # Compat one-shot GUI → prefer start_debian13_gui.sh (app SSOT) else helper mount --x11 + xfce
-GUI=/data/local/tmp/start_debian13_gui.sh
-HELPER=/data/local/tmp/fluxlinux_chroot.sh
+GUI=/data/adb/fluxlinux/$PKG/start_debian13_gui.sh
+HELPER=/data/adb/fluxlinux/$PKG/fluxlinux_chroot.sh
 DEBIANPATH="\${DEBIANPATH:-/data/local/tmp/chrootDebian13}"
 TARGET_PREFIX="\${TARGET_PREFIX:-$APP_PREFIX}"
 USERNAME="\${USERNAME:-flux}"
@@ -361,42 +361,18 @@ EOF
     success "GUI Stop Script created: $STOP_LAUNCHER"
     fi
 
-    # Also stage full root GUI launcher from app home if present (Settings SSOT)
-    APP_START_GUI="$APP_HOME/start_debian13_gui.sh"
-    if [ -f "$APP_START_GUI" ]; then
-        cp -f "$APP_START_GUI" /data/local/tmp/start_debian13_gui.sh
-        chmod +x /data/local/tmp/start_debian13_gui.sh
-        success "Staged start_debian13_gui.sh from app assets"
-    fi
-
-    # --- SSOT helper + thin compat wrappers ---
-    HELPER="/data/local/tmp/fluxlinux_chroot.sh"
-    progress "Installing chroot SSOT helper at $HELPER..."
-    HELPER_SRC=""
-    for cand in \
-        "$APP_HOME/fluxlinux_chroot.sh" \
-        "$(dirname "$APP_HOME")/staged_scripts/fluxlinux_chroot.sh" \
-        "$(dirname "$0")/fluxlinux_chroot.sh"
-    do
-        if [ -f "$cand" ]; then
-            HELPER_SRC="$cand"
-            break
-        fi
-    done
-    if [ -n "$HELPER_SRC" ]; then
-        cp -f "$HELPER_SRC" "$HELPER"
-        chmod 755 "$HELPER"
-        success "SSOT helper installed from $HELPER_SRC"
-    else
-        error "fluxlinux_chroot.sh not found in app home/staged — app ensureHelperScript will stage on first session"
-    fi
+    # --- thin compat wrappers ---
+    # M14: the app stages fluxlinux_chroot.sh, resolve_bb.sh and start_debian13_gui.sh
+    # into the root-only, SHA-256-verified stage; nothing root executes is copied to
+    # shell-writable /data/local/tmp. The wrappers below point at that stage.
+    STAGE_DIR="/data/adb/fluxlinux/$PKG"
 
     ROOT_RUNNER="/data/local/tmp/run_debian13_root.sh"
     progress "Creating thin root runner → SSOT at $ROOT_RUNNER..."
     cat <<'EOF' > "$ROOT_RUNNER"
 #!/system/bin/sh
 # Compat wrapper → fluxlinux_chroot.sh exec --user root
-HELPER=/data/local/tmp/fluxlinux_chroot.sh
+HELPER=@FLUX_STAGE_DIR@/fluxlinux_chroot.sh
 if [ ! -f "$HELPER" ]; then
   echo "fluxlinux_chroot.sh missing — open a chroot session once or re-run setup" >&2
   exit 127
@@ -407,6 +383,7 @@ if [ "$#" -lt 1 ]; then
 fi
 exec sh "$HELPER" exec --user root -- "$@"
 EOF
+    sed -i "s|@FLUX_STAGE_DIR@|$STAGE_DIR|" "$ROOT_RUNNER"
     chmod 755 "$ROOT_RUNNER"
     success "Root runner created (SSOT wrapper)."
 
@@ -415,11 +392,12 @@ EOF
     cat <<'EOF' > "$CLI_SCRIPT"
 #!/system/bin/sh
 # Compat → fluxlinux_chroot.sh login --user flux
-HELPER=/data/local/tmp/fluxlinux_chroot.sh
+HELPER=@FLUX_STAGE_DIR@/fluxlinux_chroot.sh
 [ -f "$HELPER" ] || { echo "fluxlinux_chroot.sh missing" >&2; exit 127; }
 echo "Entering Debian 13 Chroot (CLI)..."
 exec sh "$HELPER" login --user flux --shell zsh
 EOF
+    sed -i "s|@FLUX_STAGE_DIR@|$STAGE_DIR|" "$CLI_SCRIPT"
     chmod 755 "$CLI_SCRIPT"
     success "CLI Launcher created: $CLI_SCRIPT"
 
@@ -428,11 +406,12 @@ EOF
     cat <<'EOF' > "$ROOT_CLI_SCRIPT"
 #!/system/bin/sh
 # Compat → fluxlinux_chroot.sh login --user root
-HELPER=/data/local/tmp/fluxlinux_chroot.sh
+HELPER=@FLUX_STAGE_DIR@/fluxlinux_chroot.sh
 [ -f "$HELPER" ] || { echo "fluxlinux_chroot.sh missing" >&2; exit 127; }
 echo "Entering Debian 13 Chroot as ROOT..."
 exec sh "$HELPER" login --user root --shell bash
 EOF
+    sed -i "s|@FLUX_STAGE_DIR@|$STAGE_DIR|" "$ROOT_CLI_SCRIPT"
     chmod 755 "$ROOT_CLI_SCRIPT"
     success "Root CLI Launcher created: $ROOT_CLI_SCRIPT"
 
@@ -456,9 +435,10 @@ main() {
 _rr=""
 for _c in \
   "${FLUX_RESOLVE_BB:-}" \
-  "$(dirname "$0")/resolve_bb.sh" \
-  /data/local/tmp/fluxlinux_resolve_bb.sh
+  "$(dirname "$0")/resolve_bb.sh"
 do
+  # M14: never source anything from shell-writable /data/local/tmp.
+  case "$_c" in /data/local/tmp/*) continue ;; esac
   [ -n "$_c" ] && [ -f "$_c" ] && _rr="$_c" && break
 done
 if [ -n "$_rr" ]; then
@@ -469,10 +449,8 @@ fi
 if [ -z "${BB:-}" ]; then
   # sidecar missing (desktop/uninstall/staged setup) — same B1 walk as resolve_bb
   if [ -n "${FLUX_BB:-}" ] && [ -x "$FLUX_BB" ] &&
-     "$FLUX_BB" --list >/dev/null 2>&1; then BB="$FLUX_BB"; fi
-  if [ -z "${BB:-}" ] && [ -x /data/local/tmp/flux_busybox ] &&
-     /data/local/tmp/flux_busybox --list >/dev/null 2>&1; then
-    BB=/data/local/tmp/flux_busybox
+     "$FLUX_BB" --list >/dev/null 2>&1; then
+    case "$FLUX_BB" in /data/local/tmp/*) ;; *) BB="$FLUX_BB" ;; esac
   fi
   if [ -z "${BB:-}" ]; then
     for path in \
