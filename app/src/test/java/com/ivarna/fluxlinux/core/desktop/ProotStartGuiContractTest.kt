@@ -96,6 +96,15 @@ class ProotStartGuiContractTest {
     }
 
     @Test
+    fun pulse_usesUnixSocketNotTcp() {
+        // M17: host Pulse no longer listens on TCP; proot guests see $PREFIX/tmp as /tmp.
+        assertFalse(start.contains("tcp:127.0.0.1"))
+        assertFalse(start.contains("4713"))
+        assertEquals(2, Regex("PULSE_SERVER=unix:/tmp/pulse-native").findAll(guest).count())
+        assertTrue(start.contains("PULSE_SERVER=\"unix:\$TERMUX_PREFIX/tmp/pulse-native\""))
+    }
+
+    @Test
     fun scripts_parseUnderBashAndSh() {
         val bash = File("/bin/bash")
         assumeTrue(bash.canExecute())

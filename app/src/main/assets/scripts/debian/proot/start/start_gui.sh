@@ -215,7 +215,8 @@ echo "FluxLinux: Guest GPU mode=$GPU_MODE"
 # Launch XFCE in proot — propagate guest exit code (never force exit 0)
 GUEST_RC=0
 if [ "$DISTRO" = "termux" ]; then
-  export PULSE_SERVER=tcp:127.0.0.1
+  # Host Pulse serves only an app-private unix socket (no TCP listener).
+  export PULSE_SERVER="unix:$TERMUX_PREFIX/tmp/pulse-native"
   env DISPLAY=:0 startxfce4
   GUEST_RC=$?
 else
@@ -235,7 +236,7 @@ else
     unset PROOT_TMP_DIR
     export TMPDIR=/tmp
     export DISPLAY=:0
-    export PULSE_SERVER=tcp:127.0.0.1
+    export PULSE_SERVER=unix:/tmp/pulse-native
     export VTEST_SOCKET_NAME=/tmp/.virgl_test
     # Alpine glycin SVG loaders use bwrap — fails under proot and aborts GTK.
     export GLYCIN_DISABLE_SANDBOX=1
@@ -417,7 +418,7 @@ KDE_EOF
     su -s "$FLUX_SU_SHELL" - flux -c "
       unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID DBUS_SESSION_BUS_WINDOWID
       export DISPLAY=:0
-      export PULSE_SERVER=tcp:127.0.0.1
+      export PULSE_SERVER=unix:/tmp/pulse-native
       export XDG_CONFIG_DIRS=/etc/xdg
       export XDG_DATA_DIRS=/usr/local/share:/usr/share
       export HOME=/home/flux
