@@ -1224,11 +1224,12 @@ class MainActivity : ComponentActivity() {
                                          this@MainActivity,
                                          onDone = { ok ->
                                              if (!ok) return@prepareHost
-                                             val opened = com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager
-                                                 .openUninstallSession(this@MainActivity, distro)
-                                             if (opened) {
-                                                 openTerminalTab()
-                                             }
+                                             // Chroot staging/su runs off main (M15); the tab
+                                             // opens once the session is added.
+                                             com.ivarna.fluxlinux.core.terminal.UninstallSessionFactory
+                                                 .openUninstallSession(this@MainActivity, distro) { opened ->
+                                                     if (opened) openTerminalTab()
+                                                 }
                                          }
                                      )
                                  },
