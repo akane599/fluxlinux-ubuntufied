@@ -218,4 +218,50 @@ class InstallControllerTest {
         return candidates.firstOrNull { it.isFile }
             ?: error("missing $rel (cwd=$cwd)")
     }
+
+    @Test
+    fun start_refusedWhileAnUninstallRuns_thenAllowedAfterIt() {
+        // H2 (reverse): an install must not start while an uninstall deletes containers.
+        val engine = FakeEngine()
+        var uninstalling = true
+        val c = InstallController(
+            engine,
+            uninstallInProgress = { uninstalling },
+            uninstallBusyMessage = { "busy" },
+        )
+
+        assertFalse(c.start("ubuntu", "dark"))
+        assertTrue(engine.starts.isEmpty())
+        assertEquals(Status.Failed, c.state.value.status)
+        assertEquals("busy", c.state.value.errorMessage)
+
+        uninstalling = false
+        assertTrue(c.start("ubuntu", "dark"))
+        assertEquals(listOf("ubuntu" to "dark"), engine.starts)
+        assertEquals(Status.Running, c.state.value.status)
+    }
+
+    @Test
+    fun refusedStart_neverClobbersARunningInstall() {
+        val engine = FakeEngine()
+        var uninstalling = false
+        val c = InstallController(engine, uninstallInProgress = { uninstalling })
+        c.start("ubuntu", "dark")
+        uninstalling = true
+
+        assertFalse(c.start("debian", "light"))
+
+        assertEquals(1, engine.starts.size)
+        assertEquals(Status.Running, c.state.value.status)
+        assertEquals("ubuntu", c.state.value.distroId)
+    }
+
+    @Test
+    fun productionController_wiresTheUninstallGuard() {
+        val rel = "src/main/kotlin/com/ivarna/fluxlinux/core/install/InstallController.kt"
+        val cwd = File("").absoluteFile
+        val src = listOf(File(cwd, rel), File(cwd, "app/$rel")).first { it.exists() }.readText()
+        assertTrue(src.contains("UninstallSessionFactory.isAnyUninstallRunning()"))
+        assertTrue(src.contains("R.string.install_blocked_uninstall"))
+    }
 }

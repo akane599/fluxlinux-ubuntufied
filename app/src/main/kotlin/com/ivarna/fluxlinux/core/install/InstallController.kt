@@ -22,7 +22,13 @@ interface InstallEngine {
  * [cancel] is the explicit user action. One install runs at a time across the
  * onboarding flow and the install wizard.
  */
-class InstallController internal constructor(private val engine: InstallEngine) {
+class InstallController internal constructor(
+    private val engine: InstallEngine,
+    /** H2 (reverse): true while a distro uninstall session is open; installs are refused. */
+    private val uninstallInProgress: () -> Boolean = { false },
+    /** User-visible reason shown when [start] is refused because of [uninstallInProgress]. */
+    private val uninstallBusyMessage: () -> String = { "" },
+) {
 
     enum class Status { Idle, Running, Succeeded, Failed }
 
@@ -51,8 +57,24 @@ class InstallController internal constructor(private val engine: InstallEngine) 
     /** Token of the run whose callbacks are accepted; bumped by [start] and [cancel]. */
     private val acceptedRun = AtomicInteger(0)
 
-    /** Start (or restart) an install. A previous run is superseded (the engine cancels it). */
-    fun start(distroId: String, theme: String) {
+    /**
+     * Start (or restart) an install. A previous run is superseded (the engine cancels it).
+     * Refused (false, state [Status.Failed] with the reason) while an uninstall is deleting
+     * a container or the proot-distro tree the install would run in (H2).
+     */
+    fun start(distroId: String, theme: String): Boolean {
+        if (uninstallInProgress()) {
+            if (!_state.value.isRunning) {
+                _state.value = State(
+                    runId = acceptedRun.incrementAndGet(),
+                    distroId = distroId,
+                    theme = theme,
+                    status = Status.Failed,
+                    errorMessage = uninstallBusyMessage(),
+                )
+            }
+            return false
+        }
         val runId = acceptedRun.incrementAndGet()
         _state.value = State(
             runId = runId,
@@ -61,6 +83,7 @@ class InstallController internal constructor(private val engine: InstallEngine) 
             status = Status.Running,
         )
         engine.start(distroId, theme) { p -> onProgress(runId, p) }
+        return true
     }
 
     /** Explicit user cancel: stops the job and returns to idle; late callbacks are dropped. */
@@ -112,8 +135,17 @@ class InstallController internal constructor(private val engine: InstallEngine) 
         /** The process-wide controller, backed by an [OnboardingInstallRunner]. */
         fun get(ctx: Context): InstallController =
             instance ?: synchronized(this) {
-                instance ?: InstallController(OnboardingInstallRunner(ctx.applicationContext))
-                    .also { instance = it }
+                instance ?: ctx.applicationContext.let { app ->
+                    InstallController(
+                        OnboardingInstallRunner(app),
+                        uninstallInProgress = {
+                            com.ivarna.fluxlinux.core.terminal.UninstallSessionFactory.isAnyUninstallRunning()
+                        },
+                        uninstallBusyMessage = {
+                            app.getString(com.ivarna.fluxlinux.R.string.install_blocked_uninstall)
+                        },
+                    )
+                }.also { instance = it }
             }
     }
 }

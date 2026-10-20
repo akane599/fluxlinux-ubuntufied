@@ -8,6 +8,7 @@ import com.ivarna.fluxlinux.core.root.BusyBoxPaths
 import com.ivarna.fluxlinux.core.root.ChrootPaths
 import com.ivarna.fluxlinux.core.root.RootShell
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Distro uninstall sessions.
@@ -23,6 +24,14 @@ object UninstallSessionFactory {
     private val uninstallingChroots: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     fun isChrootUninstalling(path: String): Boolean = path in uninstallingChroots
+
+    /**
+     * Uninstall sessions (proot or chroot) being prepared or open. [InstallController]
+     * refuses to start an install meanwhile (H2, reverse direction).
+     */
+    private val openUninstalls = AtomicInteger(0)
+
+    fun isAnyUninstallRunning(): Boolean = openUninstalls.get() > 0
 
     /**
      * Opens the uninstall session. [onOpened] runs on the main thread with whether
@@ -41,7 +50,9 @@ object UninstallSessionFactory {
         val method = terminalComponentFor(distro.id).method
         val profile = DistroInstallProfile.forId(distro.id)
         val appCtx = ctx.applicationContext
+        openUninstalls.incrementAndGet()
         val onClosed: (Int) -> Unit = {
+            openUninstalls.decrementAndGet()
             TerminalLauncher.refreshInstalledAfterUninstall(appCtx, distro.id)
         }
         return when (method) {
@@ -49,6 +60,7 @@ object UninstallSessionFactory {
                 val chrootPath = profile?.chrootPath.orEmpty()
                 if (chrootPath.isNotEmpty() && !uninstallingChroots.add(chrootPath)) {
                     // An uninstall of this rootfs is already running.
+                    openUninstalls.decrementAndGet()
                     onOpened(false)
                     return false
                 }
@@ -81,7 +93,10 @@ object UninstallSessionFactory {
                                 onClosed(it)
                             },
                         )
-                        if (!opened) release()
+                        if (!opened) {
+                            release()
+                            openUninstalls.decrementAndGet()
+                        }
                         onOpened(opened)
                     }
                 }
@@ -108,6 +123,7 @@ object UninstallSessionFactory {
                 val opened = InstallSessionFactory.openHostCommandSession(
                     ctx, cmd, title = "Uninstall ${distro.name}", onClosed = onClosed
                 )
+                if (!opened) openUninstalls.decrementAndGet()
                 onOpened(opened)
                 opened
             }
