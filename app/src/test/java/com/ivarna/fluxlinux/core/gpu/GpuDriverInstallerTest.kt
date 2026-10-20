@@ -100,4 +100,15 @@ class GpuDriverInstallerTest {
         assertTrue(DriverRelease.isNewer("26.2.0-devel-20260710", "26.2.0-devel-20260709"))
         assertTrue(!DriverRelease.isNewer("26.2.0-devel-20260709", "26.2.0-devel-20260709"))
     }
+
+    @Test
+    fun nextPending_onlyClearsOwnDistroMarker() {
+        // Offline: this distro becomes pending.
+        assertEquals("ubuntu", GpuDriverInstaller.nextPending(null, "ubuntu", offline = true))
+        assertEquals("ubuntu", GpuDriverInstaller.nextPending("debian", "ubuntu", offline = true))
+        // Online: clear only our own marker; another distro's offline retry survives.
+        assertNull(GpuDriverInstaller.nextPending("ubuntu", "ubuntu", offline = false))
+        assertEquals("debian", GpuDriverInstaller.nextPending("debian", "ubuntu", offline = false))
+        assertNull(GpuDriverInstaller.nextPending(null, "ubuntu", offline = false))
+    }
 }
