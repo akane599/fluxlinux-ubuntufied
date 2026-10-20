@@ -225,9 +225,15 @@ EOF
     fi
 }
 
+# First-paint default only: a family re-run must not downgrade the mode that
+# setup_hw_accel_guest.sh chose (turnip/panvk), so keep any existing value.
 _flux_write_gpu_mode() {
     _mode="${1:-virgl}"
     mkdir -p /etc/fluxlinux
+    if [ -s /etc/fluxlinux/gpu_mode ]; then
+        _flux_log "gpu_mode kept ($(tr -d '[:space:]' </etc/fluxlinux/gpu_mode))"
+        return 0
+    fi
     printf '%s\n' "$_mode" > /etc/fluxlinux/gpu_mode
     _flux_log "gpu_mode=$_mode"
 }
