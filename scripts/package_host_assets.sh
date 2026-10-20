@@ -53,11 +53,13 @@ stage_app_id() {
 
   # 1. Verify inputs. Both flavors ship bootstrap.tar in the APK.
   local missing=0
-  local required=("$src/bootstrap.tar" "$src/jniLibs/arm64-v8a/libbash.so" \
-           "$src/jniLibs/arm64-v8a/libproot.so" "$src/jniLibs/arm64-v8a/libloader.so" \
-           "$src/jniLibs/arm64-v8a/libloader32.so" \
-           "$src/jniLibs/arm64-v8a/libpulseaudio.so" \
-           "$src/jniLibs/arm64-v8a/libpactl.so")
+  local jni_libs=(libbash.so libproot.so libloader.so libloader32.so \
+           libpulseaudio.so libpactl.so)
+  local required=("$src/bootstrap.tar")
+  local lib
+  for lib in "${jni_libs[@]}"; do
+    required+=("$src/jniLibs/arm64-v8a/$lib")
+  done
   for f in "${required[@]}"; do
     if [ ! -f "$f" ]; then
       echo "ERROR: missing $f — run assemble_bootstrap.py --package-name $app_id first" >&2
@@ -66,10 +68,15 @@ stage_app_id() {
   done
   if [ "$missing" -eq 1 ]; then exit 1; fi
 
-  # 2-3. Stage assets + jniLibs (flavor source set)
+  # 2-3. Stage assets + jniLibs (flavor source set). The gitignored flavor
+  # jniLibs dir is owned by this script: recreate it and copy exactly the
+  # required libs, so a stale .so from an earlier staging can never ship.
+  rm -rf "$flavor_jni/arm64-v8a"
   mkdir -p "$flavor_assets" "$flavor_jni/arm64-v8a"
   cp -f "$src/bootstrap.tar" "$flavor_assets/bootstrap.tar"
-  cp -f "$src/jniLibs/arm64-v8a/"*.so "$flavor_jni/arm64-v8a/"
+  for lib in "${jni_libs[@]}"; do
+    cp -f "$src/jniLibs/arm64-v8a/$lib" "$flavor_jni/arm64-v8a/$lib"
+  done
 
   # Pulse runtime overlay for already-extracted PREFIX (no EXTRACT_VERSION bump).
   mkdir -p "$flavor_assets/pulse-runtime"

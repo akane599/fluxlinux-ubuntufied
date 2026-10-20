@@ -109,14 +109,17 @@ def clean_and_prepare(extract_dir: Path) -> None:
 
 
 def find_deb(deb_dir: Path, pkg: str) -> Path | None:
+    # "<pkg>_" never matches suffixed variants such as libgmp-static_*.deb.
     matches = sorted(deb_dir.glob(f"{pkg}_*.deb"))
-    # Prefer non-static / main package: exact name prefix before first _
-    for m in matches:
-        name = m.name
-        # skip static variants when looking for base pkg (e.g. libgmp-static)
-        if name.startswith(f"{pkg}_"):
-            return m
-    return None
+    if len(matches) > 1:
+        # Rebuilds mirror new versions next to old ones; a lexicographic pick
+        # would silently ship whichever sorts first (e.g. 1.10 before 1.9).
+        names = ", ".join(m.name for m in matches)
+        raise SystemExit(
+            f"error: {len(matches)} candidate debs for {pkg} in {deb_dir}: {names}. "
+            "Remove the stale version(s) and re-run."
+        )
+    return matches[0] if matches else None
 
 
 def extract_debs(deb_dir: Path, extract_dir: Path, packages: list[str]) -> list[str]:
@@ -154,10 +157,17 @@ def add_loader(extract_dir: Path, target_prefix: str, loader_src: Path) -> None:
         print(f"[!] Warning: loader APK missing at {loader_src} — skip")
         return
     dest_dir = extract_dir / target_prefix / "usr/libexec/termux-x11"
+    created = [d for d in (dest_dir.parent, dest_dir) if not d.exists()]
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "loader.apk"
     print(f"[*] Copying loader.apk → {dest}")
     shutil.copy2(loader_src, dest)
+    # F-Droid reproducibility: mkdir/checkout modes follow the builder's umask
+    # (0775/0664 under umask 002, 0755/0644 under 022). Pin them to the
+    # owner-only modes every termux-packages deb entry already uses.
+    for d in created:
+        os.chmod(d, 0o700)
+    os.chmod(dest, 0o600)
 
 
 def verify_bootstrap(
@@ -246,7 +256,12 @@ def create_tarball(extract_dir: Path, target_prefix: str, tar_path: Path) -> Non
     print(f"[*] Tarball created: {size_mb:.2f} MB")
 
 
-def copy_to_jni_libs(extract_dir: Path, target_prefix: str, jni_dir: Path) -> None:
+def copy_to_jni_libs(
+    extract_dir: Path,
+    target_prefix: str,
+    jni_dir: Path,
+    mode: str = "full",
+) -> None:
     jni_dir.mkdir(parents=True, exist_ok=True)
     mapping = {
         "usr/bin/proot": "libproot.so",
@@ -257,8 +272,21 @@ def copy_to_jni_libs(extract_dir: Path, target_prefix: str, jni_dir: Path) -> No
         "usr/bin/pulseaudio": "libpulseaudio.so",
         "usr/bin/pactl": "libpactl.so",
     }
-    print(f"[*] Copying critical binaries to {jni_dir}...")
+    # terminal-proot mode has no pulseaudio stack; full mode needs all six.
+    optional = set() if mode == "full" else {"usr/bin/pulseaudio", "usr/bin/pactl"}
     base = extract_dir / target_prefix
+    missing = [
+        rel for rel in mapping if rel not in optional and not (base / rel).is_file()
+    ]
+    if missing:
+        raise SystemExit(f"error: jniLibs sources missing: {', '.join(missing)}")
+    # Drop .so files from an earlier run so a stale lib cannot pass the
+    # existence-only gates downstream (package_host_assets.sh, Gradle).
+    for old in sorted(jni_dir.glob("*.so")):
+        if old.is_file() or old.is_symlink():
+            print(f"  removing previous {old.name}")
+            old.unlink()
+    print(f"[*] Copying critical binaries to {jni_dir}...")
     for src_rel, dest_name in mapping.items():
         src = base / src_rel
         dest = jni_dir / dest_name
@@ -267,7 +295,7 @@ def copy_to_jni_libs(extract_dir: Path, target_prefix: str, jni_dir: Path) -> No
             shutil.copy2(src, dest)
             os.chmod(dest, 0o755)
         else:
-            print(f"  [WARN] missing {src_rel}")
+            print(f"  [SKIP] {src_rel} (not in {mode} mode)")
 
 
 def assert_no_wrong_prefix(extract_dir: Path, package_name: str) -> None:
@@ -391,7 +419,7 @@ def main() -> None:
         require_loader=(args.mode == "full" and not args.skip_loader_check),
         mode=args.mode,
     )
-    copy_to_jni_libs(extract_dir, target_prefix, jni_dir)
+    copy_to_jni_libs(extract_dir, target_prefix, jni_dir, mode=args.mode)
     create_tarball(extract_dir, target_prefix, out_tar)
     print("[*] Bootstrap assembly completed successfully!")
 
