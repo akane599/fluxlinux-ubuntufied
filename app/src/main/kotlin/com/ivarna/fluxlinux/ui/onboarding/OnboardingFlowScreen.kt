@@ -137,6 +137,9 @@ fun OnboardingFlowScreen(
     // H2: the install is process-scoped. Leaving composition (rotation, uiMode change,
     // split-screen, Back) never cancels it; only the explicit Cancel action does.
     val installer = remember { InstallController.get(context.applicationContext) }
+    // A fresh open (not a rotation restore) forgets a finished run left via system
+    // Back; a running install is kept and resumed below. Runs before collecting.
+    rememberSaveable { installer.clearFinished(); true }
     val install by installer.state.collectAsState()
     var step by rememberSaveable {
         // Re-opened while an Ubuntu install runs (or just finished): show its progress.
