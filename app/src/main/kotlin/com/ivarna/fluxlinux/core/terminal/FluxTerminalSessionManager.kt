@@ -202,10 +202,6 @@ object FluxTerminalSessionManager {
         onFinished: (() -> Unit)? = null
     ): Boolean = InstallSessionFactory.openInstallSession(ctx, distro, setupB64, onFinished)
 
-    /** Distro uninstall session. */
-    fun openUninstallSession(ctx: Context, distro: Distro): Boolean =
-        UninstallSessionFactory.openUninstallSession(ctx, distro)
-
     /** Component install/uninstall session inside the guest. */
     fun openComponentSession(
         ctx: Context,
