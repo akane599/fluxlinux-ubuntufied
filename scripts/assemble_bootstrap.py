@@ -109,14 +109,17 @@ def clean_and_prepare(extract_dir: Path) -> None:
 
 
 def find_deb(deb_dir: Path, pkg: str) -> Path | None:
+    # "<pkg>_" never matches suffixed variants such as libgmp-static_*.deb.
     matches = sorted(deb_dir.glob(f"{pkg}_*.deb"))
-    # Prefer non-static / main package: exact name prefix before first _
-    for m in matches:
-        name = m.name
-        # skip static variants when looking for base pkg (e.g. libgmp-static)
-        if name.startswith(f"{pkg}_"):
-            return m
-    return None
+    if len(matches) > 1:
+        # Rebuilds mirror new versions next to old ones; a lexicographic pick
+        # would silently ship whichever sorts first (e.g. 1.10 before 1.9).
+        names = ", ".join(m.name for m in matches)
+        raise SystemExit(
+            f"error: {len(matches)} candidate debs for {pkg} in {deb_dir}: {names}. "
+            "Remove the stale version(s) and re-run."
+        )
+    return matches[0] if matches else None
 
 
 def extract_debs(deb_dir: Path, extract_dir: Path, packages: list[str]) -> list[str]:
