@@ -1166,10 +1166,36 @@ class MainActivity : ComponentActivity() {
                                      // Embedded uninstall: proot → proot-distro remove in Flux
                                      // Terminal; chroot → uninstall_debian13_chroot.sh in Root Shell.
                                      val distro = selectedDistro ?: return@DistroSettingsScreen
+                                     // H2: never delete a container while an install (it outlives
+                                     // its screen) or a host-prefix extraction is using it.
+                                     val uninstallAllowed = {
+                                         com.ivarna.fluxlinux.core.install.InstallController.hostRepairAllowed(
+                                             com.ivarna.fluxlinux.core.install.InstallController
+                                                 .get(this@MainActivity).state.value,
+                                             extracting = com.ivarna.fluxlinux.core.terminal.BootstrapInstaller
+                                                 .busy.value,
+                                         )
+                                     }
+                                     val refuseUninstall = {
+                                         android.widget.Toast.makeText(
+                                             this@MainActivity,
+                                             getString(R.string.home_repair_blocked_install),
+                                             android.widget.Toast.LENGTH_LONG,
+                                         ).show()
+                                     }
+                                     if (!uninstallAllowed()) {
+                                         refuseUninstall()
+                                         return@DistroSettingsScreen
+                                     }
                                      com.ivarna.fluxlinux.core.terminal.TerminalLauncher.prepareHost(
                                          this@MainActivity,
                                          onDone = { ok ->
                                              if (!ok) return@prepareHost
+                                             // Re-check: an install may have started meanwhile.
+                                             if (!uninstallAllowed()) {
+                                                 refuseUninstall()
+                                                 return@prepareHost
+                                             }
                                              // Chroot staging/su runs off main (M15); the tab
                                              // opens once the session is added.
                                              com.ivarna.fluxlinux.core.terminal.UninstallSessionFactory
