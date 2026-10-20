@@ -29,6 +29,37 @@ export XKB_CONFIG_ROOT="$TERMUX_PREFIX/share/X11/xkb"
 export PULSE_RUNTIME_PATH="${HOME}/.pulse"
 mkdir -p "$PULSE_RUNTIME_PATH" 2>/dev/null
 
+# Verify guest setup before touching X/VirGL, so a missing desktop never leaves a
+# server running (M12). -L too: an absolute guest symlink does not resolve on the host.
+ROOTFS="$TERMUX_PREFIX/var/lib/proot-distro/containers/$DISTRO/rootfs"
+# FLUX_DESKTOP (env from DesktopLauncher): xfce4 (default) | kde
+FLUX_DESKTOP="${FLUX_DESKTOP:-xfce4}"
+case "$FLUX_DESKTOP" in
+  kde) DE_CMD=startplasma-x11 ;;
+  *) FLUX_DESKTOP=xfce4; DE_CMD=startxfce4 ;;
+esac
+if [ ! -e "$ROOTFS/usr/bin/$DE_CMD" ] && [ ! -L "$ROOTFS/usr/bin/$DE_CMD" ] && \
+   [ ! -e "$ROOTFS/usr/sbin/$DE_CMD" ] && [ ! -L "$ROOTFS/usr/sbin/$DE_CMD" ]; then
+  echo "FluxLinux: $FLUX_DESKTOP setup incomplete ($DE_CMD missing). Re-run environment setup."
+  exit 1
+fi
+echo "FluxLinux: $DE_CMD found in guest"
+
+# Whatever ends this script (early failure, guest failure, session end) also stops the
+# X server and VirGL it started. The guest runs as a child (no final exec), so the trap
+# stays armed for the whole session; stop_gui.sh covers a killed script.
+XSERVER_PID=""
+VIRGL_PID=""
+_flux_cleanup() {
+  [ -n "$XSERVER_PID" ] && kill "$XSERVER_PID" 2>/dev/null
+  [ -n "$VIRGL_PID" ] && kill "$VIRGL_PID" 2>/dev/null
+  return 0
+}
+trap _flux_cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 # Kill stale host graphics services only — NEVER am force-stop own package
 # (that would kill FluxLinux itself if the package name matches).
 # Pulse is a host service: do not pkill it here (CLI audio stays up).
@@ -67,6 +98,7 @@ fi
 if command -v virgl_test_server_android >/dev/null; then
   echo "FluxLinux: Starting VirGL server..."
   virgl_test_server_android --socket-path "$TERMUX_PREFIX/tmp/.virgl_test" >/dev/null 2>&1 &
+  VIRGL_PID=$!
   sleep 2
   test -S "${TMPDIR}/.virgl_test" && echo "FluxLinux: VirGL socket ready" || \
     echo "FluxLinux: [WARN] VirGL socket not found"
@@ -155,6 +187,7 @@ if [ ! -S "$TMPDIR/.X11-unix/X0" ] || ! kill -0 "$XSERVER_PID" 2>/dev/null; then
   echo "FluxLinux: [ERROR] X server did not create $TMPDIR/.X11-unix/X0 within 15s (or exited)."
   exit 1
 fi
+# Not a readiness marker for proot: DesktopLauncher waits for the guest FLUX_DESKTOP_READY.
 echo "FluxLinux: host X0 socket ready (X server PID=$XSERVER_PID)"
 
 # Open X11 display activity in our app
@@ -164,21 +197,6 @@ am start -n "$PKG/com.termux.x11.MainActivity" \
   --activity-clear-top 2>/dev/null || \
 am start -n "$PKG/com.termux.x11.MainActivity" 2>/dev/null
 sleep 1
-
-# Verify guest setup
-ROOTFS="$TERMUX_PREFIX/var/lib/proot-distro/containers/$DISTRO/rootfs"
-# FLUX_DESKTOP (env from DesktopLauncher): xfce4 (default) | kde
-FLUX_DESKTOP="${FLUX_DESKTOP:-xfce4}"
-case "$FLUX_DESKTOP" in
-  kde) DE_CMD=startplasma-x11 ;;
-  *) FLUX_DESKTOP=xfce4; DE_CMD=startxfce4 ;;
-esac
-if [ ! -e "$ROOTFS/usr/bin/$DE_CMD" ] && [ ! -e "$ROOTFS/usr/sbin/$DE_CMD" ]; then
-  echo "FluxLinux: $FLUX_DESKTOP setup incomplete ($DE_CMD missing). Re-run environment setup."
-  exit 1
-fi
-
-echo "FluxLinux: $DE_CMD=READY"
 
 # Guest GPU mode from setup_hw_accel_debian.sh (/etc/fluxlinux/gpu_mode)
 # turnip → Adreno/Zink; virgl → host virgl_test_server; else softpipe
@@ -197,7 +215,8 @@ echo "FluxLinux: Guest GPU mode=$GPU_MODE"
 # Launch XFCE in proot — propagate guest exit code (never force exit 0)
 GUEST_RC=0
 if [ "$DISTRO" = "termux" ]; then
-  export PULSE_SERVER=tcp:127.0.0.1
+  # Host Pulse serves only an app-private unix socket (no TCP listener).
+  export PULSE_SERVER="unix:$TERMUX_PREFIX/tmp/pulse-native"
   env DISPLAY=:0 startxfce4
   GUEST_RC=$?
 else
@@ -217,7 +236,7 @@ else
     unset PROOT_TMP_DIR
     export TMPDIR=/tmp
     export DISPLAY=:0
-    export PULSE_SERVER=tcp:127.0.0.1
+    export PULSE_SERVER=unix:/tmp/pulse-native
     export VTEST_SOCKET_NAME=/tmp/.virgl_test
     # Alpine glycin SVG loaders use bwrap — fails under proot and aborts GTK.
     export GLYCIN_DISABLE_SANDBOX=1
@@ -243,19 +262,25 @@ else
     # → xfconfd "Unable to create configuration directory" → failsafe session.
     # Match /home ownership (app uid). Avoid nested single quotes (this block is
     # already inside proot-distro login ... -c '...' ).
+    # The recursive walk is slow under ptrace, so it runs only when the ownership
+    # signature changed since the last pass (first start, app reinstall = new uid).
     if [ -d /home/flux ]; then
       _home_uid=$(stat -c %u /home 2>/dev/null || true)
       _home_gid=$(stat -c %g /home 2>/dev/null || true)
-      if [ -n "$_home_uid" ]; then
+      _perm_mark=/etc/fluxlinux/home_perms
+      _perm_sig() { echo "v1 $(stat -c %u:%g /home /home/flux /home/flux/.config 2>/dev/null | tr "\n" " ")"; }
+      if [ -n "$_home_uid" ] && [ "$(cat "$_perm_mark" 2>/dev/null)" != "$(_perm_sig)" ]; then
         chown -R "$_home_uid:$_home_gid" /home/flux 2>/dev/null || true
         if [ "$_home_uid" = "0" ]; then
           chown -R flux:flux /home/flux 2>/dev/null || true
         fi
+        mkdir -p /home/flux/.config /home/flux/.cache /home/flux/.local/share
+        # Proot writes as the app uid, which owns these files: owner rwX is enough.
+        chmod -R u+rwX /home/flux/.config /home/flux/.cache /home/flux/.local 2>/dev/null || true
+        mkdir -p /etc/fluxlinux 2>/dev/null && _perm_sig >"$_perm_mark" 2>/dev/null || true
       fi
       mkdir -p /home/flux/.config /home/flux/.cache /home/flux/.local/share
       chmod 755 /home/flux 2>/dev/null || true
-      # Open perms: host uid vs guest flux uid mismatch is common under proot
-      chmod -R 777 /home/flux/.config /home/flux/.cache /home/flux/.local 2>/dev/null || true
     fi
     if [ -d /home/flux/.cache/runtime ]; then
       chmod 700 /home/flux/.cache/runtime 2>/dev/null || true
@@ -312,13 +337,16 @@ else
     # Real bubblewrap needs user namespaces (missing under proot) and
     # "chmod a-x bwrap" becomes "Could not spawn bwrap: Permission denied"
     # which aborts xfce4-panel. Install Alpine-style shim instead.
-    if [ ! -f /usr/bin/bwrap ] || ! grep -q "FluxLinux proot" /usr/bin/bwrap 2>/dev/null; then
-      if [ -x /usr/bin/bwrap ] && [ ! -e /usr/bin/bwrap.real ]; then
+    # Every FluxLinux shim (this heredoc, the setup scripts, the compiled
+    # bwrap-proot-shim) contains "bwrap-shim", so an installed one is left alone;
+    # real bubblewrap is saved once as bwrap.real.
+    if ! grep -q "bwrap-shim" /usr/bin/bwrap 2>/dev/null; then
+      if [ -x /usr/bin/bwrap ] && [ ! -x /usr/bin/bwrap.real ]; then
         mv /usr/bin/bwrap /usr/bin/bwrap.real 2>/dev/null || true
       fi
       cat > /usr/bin/bwrap << "BWRAP_EOF"
 #!/bin/sh
-# FluxLinux: exec the real glycin loader, not an earlier --ro-bind source.
+# FluxLinux proot bwrap-shim: exec the real glycin loader, not an earlier --ro-bind source.
 while [ $# -gt 0 ]; do
   case "$1" in
     /usr/libexec/glycin-loaders/*|/usr/lib/glycin-loaders/*|/usr/bin/true|/bin/true)
@@ -390,7 +418,7 @@ KDE_EOF
     su -s "$FLUX_SU_SHELL" - flux -c "
       unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID DBUS_SESSION_BUS_WINDOWID
       export DISPLAY=:0
-      export PULSE_SERVER=tcp:127.0.0.1
+      export PULSE_SERVER=unix:/tmp/pulse-native
       export XDG_CONFIG_DIRS=/etc/xdg
       export XDG_DATA_DIRS=/usr/local/share:/usr/share
       export HOME=/home/flux
@@ -430,10 +458,20 @@ KDE_EOF
         export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe GPU_MODE=software
       fi
       $FLUX_KDE_ENV
+      if ! command -v $FLUX_DE_CMD >/dev/null 2>&1; then
+        echo \"FluxLinux(guest): [ERROR] $FLUX_DE_CMD not found for flux\"
+        exit 127
+      fi
+      # Readiness for the app: printed only if the DE (same pid after exec) is still
+      # alive 2s after launch, so a desktop that dies at once never flips to Running.
+      ( sleep 2; kill -0 \$\$ 2>/dev/null && echo FLUX_DESKTOP_READY ) &
       if command -v dbus-run-session >/dev/null 2>&1; then
         exec dbus-run-session -- $FLUX_DE_CMD
-      else
+      elif command -v dbus-launch >/dev/null 2>&1; then
         exec dbus-launch --exit-with-session $FLUX_DE_CMD
+      else
+        echo \"FluxLinux(guest): [ERROR] neither dbus-run-session nor dbus-launch found\"
+        exit 127
       fi
     "
   '
