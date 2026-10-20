@@ -146,21 +146,7 @@ object GuestSessionFactory {
             scriptContent.toByteArray(Charsets.UTF_8),
             android.util.Base64.NO_WRAP
         )
-        val arg = if (isUninstall) " uninstall" else ""
-        val envPrefix = extraEnv.entries.joinToString("") { (k, v) ->
-            "export ${k}='${v.replace("'", "'\\''")}'; "
-        }
-        val guestPayload = buildString {
-            append("export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; ")
-            append("export DEBIAN_FRONTEND=noninteractive; ")
-            append(envPrefix)
-            append("echo '$b64' | base64 -d > /tmp/flux_feature.sh; ")
-            append("chmod +x /tmp/flux_feature.sh; ")
-            append("if [ -x /bin/bash ]; then bash /tmp/flux_feature.sh$arg; ")
-            append("else sh /tmp/flux_feature.sh$arg; fi; RC=\$?; ")
-            append("rm -f /tmp/flux_feature.sh; ")
-            append("exit \$RC")
-        }
+        val guestPayload = componentPayload(b64, isUninstall, extraEnv)
         if (!SessionRegistry.hasFreeTab()) return false
         // Root required: customization / feature setup scripts call apt & chown.
         // Interactive shells stay flux via openSession(sessionUserForType).
@@ -185,5 +171,35 @@ object GuestSessionFactory {
                 iconRes = DistroRepository.iconResFor(distro.id) ?: R.drawable.ic_terminal
             )
         )
+    }
+
+    /**
+     * Guest-side shell for [openComponentSession]. The script goes to a
+     * per-session `mktemp` path (L1): concurrent component tabs share the
+     * guest `/tmp`, so a fixed name let one tab overwrite the other's script
+     * mid-run. The file is removed after the run and the exit code kept.
+     */
+    internal fun componentPayload(
+        b64: String,
+        isUninstall: Boolean,
+        extraEnv: Map<String, String>,
+        tmpDir: String = "/tmp",
+    ): String {
+        val arg = if (isUninstall) " uninstall" else ""
+        val envPrefix = extraEnv.entries.joinToString("") { (k, v) ->
+            "export ${k}='${v.replace("'", "'\\''")}'; "
+        }
+        return buildString {
+            append("export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; ")
+            append("export DEBIAN_FRONTEND=noninteractive; ")
+            append(envPrefix)
+            append("FLUX_FEATURE=\$(mktemp $tmpDir/flux_feature.XXXXXX) || exit 1; ")
+            append("echo '$b64' | base64 -d > \"\$FLUX_FEATURE\"; ")
+            append("chmod +x \"\$FLUX_FEATURE\"; ")
+            append("if [ -x /bin/bash ]; then bash \"\$FLUX_FEATURE\"$arg; ")
+            append("else sh \"\$FLUX_FEATURE\"$arg; fi; RC=\$?; ")
+            append("rm -f \"\$FLUX_FEATURE\"; ")
+            append("exit \$RC")
+        }
     }
 }

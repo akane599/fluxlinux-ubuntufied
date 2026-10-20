@@ -1,4 +1,5 @@
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <jni.h>
 #include <signal.h>
@@ -46,6 +47,7 @@ static int create_subprocess(JNIEnv* env,
             ptsname_r(ptm, devname, sizeof(devname))
 #endif
        ) {
+        close(ptm);
         return throw_runtime_exception(env, "Cannot grantpt()/unlockpt()/ptsname_r() on /dev/ptmx");
     }
 
@@ -62,6 +64,7 @@ static int create_subprocess(JNIEnv* env,
 
     pid_t pid = fork();
     if (pid < 0) {
+        close(ptm);
         return throw_runtime_exception(env, "Fork failed");
     } else if (pid > 0) {
         *pProcessId = (int) pid;
@@ -158,7 +161,7 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_JNI_createSubprocess(
     char const* cmd_utf8 = (*env)->GetStringUTFChars(env, cmd, NULL);
     int ptm = create_subprocess(env, cmd_utf8, cmd_cwd, argv, envp, &procId, rows, columns);
     (*env)->ReleaseStringUTFChars(env, cmd, cmd_utf8);
-    (*env)->ReleaseStringUTFChars(env, cmd, cmd_cwd);
+    (*env)->ReleaseStringUTFChars(env, cwd, cmd_cwd);
 
     if (argv) {
         for (char** tmp = argv; *tmp; ++tmp) free(*tmp);
@@ -168,6 +171,9 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_JNI_createSubprocess(
         for (char** tmp = envp; *tmp; ++tmp) free(*tmp);
         free(envp);
     }
+
+    // create_subprocess() threw: return with the exception pending, no further JNI calls.
+    if (ptm < 0) return -1;
 
     int* pProcId = (int*) (*env)->GetPrimitiveArrayCritical(env, processIdArray, NULL);
     if (!pProcId) return throw_runtime_exception(env, "JNI call GetPrimitiveArrayCritical(processIdArray, &isCopy) failed");
@@ -197,7 +203,14 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_JNI_setPtyUTF8Mode(JNIEnv* TERMU
 JNIEXPORT jint JNICALL Java_com_termux_terminal_JNI_waitFor(JNIEnv* TERMUX_UNUSED(env), jclass TERMUX_UNUSED(clazz), jint pid)
 {
     int status;
-    waitpid(pid, &status, 0);
+    pid_t rc;
+    do {
+        rc = waitpid(pid, &status, 0);
+    } while (rc < 0 && errno == EINTR);
+    if (rc < 0) {
+        // status is undefined: report a failure exit, never a clean 0.
+        return 255;
+    }
     if (WIFEXITED(status)) {
         return WEXITSTATUS(status);
     } else if (WIFSIGNALED(status)) {

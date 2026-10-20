@@ -1,10 +1,12 @@
 package com.ivarna.fluxlinux.core.terminal
 
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 
 class GuestZshrcRepairTest {
@@ -385,5 +387,95 @@ class GuestZshrcRepairTest {
         } finally {
             dir.deleteRecursively()
         }
+    }
+
+    // --- M8: never clobber a user's .zshrc ---------------------------------
+
+    private val oldFluxProfile = """
+        # PATH setup - local bin, npm global modules
+        export PATH="${'$'}HOME/.local/bin:${'$'}PATH"
+        # Background visuals - don't block shell startup
+        { fastfetch --config termux; pokemon-colorscripts --no-title -r 1,2,3 } &!
+        export ZSH="${'$'}HOME/.oh-my-zsh"
+        source ${'$'}ZSH/oh-my-zsh.sh
+    """.trimIndent() + "\n"
+
+    private val userProfile = "# my dotfiles\nexport EDITOR=vim\nsource ${'$'}HOME/.oh-my-zsh/oh-my-zsh.sh\n"
+
+    private inline fun withHome(block: (home: File, root: File) -> Unit) {
+        val root = Files.createTempDirectory("flux-zshrc-m8").toFile()
+        try {
+            val home = File(root, "home/flux").apply { mkdirs() }
+            block(home, root)
+        } finally {
+            SafeFiles.deleteTree(root)
+        }
+    }
+
+    private fun repair(zshrc: File) =
+        GuestZshrcRepair.repairZshrcFile(zshrc, isApkGuest = false, needsPmWrap = true, ubuntuPlugins = true)
+
+    @Test
+    fun repairZshrcFile_symlinkedZshrc_isNotFollowed() = withHome { home, root ->
+        val victim = File(root, "dotfiles/zshrc").apply { parentFile.mkdirs(); writeText(userProfile) }
+        val zshrc = File(home, ".zshrc")
+        Files.createSymbolicLink(zshrc.toPath(), victim.toPath())
+        assertEquals(GuestZshrcRepair.ZshrcRepairResult.SKIPPED_SYMLINK, repair(zshrc))
+        assertEquals(userProfile, victim.readText())
+        assertFalse(File(home, ".zshrc" + ZshPluginSet.BACKUP_SUFFIX).exists())
+    }
+
+    @Test
+    fun repairZshrcFile_danglingSymlink_doesNotCreateTarget() = withHome { home, root ->
+        val victim = File(root, "dotfiles/zshrc")
+        val zshrc = File(home, ".zshrc")
+        Files.createSymbolicLink(zshrc.toPath(), victim.toPath())
+        assertEquals(GuestZshrcRepair.ZshrcRepairResult.SKIPPED_SYMLINK, repair(zshrc))
+        assertFalse(victim.exists())
+    }
+
+    @Test
+    fun repairZshrcFile_symlinkedBackup_isNotFollowed() = withHome { home, root ->
+        val victim = File(root, "victim").apply { writeText("keep") }
+        val zshrc = File(home, ".zshrc").apply { writeText(oldFluxProfile) }
+        Files.createSymbolicLink(File(home, ".zshrc" + ZshPluginSet.BACKUP_SUFFIX).toPath(), victim.toPath())
+        assertEquals(GuestZshrcRepair.ZshrcRepairResult.SKIPPED_SYMLINK, repair(zshrc))
+        assertEquals("keep", victim.readText())
+        assertEquals(oldFluxProfile, zshrc.readText())
+    }
+
+    @Test
+    fun repairZshrcFile_fluxProfile_rewrittenWithBackup() = withHome { home, _ ->
+        val zshrc = File(home, ".zshrc").apply { writeText(oldFluxProfile) }
+        assertEquals(GuestZshrcRepair.ZshrcRepairResult.REWRITTEN, repair(zshrc))
+        assertEquals(oldFluxProfile, File(home, ".zshrc" + ZshPluginSet.BACKUP_SUFFIX).readText())
+        val text = zshrc.readText()
+        assertFalse(GuestZshrcRepair.needsRepair(text))
+        assertTrue(GuestZshrcRepair.isFluxProfile(text))
+        assertEquals(GuestZshrcRepair.ZshrcRepairResult.UNCHANGED, repair(zshrc))
+    }
+
+    @Test
+    fun repairZshrcFile_userProfile_onlyGetsGuardAppendedOnce() = withHome { home, _ ->
+        val zshrc = File(home, ".zshrc").apply { writeText(userProfile) }
+        assertTrue(GuestZshrcRepair.needsRepair(userProfile))
+        assertFalse(GuestZshrcRepair.isFluxProfile(userProfile))
+        assertEquals(GuestZshrcRepair.ZshrcRepairResult.GUARD_APPENDED, repair(zshrc))
+        val text = zshrc.readText()
+        assertTrue(text.startsWith(userProfile))
+        assertTrue(text.contains(GuestZshrcRepair.GUARD_MARKER))
+        assertTrue(text.contains("setopt no_monitor"))
+        assertTrue(text.contains("unset PROOT_TMP_DIR"))
+        assertEquals(userProfile, File(home, ".zshrc" + ZshPluginSet.BACKUP_SUFFIX).readText())
+        assertEquals(GuestZshrcRepair.ZshrcRepairResult.UNCHANGED, repair(zshrc))
+        assertEquals(text, zshrc.readText())
+    }
+
+    @Test
+    fun repairZshrcFile_missing_createsFluxProfile() = withHome { home, _ ->
+        val zshrc = File(home, ".zshrc")
+        assertEquals(GuestZshrcRepair.ZshrcRepairResult.CREATED, repair(zshrc))
+        assertTrue(GuestZshrcRepair.isFluxProfile(zshrc.readText()))
+        assertFalse(GuestZshrcRepair.needsRepair(zshrc.readText()))
     }
 }
