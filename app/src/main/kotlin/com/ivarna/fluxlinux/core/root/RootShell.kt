@@ -126,7 +126,7 @@ object RootShell {
             val rootPid = AtomicReference<RootPid?>(null)
             // The holder gets a Process whose destroyForcibly() kills the root tree first, so
             // owners that only ever call destroyForcibly() on the holder still stop the job.
-            val job = RootJobProcess(pb, rootPid)
+            val job = RootJobProcess(pb, rootPid, inv)
             processHolder?.set(job)
             try {
                 val sb = StringBuilder()
@@ -232,11 +232,13 @@ object RootShell {
     private class RootJobProcess(
         private val delegate: Process,
         private val rootPid: AtomicReference<RootPid?>,
+        /** su argv captured at job start: a later [clearSuCache] must not disable the kill. */
+        private val suInvocation: List<String>,
     ) : Process() {
         private val killed = AtomicBoolean(false)
 
         fun killTreeThenDestroy() {
-            if (killed.compareAndSet(false, true)) killRootTree(rootPid.get())
+            if (killed.compareAndSet(false, true)) killRootTree(rootPid.get(), suInvocation)
             delegate.destroyForcibly()
         }
 
@@ -322,9 +324,8 @@ object RootShell {
     """.trimIndent()
 
     /** Kill a tracked root job tree through a fresh su (never wrapped, bounded). */
-    private fun killRootTree(rootPid: RootPid?) {
+    private fun killRootTree(rootPid: RootPid?, inv: List<String>) {
         if (rootPid == null) return
-        val inv = cachedSuInvocation ?: return
         val code = runCommand(buildSuArgs(inv, buildTreeKillScript(rootPid)), onLine = null, timeoutMs = 10_000L)
         Log.i(TAG, "killRootTree pid=${rootPid.pid} exit=$code")
     }
@@ -345,7 +346,7 @@ object RootShell {
                 mainHandler.post { onLine("[RootShell] ERROR: no working su binary") }
                 -1
             } else {
-                runCommand(buildSuArgs(inv, wrapWithPidMarker(cmd)), onLine, tracked = true)
+                runCommand(buildSuArgs(inv, wrapWithPidMarker(cmd)), onLine, killWith = inv)
             }
             mainHandler.post { onDone(code) }
         }
@@ -365,7 +366,7 @@ object RootShell {
             buildSuArgs(inv, wrapWithPidMarker(cmd)),
             onLine = null,
             timeoutMs = timeoutMs,
-            tracked = true,
+            killWith = inv,
         )
     }
 
@@ -408,7 +409,7 @@ object RootShell {
                 runCommand(
                     buildSuArgs(inv, wrapWithPidMarker("sh \"$stagedPath\"")),
                     onLine,
-                    tracked = true,
+                    killWith = inv,
                 )
             }
             mainHandler.post { onDone(code) }
@@ -864,7 +865,8 @@ object RootShell {
         args: List<String>,
         onLine: ((String) -> Unit)?,
         timeoutMs: Long = 0L,
-        tracked: Boolean = false,
+        /** Non-null = the cmd was wrapped with [wrapWithPidMarker]; su argv used for the tree kill. */
+        killWith: List<String>? = null,
     ): Int {
         Log.d(TAG, "runCommand: ${args.joinToString(" ").take(200)}")
         return try {
@@ -877,7 +879,7 @@ object RootShell {
             val reader = Thread {
                 try {
                     BufferedReader(InputStreamReader(pb.inputStream)).use { r ->
-                        var first = tracked
+                        var first = killWith != null
                         var line: String?
                         while (r.readLine().also { line = it } != null) {
                             val l = line ?: continue
@@ -906,7 +908,7 @@ object RootShell {
                 true
             }
             if (!finished) {
-                if (tracked) killRootTree(rootPid.get())
+                if (killWith != null) killRootTree(rootPid.get(), killWith)
                 pb.destroyForcibly()
                 reader.join(500)
                 Log.w(TAG, "runCommand timeout after ${timeoutMs}ms")

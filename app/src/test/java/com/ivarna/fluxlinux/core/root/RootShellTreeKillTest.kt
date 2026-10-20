@@ -172,4 +172,19 @@ class RootShellTreeKillTest {
         assertFalse(t.isAlive)
         assertAllDead(pids())
     }
+
+    @Test
+    fun suCacheClearedMidJob_holderKillStillKillsTree() {
+        // ChrootSettingsModel calls clearSuCache() during refresh; the kill must not go silent.
+        seedHostShell()
+        val holder = AtomicReference<Process?>(null)
+        val t = Thread { RootShell.captureResult(treeCmd(), processHolder = holder) }
+        t.start()
+        awaitPids(3)
+        RootShell.clearSuCache()
+        holder.getAndSet(null)?.destroyForcibly()
+        t.join(10_000)
+        assertFalse(t.isAlive)
+        assertAllDead(pids())
+    }
 }
