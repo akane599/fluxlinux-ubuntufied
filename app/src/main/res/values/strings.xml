@@ -31,4 +31,20 @@
     <string name="install_blocked_uninstall">A distro is being uninstalled. Close the uninstall tab when it finishes, then install again.</string>
     <string name="terminal_settings_accelerate_keys">Accelerate held keys</string>
     <string name="terminal_settings_accelerate_keys_summary">Held arrows and delete speed up over time. Off repeats at a steady Termux-like speed.</string>
+    <!-- Terminal extra keys: spoken names for glyph / abbreviated key labels -->
+    <string name="extra_key_up">Up arrow</string>
+    <string name="extra_key_down">Down arrow</string>
+    <string name="extra_key_left">Left arrow</string>
+    <string name="extra_key_right">Right arrow</string>
+    <string name="extra_key_tab">Tab</string>
+    <string name="extra_key_minus">Minus</string>
+    <string name="extra_key_escape">Escape</string>
+    <string name="extra_key_page_up">Page up</string>
+    <string name="extra_key_page_down">Page down</string>
+    <string name="extra_key_backspace">Backspace</string>
+    <string name="extra_key_delete">Delete</string>
+    <string name="extra_key_insert">Insert</string>
+    <string name="extra_key_enter">Enter</string>
+    <string name="extra_key_shift">Shift</string>
+    <string name="extra_key_fn">Function keys</string>
 </resources>

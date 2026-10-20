@@ -3,6 +3,7 @@
 package com.ivarna.fluxlinux.ui.terminal
 
 import android.view.KeyEvent
+import androidx.annotation.StringRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -15,9 +16,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -27,7 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,13 +41,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -207,15 +207,79 @@ object TerminalKeyInjector {
     }
 }
 
+
+/**
+ * Toolbar key layout. Rows 1–2 are Termux's default `extra-keys` property
+ * (`[['ESC','/','-','HOME','UP','END','PGUP'],['TAB','CTRL','ALT','LEFT','DOWN','RIGHT','PGDN']]`),
+ * so ↑ sits directly above ↓ with ← and → beside it. [EXTRA_ROW] keeps every
+ * other key the old FluxLinux toolbar had; [FN] toggles the [F_KEYS] row.
+ * Key names are [TerminalKeyCodes] names, printable symbols, or the modifiers.
+ */
+object TerminalExtraKeysLayout {
+    const val CTRL = "CTRL"
+    const val ALT = "ALT"
+    const val SHIFT = "SHIFT"
+    const val FN = "FN"
+
+    val TERMUX_ROWS: List<List<String>> = listOf(
+        listOf("ESC", "/", "-", "HOME", "UP", "END", "PGUP"),
+        listOf("TAB", CTRL, ALT, "LEFT", "DOWN", "RIGHT", "PGDN"),
+    )
+
+    val EXTRA_ROW: List<String> = listOf(SHIFT, "BKSP", "DEL", "INS", "ENTER", "|", "~", "_", "\\", FN)
+
+    val F_KEYS: List<String> = (1..12).map { "F$it" }
+
+    // Termux DEFAULT_CHAR_DISPLAY (classic arrows, ↹ tab, ― minus); other keys show their name.
+    private val LABELS: Map<String, String> = mapOf(
+        "UP" to "↑",
+        "DOWN" to "↓",
+        "LEFT" to "←",
+        "RIGHT" to "→",
+        "TAB" to "↹",
+        "-" to "―",
+        SHIFT to "SHFT",
+        "ENTER" to "ENT",
+        FN to "Fn",
+    )
+
+    fun label(key: String): String = LABELS[key] ?: key
+}
+
+/** Spoken name for keys whose label is a glyph or abbreviation; null → read the label. */
+@StringRes
+private fun keyDescriptionRes(key: String): Int? = when (key) {
+    "UP" -> R.string.extra_key_up
+    "DOWN" -> R.string.extra_key_down
+    "LEFT" -> R.string.extra_key_left
+    "RIGHT" -> R.string.extra_key_right
+    "TAB" -> R.string.extra_key_tab
+    "-" -> R.string.extra_key_minus
+    "ESC" -> R.string.extra_key_escape
+    "PGUP" -> R.string.extra_key_page_up
+    "PGDN" -> R.string.extra_key_page_down
+    "BKSP" -> R.string.extra_key_backspace
+    "DEL" -> R.string.extra_key_delete
+    "INS" -> R.string.extra_key_insert
+    "ENTER" -> R.string.extra_key_enter
+    TerminalExtraKeysLayout.SHIFT -> R.string.extra_key_shift
+    TerminalExtraKeysLayout.FN -> R.string.extra_key_fn
+    else -> null
+}
+
 /** Hold-to-repeat schedule for the toolbar keys: [KeyRepeat] accelerated vs constant mode. */
 private val LocalKeyRepeatAccelerated = compositionLocalOf { false }
 
+private val KEY_HEIGHT = 44.dp
+private val KEY_GAP = 2.dp
+
 /**
- * Nativecode-style special-keys toolbar (2 rows + optional F-keys row).
+ * Termux-style special-keys toolbar ([TerminalExtraKeysLayout]).
  *
- * Row 1: CTRL · ALT · SHFT · ESC · TAB · ENT · BKSP — equal weight, 44dp, edge-to-edge.
- * Row 2: horizontal scroll — arrow icons, DEL / Ins, symbols `/\|~-_\`, Fn toggle.
- * Row 3: F1–F12 (toggled via Fn). Image attach is out of scope for v1 (plan §4).
+ * Rows 1–2: Termux default keys, 7 equal-width cells across the full width.
+ * Row 3: horizontal scroll — SHFT, BKSP, DEL, INS, ENT, `|~_\`, Fn toggle, in
+ * cells as wide as the grid above. Row 4: F1–F12 (toggled via Fn).
+ * Image attach is out of scope for v1 (plan §4).
  */
 @Composable
 fun TerminalExtraKeys(
@@ -224,13 +288,9 @@ fun TerminalExtraKeys(
     modifier: Modifier = Modifier,
     accelerateRepeat: Boolean = false,
 ) {
-    val row2Scroll = rememberScrollState()
+    val extraRowScroll = rememberScrollState()
     val fRowScroll = rememberScrollState()
     var fnVisible by remember { mutableStateOf(false) }
-    // Nativecode keyWidth = screenWidthPx / 8 → screenWidthDp / 8.
-    val keyWidth: Dp = with(LocalDensity.current) {
-        (LocalConfiguration.current.screenWidthDp / 8).dp
-    }
 
     fun send(key: String) {
         TerminalKeyInjector.injectKey(
@@ -255,54 +315,69 @@ fun TerminalExtraKeys(
     fun onHoldEnd(key: String): (() -> Unit)? =
         if (KeyRepeat.isRepeatable(key)) { { modState.consumeModifiers() } } else null
 
+    @Composable
+    fun Key(key: String, cellModifier: Modifier) {
+        val label = TerminalExtraKeysLayout.label(key)
+        val description = keyDescriptionRes(key)?.let { stringResource(it) }
+        when (key) {
+            TerminalExtraKeysLayout.CTRL -> ModifierKey(
+                label, description, modState.ctrlActive, modState.ctrlLocked,
+                { modState.toggleCtrl() }, { modState.lockCtrl() }, cellModifier
+            )
+            TerminalExtraKeysLayout.ALT -> ModifierKey(
+                label, description, modState.altActive, modState.altLocked,
+                { modState.toggleAlt() }, { modState.lockAlt() }, cellModifier
+            )
+            TerminalExtraKeysLayout.SHIFT -> ModifierKey(
+                label, description, modState.shiftActive, modState.shiftLocked,
+                { modState.toggleShift() }, { modState.lockShift() }, cellModifier
+            )
+            TerminalExtraKeysLayout.FN ->
+                ToolbarKey(label, description, { fnVisible = !fnVisible }, cellModifier, active = fnVisible)
+            else -> ToolbarKey(label, description, onFire(key), cellModifier, onHoldEnd = onHoldEnd(key))
+        }
+    }
+
     CompositionLocalProvider(LocalKeyRepeatAccelerated provides accelerateRepeat) {
-        Column(
+        BoxWithConstraints(
             modifier = modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
         ) {
-            // ── Row 1: modifiers + core keys (equal weight, 44dp) ───────────────
-            Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
-                ModifierKey("CTRL", modState.ctrlActive, modState.ctrlLocked, { modState.toggleCtrl() }, { modState.lockCtrl() }, Modifier.weight(1f))
-                ModifierKey("ALT", modState.altActive, modState.altLocked, { modState.toggleAlt() }, { modState.lockAlt() }, Modifier.weight(1f))
-                ModifierKey("SHFT", modState.shiftActive, modState.shiftLocked, { modState.toggleShift() }, { modState.lockShift() }, Modifier.weight(1f))
-                CoreKey("ESC", { press("ESC") }, Modifier.weight(1f))
-                CoreKey("TAB", { press("TAB") }, Modifier.weight(1f))
-                CoreKey("ENT", { press("ENTER") }, Modifier.weight(1f))
-                CoreKey("BKSP", onFire("BKSP"), Modifier.weight(1f), onHoldEnd("BKSP"))
-            }
+            val columns = TerminalExtraKeysLayout.TERMUX_ROWS.first().size
+            // Scroll-row cells match the grid columns so the three rows line up.
+            val cellWidth: Dp = (maxWidth - KEY_GAP * (columns + 1)) / columns
+            val rowModifier = Modifier
+                .fillMaxWidth()
+                .height(KEY_HEIGHT)
+                .padding(horizontal = KEY_GAP)
 
-            // ── Row 2: scrollable special keys ──────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(row2Scroll)
-                    .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            Column(
+                modifier = Modifier.padding(vertical = KEY_GAP),
+                verticalArrangement = Arrangement.spacedBy(KEY_GAP)
             ) {
-                IconKey(painterResource(R.drawable.ic_arrow_left), "Arrow left", onFire("LEFT"), keyWidth, onHoldEnd("LEFT"))
-                IconKey(painterResource(R.drawable.ic_arrow_up), "Arrow up", onFire("UP"), keyWidth, onHoldEnd("UP"))
-                IconKey(painterResource(R.drawable.ic_arrow_down), "Arrow down", onFire("DOWN"), keyWidth, onHoldEnd("DOWN"))
-                IconKey(painterResource(R.drawable.ic_arrow_right), "Arrow right", onFire("RIGHT"), keyWidth, onHoldEnd("RIGHT"))
-                IconKey(painterResource(R.drawable.ic_backspace), "Delete", onFire("DEL"), keyWidth, onHoldEnd("DEL"))
-                TextKey("Ins", { press("INS") }, keyWidth)
-                listOf("/", "|", "~", "-", "_", "\\").forEach { sym ->
-                    TextKey(sym, { press(sym) }, keyWidth)
+                // ── Rows 1–2: Termux default keys (equal width, full width) ─────
+                TerminalExtraKeysLayout.TERMUX_ROWS.forEach { row ->
+                    Row(modifier = rowModifier, horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
+                        row.forEach { key -> Key(key, Modifier.weight(1f)) }
+                    }
                 }
-                TextKey("Fn", { fnVisible = !fnVisible }, keyWidth, active = fnVisible)
-            }
 
-            // ── Row 3: F-keys (toggle via Fn) ───────────────────────────────────
-            if (fnVisible) {
+                // ── Row 3: remaining keys, horizontal scroll ────────────────────
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(fRowScroll)
-                        .padding(bottom = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    modifier = rowModifier.horizontalScroll(extraRowScroll),
+                    horizontalArrangement = Arrangement.spacedBy(KEY_GAP)
                 ) {
-                    (1..12).forEach { n ->
-                        TextKey("F$n", { press("F$n") }, keyWidth)
+                    TerminalExtraKeysLayout.EXTRA_ROW.forEach { key -> Key(key, Modifier.width(cellWidth)) }
+                }
+
+                // ── Row 4: F-keys (toggle via Fn) ───────────────────────────────
+                if (fnVisible) {
+                    Row(
+                        modifier = rowModifier.horizontalScroll(fRowScroll),
+                        horizontalArrangement = Arrangement.spacedBy(KEY_GAP)
+                    ) {
+                        TerminalExtraKeysLayout.F_KEYS.forEach { key -> Key(key, Modifier.width(cellWidth)) }
                     }
                 }
             }
@@ -310,9 +385,13 @@ fun TerminalExtraKeys(
     }
 }
 
+/** Single glyphs (arrows, ↹, symbols) get a larger size so they read like Termux's keys. */
+private fun labelFontSize(label: String) = if (label.length == 1) 18.sp else 11.sp
+
 @Composable
 private fun ModifierKey(
     label: String,
+    description: String?,
     active: Boolean,
     locked: Boolean,
     onPress: () -> Unit,
@@ -335,12 +414,12 @@ private fun ModifierKey(
             )
             .combinedClickable(onClick = onPress, onLongClick = onLongPress)
     ) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+        KeyLabel(
+            label = label,
+            description = description,
             color = if (active) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold
         )
         if (locked) {
             Box(
@@ -423,72 +502,43 @@ private fun keyClickModifier(onClick: () -> Unit, onHoldEnd: (() -> Unit)?): Mod
 }
 
 @Composable
-private fun CoreKey(
+private fun ToolbarKey(
     label: String,
+    description: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onHoldEnd: (() -> Unit)? = null
+    onHoldEnd: (() -> Unit)? = null,
+    active: Boolean = false
 ) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surface)
-            .then(keyClickModifier(onClick, onHoldEnd))
-    ) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
-private fun IconKey(
-    painter: Painter,
-    contentDescription: String,
-    onClick: () -> Unit,
-    width: Dp,
-    onHoldEnd: (() -> Unit)? = null
-) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .width(width)
-            .height(44.dp)
-            .background(MaterialTheme.colorScheme.surface)
-            .then(keyClickModifier(onClick, onHoldEnd))
-    ) {
-        Icon(
-            painter = painter,
-            contentDescription = contentDescription,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(22.dp).height(22.dp)
-        )
-    }
-}
-
-@Composable
-private fun TextKey(label: String, onClick: () -> Unit, width: Dp, active: Boolean = false) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .width(width)
-            .height(44.dp)
             .background(
                 if (active) FluxAccentMagenta.copy(alpha = 0.85f)
                 else MaterialTheme.colorScheme.surface
             )
-            .combinedClickable(onClick = onClick)
+            .then(keyClickModifier(onClick, onHoldEnd))
     ) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
+        KeyLabel(
+            label = label,
+            description = description,
             color = if (active) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium
         )
     }
+}
+
+@Composable
+private fun KeyLabel(label: String, description: String?, color: Color, fontWeight: FontWeight) {
+    Text(
+        text = label,
+        fontSize = labelFontSize(label),
+        fontWeight = fontWeight,
+        color = color,
+        maxLines = 1,
+        // TalkBack reads the description instead of a glyph like "↹".
+        modifier = if (description != null) Modifier.semantics { contentDescription = description } else Modifier
+    )
 }
