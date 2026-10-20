@@ -42,4 +42,40 @@ class CustomizationXfceScriptContractTest {
         assertTrue(script.contains("if ! unzip -o -j \"\$TEMP_WP_ZIP\" -d \"\$WALLPAPER_DIR\""))
         assertFalse(script.contains("unzip -o -j \"\$TEMP_WP_ZIP\" -d \"\$WALLPAPER_DIR\" 2>/dev/null || true"))
     }
+
+    @Test
+    fun gitClones_arePinnedToCommitShas() {
+        val calls = Regex("""_flux_git_clone "https://[^"]+"[^\n\\]*(?:\\\n[^\n]*)?""")
+            .findAll(script).map { it.value }.toList()
+        assertTrue("expected OMZ, 3 plugins and pokemon", calls.size >= 5)
+        calls.forEach { call ->
+            assertTrue("unpinned clone: $call", Regex(""""\$[A-Z_]+_SHA"""").containsMatchIn(call))
+        }
+        listOf(
+            "OMZ_SHA", "ZSH_AUTOSUGGEST_SHA", "ZSH_SYNTAX_HL_SHA", "FZF_TAB_SHA",
+            "POKEMON_SHA", "AGNOSTERZAK_SHA",
+        ).forEach { name ->
+            assertTrue("$name must be a full commit SHA", Regex("""\n$name="[0-9a-f]{40}"""").containsMatchIn(script))
+        }
+        val clone = body("_flux_git_clone")
+        assertTrue(clone.contains("fetch -q --depth 1 \"\$_url\" \"\$_sha\""))
+        assertTrue(clone.contains("rev-parse HEAD"))
+        assertFalse(clone.contains("git clone"))
+    }
+
+    @Test
+    fun downloadsAreVersionedAndHashed() {
+        assertFalse("no floating release", script.contains("releases/latest"))
+        assertFalse("no floating branch", script.contains("agnosterzak-ohmyzsh-theme/master/"))
+        assertTrue(Regex("""\n\s*NERD_FONT_SHA256="[0-9a-f]{64}"""").containsMatchIn(script))
+        assertTrue(script.contains("_flux_sha256_ok \"\$TEMP_ZIP\" \"\$NERD_FONT_SHA256\""))
+        assertTrue(Regex("""\nAGNOSTERZAK_SHA256="[0-9a-f]{64}"""").containsMatchIn(script))
+        assertTrue(script.contains("_flux_sha256_ok \"\$_az_part\" \"\$AGNOSTERZAK_SHA256\""))
+    }
+
+    @Test
+    fun pokemon_isCopiedNotInstalledByUpstreamScript() {
+        assertFalse("never run fetched install.sh as root", script.contains("./install.sh"))
+        assertTrue(script.contains("ln -s \"\$_pk_dir/pokemon-colorscripts.py\" /usr/local/bin/pokemon-colorscripts"))
+    }
 }
