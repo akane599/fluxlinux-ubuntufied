@@ -33,17 +33,16 @@ class ProotStartGuiContractTest {
     }
 
     @Test
-    fun readiness_prootUsesGuestMarkerOnly_chrootKeepsLegacyMarkers() {
+    fun readiness_usesGuestMarkerOnly() {
+        // proot and chroot alike (M12): host X socket lines are never a marker.
         val hostLine = "FluxLinux: host X0 socket ready (X server PID=123)"
-        assertFalse(DesktopLauncher.isDesktopReadyLine(hostLine, "proot"))
-        assertTrue(DesktopLauncher.isDesktopReadyLine("FLUX_DESKTOP_READY", "proot"))
-        assertTrue(DesktopLauncher.isDesktopReadyLine("  FLUX_DESKTOP_READY\r", "proot"))
-        assertFalse(DesktopLauncher.isDesktopReadyLine("echo FLUX_DESKTOP_READY failed", "proot"))
-        assertFalse(DesktopLauncher.isDesktopReadyLine("FluxLinux: startxfce4 found in guest", "proot"))
-        // FOLLOW-UP: chroot scripts still announce only the host socket.
-        assertTrue(DesktopLauncher.isDesktopReadyLine(hostLine, "chroot"))
-        assertTrue(DesktopLauncher.isDesktopReadyLine("FluxLinux: host X0 socket ready", "chroot"))
-        assertTrue(DesktopLauncher.isDesktopReadyLine("FLUX_DESKTOP_READY", "chroot"))
+        assertFalse(DesktopLauncher.isDesktopReadyLine(hostLine))
+        assertFalse(DesktopLauncher.isDesktopReadyLine("FluxLinux: host X0 socket ready"))
+        assertFalse(DesktopLauncher.isDesktopReadyLine("FluxLinux: host X0 socket present"))
+        assertTrue(DesktopLauncher.isDesktopReadyLine("FLUX_DESKTOP_READY"))
+        assertTrue(DesktopLauncher.isDesktopReadyLine("  FLUX_DESKTOP_READY\r"))
+        assertFalse(DesktopLauncher.isDesktopReadyLine("echo FLUX_DESKTOP_READY failed"))
+        assertFalse(DesktopLauncher.isDesktopReadyLine("FluxLinux: startxfce4 found in guest"))
     }
 
     @Test

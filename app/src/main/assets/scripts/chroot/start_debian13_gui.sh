@@ -104,7 +104,7 @@ chmod 1777 "$TARGET_PREFIX/tmp/.X11-unix" 2>/dev/null || true
 i=0
 while [ $i -lt 15 ]; do
   if [ -S "$TARGET_PREFIX/tmp/.X11-unix/X0" ]; then
-    echo "FluxLinux: host X0 socket ready"
+    echo "FluxLinux: host X0 socket present"
     break
   fi
   i=$((i + 1))
@@ -213,6 +213,9 @@ KDE_EOF
   chmod 644 "$DEBIANPATH/usr/local/lib/fluxlinux/flux_kde_env.sh"
   FLUX_KDE_ENV="export XDG_RUNTIME_DIR=/home/$USERNAME/.cache/runtime; mkdir -p /home/$USERNAME/.cache/runtime; chmod 700 /home/$USERNAME/.cache/runtime; . /usr/local/lib/fluxlinux/flux_kde_env.sh"
 fi
+# Readiness (M12): the user shell below prints FLUX_DESKTOP_READY only if the desktop
+# it execs (same pid) is still alive 2s later, so DesktopLauncher never flips to Running
+# for a desktop that is missing or dies at once. The host X socket line is not a marker.
 # Guest script: sticky /tmp X11 + host-tmp VirGL + gpu_mode file
 $BB chroot "$DEBIANPATH" /bin/bash -c "
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -256,6 +259,11 @@ su - $USERNAME -c '
     export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe GPU_MODE=software
   fi
   $FLUX_KDE_ENV
+  if ! command -v $FLUX_DE_CMD >/dev/null 2>&1; then
+    echo \"FluxLinux(guest): [ERROR] $FLUX_DE_CMD not found for $USERNAME\"
+    exit 127
+  fi
+  ( sleep 2; kill -0 \$\$ 2>/dev/null && echo FLUX_DESKTOP_READY ) &
   exec dbus-launch --exit-with-session $FLUX_DE_CMD
 '
 "
