@@ -57,8 +57,14 @@ class DesktopSessionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotification(): Notification {
+        // A target page makes a cold-start tap land on Home without counting as a plain
+        // launch (which could auto-start the desktop again).
+        val open = Intent(this, MainActivity::class.java).apply {
+            putExtra(LaunchTargets.EXTRA_TARGET_PAGE, LaunchTargets.PAGE_HOME)
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
+            this, 0, open,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)

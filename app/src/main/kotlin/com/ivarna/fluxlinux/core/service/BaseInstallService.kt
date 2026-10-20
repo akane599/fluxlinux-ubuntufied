@@ -137,6 +137,8 @@ class BaseInstallService : Service() {
             this,
             NOTIF_ID,
             Intent(this, MainActivity::class.java).apply {
+                // Not a plain launch (no auto-start); onboarding restores its own screen.
+                putExtra(LaunchTargets.EXTRA_TARGET_PAGE, LaunchTargets.PAGE_INSTALL)
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
