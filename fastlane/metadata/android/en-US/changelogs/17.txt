@@ -1,0 +1,7 @@
+- Installs survive rotation, split-screen and Back; cancel stops the whole install
+- Desktop is reported ready only once it runs; Stop/Start races fixed
+- Closing a tab whose shell never started no longer kills the app
+- termux-x11: only FluxLinux can control it; large clipboards no longer crash it
+- PulseAudio uses a private unix socket instead of a shared TCP port
+- Rooted: root helpers staged in a root-owned dir; SELinux stays enforcing
+- Rooted: chroot uninstall can no longer delete shared storage

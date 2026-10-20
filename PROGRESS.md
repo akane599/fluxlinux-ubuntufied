@@ -6,6 +6,7 @@ _Work items, stories and blockers live on the Sidequest board. This file keeps w
 - 2026-10-19 @ 7f6e61d: `:app:assembleIvarnaDebug` ok, 402 unit tests (`:app:testIvarnaDebugUnitTest`), 2 failing (pre-existing, not ours):
   - `ui.OnboardingConsentContractTest.optionsPage_requiresDownloadConsentBeforeInstall`: AssertionError (cause not yet investigated)
   - `core.terminal.GuestRootfsShellTest.alpine_absolute_sh_symlink_counts_as_installed`: AssertionError (cause not yet investigated)
+- 2026-10-20 @ bffeb9e: 722 unit tests, 0 failing; lint 0 errors; screenshots valid (audit remediation gate).
 - 2026-10-19 @ b4cf9d6: 402 unit tests, 0 failing. Both baseline failures are fixed (SQ-1 bc97fe1, SQ-2 f1b5efd). Screenshot tests: 3 previews pass `:app:validateIvarnaDebugScreenshotTest` (SQ-3).
 
 ## Decision log (never delete; one line each)
@@ -19,16 +20,17 @@ _Work items, stories and blockers live on the Sidequest board. This file keeps w
 - 2026-10-19: Release APK shrunk 177→65 MB: `bootstrap.tar` deflated in the APK, native libs stripped (NDK 29), English-only resources. Releases are signed with the fork's own key in `~/.config/fluxlinux-ubuntufied/signing/` (repo-root `keystore.properties` copy, gitignored); never regenerate it.
 - 2026-10-20: v2.1.1: termux-x11 loads `libXlorie.so` from the read-only `dirname(base.apk)/lib/arm64` (nativeLibraryDir, via `TERMUX_X11_LIB_PATH`) over the script-extracted `/data/data/<pkg>/lib` copy, because Android 17 refuses `System.load` of a writable file. Keep `useLegacyPackaging = true` (extractNativeLibs): without it that read-only copy doesn't exist.
 - 2026-10-20: v2.1.2: terminal opens Ubuntu directly (TerminalToolSelector removed; extras via long-press "+") over a distro picker, because only Ubuntu is installable in this fork. Ubuntu zsh plugin list is built at start-up from what's installed (ZshPluginSet.kt is the source of truth, script copy test-enforced), so partial network installs never print errors.
+- 2026-10-20: v2.1.3: audit remediation (AUDIT_REPORT.md §6; 57 fixed, M14/L8 partial, L29 blocked on a toolchain decision). Chroot root helpers live in root-only /data/adb/fluxlinux/<pkg> and are SHA-256-checked before exec, never /data/local/tmp. PulseAudio uses a private unix socket, not 127.0.0.1:4713. Chroot mounts are guarded by a shared mkdir lock that is identical across 7 scripts (test-enforced).
 - 2026-10-19: redroid (no-KVM host) can't execute the arm64 host binaries (no native bridge libs), so on-device QA there covers UI, provider and links with a staged fake rootfs only.
 
 ## Audit status
 | Area | Last run | Result | How |
 |---|---|---|---|
 | Sidequest bug hunt | — | — | `/bug-hunt` |
-| Repository audit | — | — | `/full-repo-audit` |
-| Audit fixes | — | — | `/audit-remediate` |
+| Repository audit | 2026-10-20 | 4 high, 23 medium, 33 low (AUDIT_REPORT.md) | `/full-repo-audit` |
+| Audit fixes | 2026-10-20 | 57 fixed, M14/L8 partial, L29 blocked; device-unverified | `/audit-remediate` |
 | UI / design | — | — | `/ui-overhaul` phase review |
-| Lint | — | — | `./gradlew :app:lintIvarnaDebug -q` |
+| Lint | 2026-10-20 | 0 errors | `./gradlew :app:lintIvarnaDebug -q` |
 | Device QA | 2026-10-19 | redroid: upgrade preserved staged files; SAF roots, ~/storage links, Home, auto-start guard, Settings switch, onboarding OK; runtime not testable | Mobile MCP | Mobile MCP (when configured) or android-emulator-qa fallback skill |
 
 ## Environment notes
