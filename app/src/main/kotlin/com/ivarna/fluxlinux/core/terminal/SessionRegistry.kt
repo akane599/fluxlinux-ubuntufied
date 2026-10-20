@@ -11,6 +11,7 @@ import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -38,7 +39,12 @@ object SessionRegistry {
         val iconRes: Int? = null,
     )
 
-    private val sessionsList = ArrayList<ManagedSession>()
+    /**
+     * Mutated on the main thread; read from Dispatchers.IO too (e.g.
+     * `ProotSizeManager.isProotUninstallRunning`). Copy-on-write keeps those
+     * reads from tearing or throwing ConcurrentModificationException (L3).
+     */
+    private val sessionsList = CopyOnWriteArrayList<ManagedSession>()
 
     internal fun addForTest(managed: ManagedSession) {
         sessionsList.add(managed)
