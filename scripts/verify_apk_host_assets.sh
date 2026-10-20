@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # verify_apk_host_assets.sh — unzip checks that the built APK contains the host
-# jniLibs and assets/bootstrap.tar (STORED), and — since rootfs moved to GitHub
-# release download — ZERO assets/rootfs/* entries. Both flavors package the
+# jniLibs and assets/bootstrap.tar (Deflated by AAPT on purpose, or Stored), and
+# — since rootfs moved to GitHub release download — ZERO assets/rootfs/* entries. Both flavors package the
 # bootstrap (HostBootstrap.downloadsFromRelease is false for every appId).
 #
 # Usage:
@@ -39,12 +39,21 @@ bootstrap_count="$(unzip -l "$APK" | grep -c " assets/bootstrap.tar$" || true)"
 if [ "$bootstrap_count" -gt 0 ]; then
   echo "  [OK] assets/bootstrap.tar"
   method=$(unzip -v "$APK" | grep " assets/bootstrap.tar$" | awk '{print $2}')
-  if [ "$method" = "Stored" ]; then
-    echo "  [OK] assets/bootstrap.tar stored uncompressed"
-  else
-    echo "  [FAIL] assets/bootstrap.tar compressed ($method) — check androidResources.noCompress"
-    fail=1
-  fi
+  # app/build.gradle.kts deliberately lets AAPT deflate bootstrap.tar (~130 MB
+  # -> ~39 MB); BootstrapInstaller streams it via AssetManager.open(), which
+  # inflates transparently. Android only reads Stored or Deflated zip entries.
+  case "$method" in
+    Defl:*)
+      echo "  [OK] assets/bootstrap.tar deflated ($method)"
+      ;;
+    Stored)
+      echo "  [OK] assets/bootstrap.tar stored uncompressed"
+      ;;
+    *)
+      echo "  [FAIL] assets/bootstrap.tar uses unsupported zip method '$method' (expected Defl:* or Stored)"
+      fail=1
+      ;;
+  esac
 else
   echo "  [MISSING] assets/bootstrap.tar"
   fail=1
