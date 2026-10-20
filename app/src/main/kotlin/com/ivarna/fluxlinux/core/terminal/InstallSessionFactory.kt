@@ -158,6 +158,8 @@ object InstallSessionFactory {
         onFinished: (() -> Unit)?
     ): Boolean {
         val profile = DistroInstallProfile.require(distroId)
+        // Re-running setup repairs a broken guest: its login must work before it can switch.
+        GuestCoreutilsRepair.repairIfNeeded(distroId)
         val args = if (setupB64.isNullOrEmpty() || setupB64 == "null") {
             arrayOf(profile.prootName)
         } else {

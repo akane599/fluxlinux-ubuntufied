@@ -55,6 +55,8 @@ object GuestSessionFactory {
         // Proot: Termux-style ~/storage links (same distro fallback as LinuxCommandBuilder).
         if (method != "chroot") {
             runCatching { GuestStorageLinks.ensure(ctx, distroId ?: "debian") }
+            // Ubuntu uutils broken by l2s: the guest's own `/usr/bin/env -i` would fail too.
+            GuestCoreutilsRepair.repairIfNeeded(distroId)
         }
         val user = LinuxCommandBuilder.sessionUserForType(type)
         // Always ZSH or BASH from prefs — never null (chroot root follows the pref too).

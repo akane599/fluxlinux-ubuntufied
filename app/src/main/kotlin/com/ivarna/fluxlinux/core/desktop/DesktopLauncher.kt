@@ -12,6 +12,7 @@ import com.ivarna.fluxlinux.core.service.DesktopSessionService
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.PhantomProcessFixer
 import com.ivarna.fluxlinux.core.root.RootShell
+import com.ivarna.fluxlinux.core.terminal.GuestCoreutilsRepair
 import com.ivarna.fluxlinux.core.terminal.HostScriptDeployer
 import com.ivarna.fluxlinux.core.terminal.ShellCommandRunner
 import com.ivarna.fluxlinux.core.terminal.ShellJob
@@ -304,6 +305,7 @@ object DesktopLauncher {
 
         if (method != "chroot") {
             runCatching { GuestStorageLinks.ensure(app, distroId) }
+            GuestCoreutilsRepair.repairIfNeeded(distroId)
         }
 
         startFgs(app)
