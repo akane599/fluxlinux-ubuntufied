@@ -14,7 +14,7 @@ import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 
 /**
- * M2 / L6: executes functions of `setup_guest_chroot.sh` (sourced with
+ * M2 / L6: executes functions of the chroot setup scripts (sourced with
  * FLUX_SETUP_LIB=1) in a temp dir. `$BB` is a stub: `mount`/`umount` edit a
  * fake mounts table, `tar` runs the host tar. No real mounts are touched.
  */
@@ -87,12 +87,25 @@ class ChrootSetupScriptTest {
         ).firstOrNull { it.exists() } ?: error("missing $rel (cwd=$cwd)")
     }
 
-    private fun run(snippet: String, stuck: String = "__none__"): Int {
-        val script = repoFile("src/main/assets/scripts/chroot/setup_guest_chroot.sh")
+    /** Setup script → its rootfs path variable. */
+    private val setups = mapOf(
+        "setup_guest_chroot.sh" to "GUESTPATH",
+        "setup_debian13_chroot.sh" to "DEBIANPATH",
+        "setup_alpine_chroot.sh" to "ALPINEPATH",
+    )
+
+    private fun run(
+        snippet: String,
+        stuck: String = "__none__",
+        name: String = "setup_guest_chroot.sh",
+        path: String? = null,
+    ): Int {
+        val script = repoFile("src/main/assets/scripts/chroot/$name")
+        val v = setups.getValue(name)
         val pb = ProcessBuilder(
             "/bin/sh",
             "-c",
-            ". \"$1\"; PROC_MOUNTS=\"\$FAKE_MOUNTS\"; GUESTPATH=\"$2\"; $snippet",
+            ". \"$1\"; PROC_MOUNTS=\"\$FAKE_MOUNTS\"; $v=\"$2\"; GUESTPATH=\"$2\"; $snippet",
             "sh",
             script.absolutePath,
             guest.absolutePath,
@@ -104,6 +117,7 @@ class ChrootSetupScriptTest {
             put("MOUNT_LOG", mountLog.absolutePath)
             put("STUCK", stuck)
             put("ARCHIVE", archive.absolutePath)
+            if (path != null) put("PATH", path)
         }
         val p = pb.start()
         val out = p.inputStream.bufferedReader().readText()
@@ -112,52 +126,69 @@ class ChrootSetupScriptTest {
         return p.exitValue()
     }
 
+    private fun reset() {
+        SafeFiles.deleteTree(guest)
+        mounts.writeText("")
+    }
+
     @Test
     fun partialExtraction_isReExtracted_andMarked() {
-        // Interrupted earlier: bash landed, the rest (etc/os-release) did not.
-        File(guest, "usr/bin").mkdirs()
-        File(guest, "usr/bin/bash").writeText("#!partial")
+        for (name in setups.keys) {
+            // Interrupted earlier: bash landed, the rest (etc/os-release) did not.
+            File(guest, "usr/bin").mkdirs()
+            File(guest, "usr/bin/bash").writeText("#!partial")
 
-        assertEquals(0, run("extract_file \"\$GUESTPATH\" \"\$ARCHIVE\""))
+            assertEquals(name, 0, run("extract_file \"\$GUESTPATH\" \"\$ARCHIVE\"", name = name))
 
-        assertEquals("ID=test", File(guest, "etc/os-release").readText())
-        assertEquals("#!full", File(guest, "usr/bin/bash").readText())
-        assertTrue(File(guest, ".flux_extract_ok").exists())
+            assertEquals("ID=test", File(guest, "etc/os-release").readText())
+            assertEquals("#!full", File(guest, "usr/bin/bash").readText())
+            assertTrue(File(guest, ".flux_extract_ok").exists())
+            reset()
+        }
     }
 
     @Test
     fun completedExtraction_isSkipped() {
-        File(guest, "usr/bin").mkdirs()
-        File(guest, "usr/bin/bash").writeText("#!installed")
-        File(guest, ".flux_extract_ok").writeText("sha")
+        for (name in setups.keys) {
+            File(guest, "usr/bin").mkdirs()
+            File(guest, "usr/bin/bash").writeText("#!installed")
+            File(guest, ".flux_extract_ok").writeText("sha")
 
-        assertEquals(0, run("extract_file \"\$GUESTPATH\" \"\$ARCHIVE\""))
+            assertEquals(name, 0, run("extract_file \"\$GUESTPATH\" \"\$ARCHIVE\"", name = name))
 
-        assertEquals("#!installed", File(guest, "usr/bin/bash").readText())
-        assertFalse(File(guest, "etc/os-release").exists())
+            assertEquals("#!installed", File(guest, "usr/bin/bash").readText())
+            assertFalse(File(guest, "etc/os-release").exists())
+            reset()
+        }
     }
 
     @Test
     fun legacyConfiguredInstall_isSkipped() {
-        File(guest, "usr/bin").mkdirs()
-        File(guest, "usr/bin/bash").writeText("#!installed")
-        File(guest, ".flux_configured").writeText("")
+        for (name in setups.keys) {
+            File(guest, "usr/bin").mkdirs()
+            File(guest, "usr/bin/bash").writeText("#!installed")
+            File(guest, ".flux_configured").writeText("")
 
-        assertEquals(0, run("extract_file \"\$GUESTPATH\" \"\$ARCHIVE\""))
+            assertEquals(name, 0, run("extract_file \"\$GUESTPATH\" \"\$ARCHIVE\"", name = name))
 
-        assertFalse(File(guest, "etc/os-release").exists())
+            assertFalse(File(guest, "etc/os-release").exists())
+            reset()
+        }
     }
 
     @Test
     fun leftoverMount_blocksExtraction() {
-        guest.mkdirs()
-        mounts.writeText("/dev/fuse ${guest.absolutePath}/sdcard fuse rw 0 0\n")
+        for (name in setups.keys) {
+            guest.mkdirs()
+            mounts.writeText("/dev/fuse ${guest.absolutePath}/sdcard fuse rw 0 0\n")
 
-        val rc = run("extract_file \"\$GUESTPATH\" \"\$ARCHIVE\"", stuck = "*/sdcard")
+            val rc = run("extract_file \"\$GUESTPATH\" \"\$ARCHIVE\"", stuck = "*/sdcard", name = name)
 
-        assertNotEquals(0, rc)
-        assertFalse(File(guest, "etc/os-release").exists())
-        assertFalse(File(guest, ".flux_extract_ok").exists())
+            assertNotEquals(name, 0, rc)
+            assertFalse(File(guest, "etc/os-release").exists())
+            assertFalse(File(guest, ".flux_extract_ok").exists())
+            reset()
+        }
     }
 
     @Test
@@ -174,6 +205,25 @@ class ChrootSetupScriptTest {
         assertEquals(0, run("cleanup_mounts"))
 
         assertEquals("/dev/block/x /data ext4 rw 0 0\n", mounts.readText())
+    }
+
+    @Test
+    fun cleanupMounts_withoutAwk_failsClosed() {
+        // H4 review: without awk the mount list used to come back empty ("clean").
+        val tools = File(tmp, "tools").apply { mkdirs() }
+        for (t in listOf("cat", "grep", "mkdir", "rm", "tar", "gzip", "printf")) {
+            val real = listOf("/usr/bin/$t", "/bin/$t").map(::File).firstOrNull { it.canExecute() }
+                ?: continue
+            File(tools, t).apply {
+                writeText("#!/bin/sh\nexec ${real.absolutePath} \"\$@\"\n")
+                setExecutable(true)
+            }
+        }
+        for (name in setups.keys) {
+            mounts.writeText("/dev/fuse ${guest.absolutePath}/sdcard fuse rw 0 0\n")
+            assertNotEquals(name, 0, run("cleanup_mounts", name = name, path = tools.absolutePath))
+            assertTrue(name, mounts.readText().contains("/sdcard"))
+        }
     }
 
     @Test

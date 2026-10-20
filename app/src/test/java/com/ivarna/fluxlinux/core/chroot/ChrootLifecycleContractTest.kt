@@ -39,14 +39,20 @@ class ChrootLifecycleContractTest {
     fun ensureMounts_refusesUninstallingOrUnconfiguredTreeBeforeAnyMount() {
         val src = chrootScript("fluxlinux_chroot.sh")
         val body = src.substringAfter("ensure_mounts() {").substringBefore("\n}\n")
+        val lock = body.indexOf("mount_lock \"\$FLUX_CHROOT\"")
         val guard = body.indexOf(".flux_uninstalling")
         val configured = body.indexOf(".flux_configured")
         val firstMkdir = body.indexOf("mkdir -p")
-        val firstMount = body.indexOf("mount")
+        val firstMount = body.indexOf("bind_if_missing")
         assertTrue("uninstalling guard missing", guard >= 0)
         assertTrue("configured guard missing", configured >= 0)
+        assertTrue("M16: guards run under the mount lock", lock in 0 until guard)
         assertTrue("guards must precede mkdir/mount", guard < firstMkdir && configured < firstMkdir)
         assertTrue(guard < firstMount)
+        // M16: the session is registered before the lock is released.
+        val register = body.indexOf(".flux_sessions/\$\$")
+        val unlock = body.lastIndexOf("mount_unlock \"\$FLUX_CHROOT\"")
+        assertTrue(register in firstMount until unlock)
     }
 
     @Test
@@ -123,29 +129,38 @@ class ChrootLifecycleContractTest {
                 assertFalse("$f loads a legacy chroot setup", src.contains("chroot/setup/"))
             }
         }
-        // FOLLOW-UP (owned by another remediation worker at the time of writing): these still
-        // write root-run compat launchers to /data/local/tmp; drop once moved to the stage.
-        val pendingFollowUp = setOf(
-            "chroot/setup_debian13_chroot.sh",
-            "chroot/setup_alpine_chroot.sh",
-        )
         val offenders = allAssetScripts()
-            .filterKeys { it !in legacyNoCaller && it !in pendingFollowUp }
+            .filterKeys { it !in legacyNoCaller }
             .mapValues { dataLocalTmpWriteOrExec(it.value) }
             .filterValues { it.isNotEmpty() }
         assertTrue("write-then-exec under /data/local/tmp: $offenders", offenders.isEmpty())
     }
 
     @Test
+    fun debianAlpineSetup_writeCompatLaunchersOnlyIntoRootStage() {
+        for (name in listOf("setup_debian13_chroot.sh", "setup_alpine_chroot.sh")) {
+            val src = chrootScript(name)
+            assertTrue(name, src.contains("STAGE_DIR=\"\$STAGE_PARENT/\$PKG\""))
+            assertTrue(name, src.contains("chmod 0700 \"\$STAGE_PARENT\" \"\$STAGE_DIR\""))
+        }
+        assertTrue(chrootScript("uninstall_debian13_chroot.sh").contains("\$_stage_dir/run_debian13_root.sh"))
+        assertTrue(chrootScript("uninstall_alpine_chroot.sh").contains("\$_stage_dir/enter_alpine.sh"))
+    }
+
+    @Test
     fun stopScripts_keepMountsWhileChrootInUse() {
         for (name in listOf("stop_guest_gui.sh", "stop_debian13_gui.sh", "stop_alpine_gui.sh")) {
             val src = chrootScript(name)
-            val guard = src.indexOf("&& chroot_in_use; then")
+            val lock = src.indexOf("if ! mount_lock ")
+            val guard = src.indexOf("elif chroot_in_use; then")
             val procUmount = src.indexOf("/proc\" \\")
             assertTrue("$name: in-use guard missing", guard >= 0)
+            assertTrue("$name: M16 check + unmount run under the mount lock", lock in 0 until guard)
             assertTrue("$name: guard must precede the /proc unmount", guard < procUmount)
             assertTrue(src.contains("keeping its mounts"))
+            assertTrue("$name: same lock dir as ensure_mounts", src.contains("/.flux_mount.lock\""))
         }
+        assertTrue(chrootScript("fluxlinux_chroot.sh").contains("_lk=\"\$1/.flux_mount.lock\""))
     }
 
     @Test
@@ -209,8 +224,15 @@ class ChrootLifecycleContractTest {
 
     @Test
     fun setupClearsStaleUninstallingMarkerWhenConfigured() {
-        val src = chrootScript("setup_guest_chroot.sh")
-        assertTrue(src.contains("rm -f \"\$GUESTPATH/.flux_uninstalling\""))
-        assertTrue(src.contains(".flux_extract_ok"))
+        // The uninstall marker is a directory (mkdir never follows a planted symlink).
+        for ((name, v) in listOf(
+            "setup_guest_chroot.sh" to "GUESTPATH",
+            "setup_debian13_chroot.sh" to "DEBIANPATH",
+            "setup_alpine_chroot.sh" to "ALPINEPATH",
+        )) {
+            val src = chrootScript(name)
+            assertTrue(name, src.contains("rm -rf \"\$$v/.flux_uninstalling\""))
+        }
+        assertTrue(chrootScript("setup_guest_chroot.sh").contains(".flux_extract_ok"))
     }
 }

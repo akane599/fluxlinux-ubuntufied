@@ -31,20 +31,77 @@ error() {
     printf "\033[1;31m[!] %s\033[0m\n" "$1"
 }
 
-# Cleanup function
-cleanup_mounts() {
-    printf "\033[1;36m[+] Safety Check: Unmounting filesystems...\033[0m\n"
-    $BB umount "$DEBIANPATH/sdcard" 2>/dev/null || true
-    $BB umount "$DEBIANPATH/mnt/host-tmp" 2>/dev/null || true
-    $BB umount "$DEBIANPATH/mnt/termux-tmp" 2>/dev/null || true
-    $BB umount "$DEBIANPATH/dev/shm" 2>/dev/null || true
-    $BB umount "$DEBIANPATH/dev/pts" 2>/dev/null || true
-    $BB umount "$DEBIANPATH/proc" 2>/dev/null || true
-    $BB umount "$DEBIANPATH/sys" 2>/dev/null || true
-    $BB umount "$DEBIANPATH/dev" 2>/dev/null || true
-    $BB umount "$DEBIANPATH/tmp" 2>/dev/null || true
-    return 0
+PROC_MOUNTS=/proc/mounts
+
+AWK=""
+
+# awk from PATH, else the root BusyBox applet. Non-zero when neither works.
+pick_awk() {
+    [ -n "$AWK" ] && return 0
+    for _a in awk "${BB:+$BB awk}"; do
+        [ -n "$_a" ] || continue
+        # shellcheck disable=SC2086
+        if [ "$(echo ok | $_a '{ print $1 }' 2>/dev/null)" = ok ]; then
+            AWK="$_a"
+            return 0
+        fi
+    done
+    return 1
 }
+
+# Mount points at or below $1, deepest first (exact path match, no regex).
+# Fails closed: non-zero when /proc/mounts is unreadable or awk is unavailable.
+mounts_under() {
+    { [ -r "$PROC_MOUNTS" ] && pick_awk; } || return 1
+    # shellcheck disable=SC2086
+    $AWK -v p="$1" '
+        $2 == p || index($2, p "/") == 1 { m[n++] = $2 }
+        END {
+            for (i = 0; i < n; i++)
+                for (j = i + 1; j < n; j++)
+                    if (length(m[j]) > length(m[i])) { t = m[i]; m[i] = m[j]; m[j] = t }
+            for (i = 0; i < n; i++) print m[i]
+        }' "$PROC_MOUNTS"
+}
+
+# Independent of awk: 0 only when $PROC_MOUNTS is readable and lists no mount
+# point at or below $1 (fixed-string match; grep status 1 = no match).
+no_mounts_at_or_under() {
+    [ -r "$PROC_MOUNTS" ] || return 1
+    _grep=grep
+    command -v grep >/dev/null 2>&1 || _grep="${BB:+$BB grep}"
+    [ -n "$_grep" ] || return 1
+    # shellcheck disable=SC2086
+    $_grep -F -e " $1 " -e " $1/" "$PROC_MOUNTS" >/dev/null 2>&1
+    [ "$?" -eq 1 ]
+}
+
+# Unmount everything under the rootfs, looping while anything is still mounted
+# (stacked layers need several passes). 0 only when nothing remains (L6).
+cleanup_mounts() {
+    progress "Safety Check: Unmounting filesystems..."
+    _pass=0
+    while [ "$_pass" -lt 5 ]; do
+        # Fail closed (H4 review): unknown mount state counts as still mounted.
+        _mnts=$(mounts_under "$DEBIANPATH") || break
+        if [ -z "$_mnts" ]; then
+            no_mounts_at_or_under "$DEBIANPATH" && return 0
+            break
+        fi
+        for _mnt in $_mnts; do
+            $BB umount "$_mnt" 2>/dev/null || $BB umount -l "$_mnt" 2>/dev/null || true
+        done
+        _pass=$((_pass + 1))
+    done
+    if _mnts=$(mounts_under "$DEBIANPATH") && [ -z "$_mnts" ] \
+        && no_mounts_at_or_under "$DEBIANPATH"; then
+        return 0
+    fi
+    error "Still mounted (or mounts unreadable) under $DEBIANPATH:"
+    grep -F " $DEBIANPATH" "$PROC_MOUNTS" 2>/dev/null
+    return 1
+}
+
 
 # Exit handler
 goodbye() {
@@ -113,16 +170,11 @@ download_file() {
 }
 
 # Extraction Helper — archive path is $2 (or $1/rootfs.tar.xz)
-extract_file() {
+extract_archive() {
     # $1=dest root  $2=optional archive path
     _dest="$1"
     _archive="${2:-$_dest/rootfs.tar.xz}"
     progress "Extracting file from $_archive ..."
-    if [ -f "$_dest/bin/bash" ] || [ -e "$_dest/bin/sh" ]; then
-        printf "\033[1;33m[!] Rootfs appears populated: %s/bin\033[0m\n" "$_dest"
-        printf "\033[1;33m[!] Skipping extraction...\033[0m\n"
-        return 0
-    fi
     if [ ! -f "$_archive" ] || [ ! -s "$_archive" ]; then
         error "Rootfs archive missing: $_archive"
         goodbye
@@ -156,6 +208,34 @@ extract_file() {
 
     error "Extraction Failed! Your Busybox/Tar does not support XZ compression."
     goodbye
+}
+
+# M2: .flux_extract_ok is written only after tar exits 0. A tree that has a
+# shell but no marker was interrupted mid-extraction and is re-extracted over.
+# .flux_configured (written after a past full extract) grandfathers old installs.
+EXTRACT_MARKER=".flux_extract_ok"
+
+mark_extracted() {
+    printf '%s\n' "${ROOTFS_SHA256:-unknown}" > "$1/$EXTRACT_MARKER" || goodbye
+}
+
+extract_file() {
+    _dest="$1"
+    if [ -e "$_dest/$EXTRACT_MARKER" ] || [ -e "$_dest/.flux_configured" ]; then
+        printf "\033[1;33m[!] Rootfs already extracted: %s\033[0m\n" "$_dest"
+        return 0
+    fi
+    if [ -L "$_dest/bin/sh" ] || [ -e "$_dest/bin/sh" ] || [ -e "$_dest/bin/bash" ]; then
+        printf "\033[1;33m[!] Rootfs is incomplete (no %s) — re-extracting: %s\033[0m\n" \
+            "$EXTRACT_MARKER" "$_dest"
+    fi
+    # Never let tar write through a leftover bind (/dev, /sdcard) into the host.
+    if ! cleanup_mounts; then
+        error "Refusing to extract while filesystems are mounted under $_dest"
+        goodbye
+    fi
+    extract_archive "$@"
+    mark_extracted "$_dest"
 }
 
 
@@ -291,19 +371,31 @@ configure_debian_chroot() {
 
     touch "$DEBIANPATH/.flux_configured"
     # A failed earlier uninstall may have left this; the tree is valid again.
-    rm -f "$DEBIANPATH/.flux_uninstalling" 2>/dev/null || true
+    rm -rf "$DEBIANPATH/.flux_uninstalling" 2>/dev/null || true
     success "Debian Environment Configured!"
 
-    # --- GENERATE GUI LAUNCH SCRIPT (thin → SSOT GUI / helper) ---
-    LAUNCH_SCRIPT="/data/local/tmp/start_debian13.sh"
+    # --- thin compat wrappers (M14) ---
+    # The app stages fluxlinux_chroot.sh, resolve_bb.sh and the GUI start/stop scripts into
+    # the root-only, SHA-256-verified stage. Root-run wrappers live there too, never in
+    # shell-writable /data/local/tmp (the shell uid could swap them before su runs them).
+    STAGE_PARENT="/data/adb/fluxlinux"
+    STAGE_DIR="$STAGE_PARENT/$PKG"
+    rm -f /data/local/tmp/start_debian13.sh /data/local/tmp/stop_debian13_gui.sh \
+        /data/local/tmp/run_debian13_root.sh /data/local/tmp/enter_debian13.sh \
+        /data/local/tmp/enter_debian13_root.sh 2>/dev/null || true
+    if ! { ( umask 077; mkdir -p "$STAGE_DIR" ) && [ ! -L "$STAGE_PARENT" ] && [ ! -L "$STAGE_DIR" ] && \
+        chown 0:0 "$STAGE_PARENT" "$STAGE_DIR" && chmod 0700 "$STAGE_PARENT" "$STAGE_DIR"; }; then
+        printf "\033[1;33m[!] Root-only stage %s unavailable; compat launchers skipped\033[0m\n" "$STAGE_DIR"
+    else
+    LAUNCH_SCRIPT="$STAGE_DIR/start_debian13.sh"
     progress "Creating thin GUI launch script at $LAUNCH_SCRIPT..."
 
-    # Expand APP_PREFIX / PKG at write time (unquoted EOF); keep runtime vars escaped.
+    # Expand STAGE_DIR / APP_PREFIX / PKG at write time (unquoted EOF); keep runtime vars escaped.
     cat <<EOF > "$LAUNCH_SCRIPT"
 #!/system/bin/sh
 # Compat one-shot GUI → prefer start_debian13_gui.sh (app SSOT) else helper mount --x11 + xfce
-GUI=/data/adb/fluxlinux/$PKG/start_debian13_gui.sh
-HELPER=/data/adb/fluxlinux/$PKG/fluxlinux_chroot.sh
+GUI=$STAGE_DIR/start_debian13_gui.sh
+HELPER=$STAGE_DIR/fluxlinux_chroot.sh
 DEBIANPATH="\${DEBIANPATH:-/data/local/tmp/chrootDebian13}"
 TARGET_PREFIX="\${TARGET_PREFIX:-$APP_PREFIX}"
 USERNAME="\${USERNAME:-flux}"
@@ -330,44 +422,12 @@ echo "NOTE: Prefer app Settings START (start_gui_chroot.sh) for Pulse/X11 host s
 exec sh "\$HELPER" sh --user "\$USERNAME" -- \\
   'export DISPLAY=:0 PULSE_SERVER=unix:/mnt/host-tmp/pulse-native XDG_RUNTIME_DIR=/tmp VTEST_SOCKET_NAME=/mnt/host-tmp/.virgl_test; xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; exec dbus-launch --exit-with-session startxfce4'
 EOF
-    chmod 755 "$LAUNCH_SCRIPT"
+    chmod 700 "$LAUNCH_SCRIPT"
     success "GUI Launch script created (SSOT thin wrapper)."
+    # No separate stop wrapper: the app stages the verified stop_debian13_gui.sh into
+    # $STAGE_DIR on every desktop Stop (stop_gui_chroot.sh).
 
-    # Prefer asset SSOT stop when present under app home (redeployed by app)
-    STOP_LAUNCHER="/data/local/tmp/stop_debian13_gui.sh"
-    progress "Creating GUI Stop Script at $STOP_LAUNCHER..."
-    APP_STOP="$APP_HOME/stop_debian13_gui.sh"
-    if [ -f "$APP_STOP" ]; then
-        cp -f "$APP_STOP" "$STOP_LAUNCHER"
-        chmod +x "$STOP_LAUNCHER"
-        success "GUI Stop Script copied from app assets: $STOP_LAUNCHER"
-    else
-    cat <<EOF > "$STOP_LAUNCHER"
-#!/bin/sh
-DEBIANPATH="/data/local/tmp/chrootDebian13"
-BB="$BB"
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
-TARGET_TERMUX_PREFIX="$APP_PREFIX"
-
-echo "Terminating Debian 13 Chroot GUI processes..."
-\$BB chroot \$DEBIANPATH /bin/su - root -c "killall -9 xfce4-session xfwm4 xfdesktop xfce4-panel dbus-launch dbus-daemon" >/dev/null 2>&1
-
-pkill -9 -f termux-x11 >/dev/null 2>&1
-pkill -9 -f "app_process.*termux-x11" >/dev/null 2>&1
-rm -rf \$TARGET_TERMUX_PREFIX/tmp/.X11-unix \$TARGET_TERMUX_PREFIX/tmp/.X0-lock 2>/dev/null
-echo "Debian 13 GUI Stopped."
-EOF
-    chmod +x "$STOP_LAUNCHER"
-    success "GUI Stop Script created: $STOP_LAUNCHER"
-    fi
-
-    # --- thin compat wrappers ---
-    # M14: the app stages fluxlinux_chroot.sh, resolve_bb.sh and start_debian13_gui.sh
-    # into the root-only, SHA-256-verified stage; nothing root executes is copied to
-    # shell-writable /data/local/tmp. The wrappers below point at that stage.
-    STAGE_DIR="/data/adb/fluxlinux/$PKG"
-
-    ROOT_RUNNER="/data/local/tmp/run_debian13_root.sh"
+    ROOT_RUNNER="$STAGE_DIR/run_debian13_root.sh"
     progress "Creating thin root runner → SSOT at $ROOT_RUNNER..."
     cat <<'EOF' > "$ROOT_RUNNER"
 #!/system/bin/sh
@@ -384,10 +444,10 @@ fi
 exec sh "$HELPER" exec --user root -- "$@"
 EOF
     sed -i "s|@FLUX_STAGE_DIR@|$STAGE_DIR|" "$ROOT_RUNNER"
-    chmod 755 "$ROOT_RUNNER"
+    chmod 700 "$ROOT_RUNNER"
     success "Root runner created (SSOT wrapper)."
 
-    CLI_SCRIPT="/data/local/tmp/enter_debian13.sh"
+    CLI_SCRIPT="$STAGE_DIR/enter_debian13.sh"
     progress "Creating thin CLI launcher at $CLI_SCRIPT..."
     cat <<'EOF' > "$CLI_SCRIPT"
 #!/system/bin/sh
@@ -398,10 +458,10 @@ echo "Entering Debian 13 Chroot (CLI)..."
 exec sh "$HELPER" login --user flux --shell zsh
 EOF
     sed -i "s|@FLUX_STAGE_DIR@|$STAGE_DIR|" "$CLI_SCRIPT"
-    chmod 755 "$CLI_SCRIPT"
-    success "CLI Launcher created: $CLI_SCRIPT"
+    chmod 700 "$CLI_SCRIPT"
+    success "CLI Launcher created: su -c sh $CLI_SCRIPT"
 
-    ROOT_CLI_SCRIPT="/data/local/tmp/enter_debian13_root.sh"
+    ROOT_CLI_SCRIPT="$STAGE_DIR/enter_debian13_root.sh"
     progress "Creating thin root CLI launcher at $ROOT_CLI_SCRIPT..."
     cat <<'EOF' > "$ROOT_CLI_SCRIPT"
 #!/system/bin/sh
@@ -412,8 +472,9 @@ echo "Entering Debian 13 Chroot as ROOT..."
 exec sh "$HELPER" login --user root --shell bash
 EOF
     sed -i "s|@FLUX_STAGE_DIR@|$STAGE_DIR|" "$ROOT_CLI_SCRIPT"
-    chmod 755 "$ROOT_CLI_SCRIPT"
-    success "Root CLI Launcher created: $ROOT_CLI_SCRIPT"
+    chmod 700 "$ROOT_CLI_SCRIPT"
+    success "Root CLI Launcher created: su -c sh $ROOT_CLI_SCRIPT"
+    fi
 
     cleanup_mounts
     success "NativeCode: Chroot Setup Complete!"
@@ -478,15 +539,14 @@ fi
 
     DEBIANPATH="/data/local/tmp/chrootDebian13"
 
-    # Already installed: marker and/or a real shell binary (app cannot always see this path).
-    if [ -f "$DEBIANPATH/.flux_configured" ] || [ -e "$DEBIANPATH/bin/sh" ] || [ -e "$DEBIANPATH/usr/bin/bash" ]; then
+    # Already installed only with the configured marker (M2): a shell alone may be a
+    # tree whose extraction was interrupted; extract_file re-extracts over it.
+    if [ -f "$DEBIANPATH/.flux_configured" ]; then
         success "Debian 13 Chroot already installed."
         progress "Skipping installation (rootfs at $DEBIANPATH)..."
-        # Ensure marker exists for future probes
-        touch "$DEBIANPATH/.flux_configured" 2>/dev/null || true
-        rm -f "$DEBIANPATH/.flux_uninstalling" 2>/dev/null || true
+        rm -rf "$DEBIANPATH/.flux_uninstalling" 2>/dev/null || true
         # Print probe lines the app can match in logs
-        progress "VERIFY: chroot present (bin/sh or bash + marker)"
+        progress "VERIFY: chroot present (marker)"
         am start -a android.intent.action.VIEW -d "fluxlinux://callback?result=success&name=distro_install_debian13_chroot" >/dev/null 2>&1 || true
         exit 0
     fi
@@ -522,4 +582,4 @@ fi
     exit 0
 }
 
-main "$@"
+[ "${FLUX_SETUP_LIB:-0}" = "1" ] || main "$@"

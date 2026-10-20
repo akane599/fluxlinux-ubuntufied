@@ -92,12 +92,20 @@ class ChrootUninstallScriptTest {
     }
 
     /** Runs remove_rootfs in [name]; `stuck` is a sh case pattern for umount to fail on. */
-    private fun removeRootfs(name: String, stuck: String = "__none__", mv: File? = null): Int {
+    private fun removeRootfs(
+        name: String,
+        stuck: String = "__none__",
+        mv: File? = null,
+        path: String? = null,
+        preCmd: String = "",
+        call: String = "remove_rootfs \"\$2\"",
+    ): Int {
+        val stage = File(tmp, "stage").apply { mkdirs() }
         val pathPrefix = mv?.parentFile?.absolutePath?.let { "$it:" } ?: ""
         val pb = ProcessBuilder(
             "/bin/sh",
             "-c",
-            ". \"$1\"; PROC_MOUNTS=\"\$FAKE_MOUNTS\"; remove_rootfs \"$2\"",
+            ". \"$1\"; PROC_MOUNTS=\"\$FAKE_MOUNTS\"; PROBE_BASE=\"\$FAKE_STAGE\"; $preCmd $call",
             "sh",
             script(name).absolutePath,
             guest.absolutePath,
@@ -106,14 +114,33 @@ class ChrootUninstallScriptTest {
             put("FLUX_UNINSTALL_LIB", "1")
             put("BB", bb.absolutePath)
             put("FAKE_MOUNTS", mounts.absolutePath)
+            put("FAKE_STAGE", stage.absolutePath)
             put("STUCK", stuck)
-            put("PATH", pathPrefix + (get("PATH") ?: "/usr/bin:/bin"))
+            put("PATH", path ?: (pathPrefix + (get("PATH") ?: "/usr/bin:/bin")))
         }
         val p = pb.start()
         val out = p.inputStream.bufferedReader().readText()
         assertTrue("timeout", p.waitFor(60, TimeUnit.SECONDS))
         println(out)
         return p.exitValue()
+    }
+
+    /** A PATH dir of exec wrappers for the host tools the scripts use, minus [without]. */
+    private fun toolsDir(without: Set<String>): File {
+        val dir = File(tmp, "tools").apply { mkdirs() }
+        val tools = listOf(
+            "awk", "cat", "dirname", "find", "grep", "kill", "ls", "mkdir", "mv",
+            "readlink", "rm", "sleep", "sort",
+        )
+        for (t in tools - without) {
+            val real = listOf("/usr/bin/$t", "/bin/$t").map(::File).firstOrNull { it.canExecute() }
+                ?: continue
+            File(dir, t).apply {
+                writeText("#!/bin/sh\nexec ${real.absolutePath} \"\$@\"\n")
+                setExecutable(true)
+            }
+        }
+        return dir
     }
 
     private fun tombs(): List<File> =
@@ -214,6 +241,78 @@ class ChrootUninstallScriptTest {
     }
 
     @Test
+    fun awkMissing_failsClosed_nothingDeleted() {
+        // H4 review: without awk (Android 8 /system/bin) mounts_under used to print
+        // nothing, so the rootfs was renamed and deleted with its binds attached.
+        val noAwk = toolsDir(without = setOf("awk")).absolutePath
+        for (name in scripts) {
+            seedGuest()
+            mounts.writeText("/dev/fuse ${guest.absolutePath}/sdcard fuse rw 0 0\n")
+
+            val rc = removeRootfs(name, path = noAwk)
+
+            assertNotEquals("$name must fail when mounts cannot be listed", 0, rc)
+            assertEquals("user data", File(guest, "sdcard/photo.jpg").readText())
+            assertTrue("no tombstone", tombs().isEmpty())
+            assertEquals(
+                "mount table untouched",
+                "/dev/fuse ${guest.absolutePath}/sdcard fuse rw 0 0\n",
+                mounts.readText(),
+            )
+            SafeFiles.deleteTree(root)
+            root.mkdirs()
+        }
+    }
+
+    @Test
+    fun deleteTree_refusesWhileMountStillListed_evenWithDestructiveFind() {
+        // A find that would delete straight through mounts (BusyBox ignores -xdev
+        // under -depth/-delete): the grep-based /proc/mounts check must stop it.
+        val fakeFind = File(tmp, "fakefind").apply {
+            writeText("#!/bin/sh\nrm -rf \"\$1\"\n")
+            setExecutable(true)
+        }
+        for (name in scripts) {
+            seedGuest()
+            val tomb = File(root, "chrootX.deleting.7")
+            check(guest.renameTo(tomb))
+            mounts.writeText("/dev/fuse ${tomb.absolutePath}/sdcard fuse rw 0 0\n")
+
+            val rc = removeRootfs(
+                name,
+                call = "FIND='${fakeFind.absolutePath}'; delete_tree '${tomb.absolutePath}'",
+            )
+
+            assertNotEquals("$name must refuse the delete", 0, rc)
+            assertEquals("user data", File(tomb, "sdcard/photo.jpg").readText())
+            SafeFiles.deleteTree(root)
+            root.mkdirs()
+        }
+    }
+
+    @Test
+    fun plantedMarkerSymlink_andExistingTombstoneName_areNotFollowed() {
+        for (name in scripts) {
+            seedGuest()
+            // A symlinked marker must not truncate its target.
+            Files.createSymbolicLink(
+                File(guest, ".flux_uninstalling").toPath(),
+                File(victim, "keep").toPath(),
+            )
+            mounts.writeText("")
+            // Pre-create this run's tombstone name: mv would move the rootfs into it.
+            val rc = removeRootfs(name, preCmd = "mkdir \"\$2.deleting.\$\$\";")
+
+            assertNotEquals("$name must refuse an existing tombstone name", 0, rc)
+            assertEquals("keep", File(victim, "keep").readText())
+            assertTrue(File(guest, ".flux_uninstalling").isDirectory)
+            assertTrue("rootfs not moved", File(guest, "sdcard/photo.jpg").exists())
+            SafeFiles.deleteTree(root)
+            root.mkdirs()
+        }
+    }
+
+    @Test
     fun scripts_reportFailureResultAndExitStatus() {
         for (name in scripts) {
             val src = script(name).readText()
@@ -224,6 +323,8 @@ class ChrootUninstallScriptTest {
                 Regex("rm -rf \"\\$(GUESTPATH|DEBIANPATH|ALPINEPATH)\"").containsMatchIn(src),
             )
             assertTrue(name, src.contains("-xdev -depth -delete"))
+            assertTrue(name, src.contains("for _f in /system/bin/find find \"\${BB:+\$BB find}\""))
+            assertFalse(name, src.contains("never descends"))
         }
     }
 }
