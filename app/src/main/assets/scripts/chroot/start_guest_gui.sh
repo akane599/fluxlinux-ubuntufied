@@ -76,13 +76,14 @@ if [ ! -e "$CHROOT_ROOT/usr/bin/startxfce4" ] && [ ! -e "$CHROOT_ROOT/usr/sbin/s
   exit 1
 fi
 
-# Soft SELinux (HyperOS / enforcing) — flux pattern; fail soft
+# SELinux mode is never changed here (M13): switching the whole device to
+# permissive would drop every app's confinement until reboot. Log only.
 if command -v getenforce >/dev/null 2>&1; then
   SELINUX_STATUS=$(getenforce 2>/dev/null || true)
   echo "FluxLinux: SELinux=$SELINUX_STATUS"
   if [ "$SELINUX_STATUS" = "Enforcing" ]; then
-    setenforce 0 2>/dev/null && echo "FluxLinux: SELinux → Permissive (until reboot)" \
-      || echo "FluxLinux: [WARN] setenforce 0 failed"
+    echo "FluxLinux: SELinux is Enforcing (left unchanged). If the desktop fails," \
+      "check 'dmesg | grep avc' / 'logcat | grep avc' for denials."
   fi
 fi
 # PREFIX/tmp must stay app_data_file. Labeling it tmpfs:s0 makes termux-x11
