@@ -1,5 +1,7 @@
 package com.ivarna.fluxlinux.core.root
 
+import com.ivarna.fluxlinux.BuildConfig
+
 /**
  * On-device chroot SSOT paths + helper identity.
  * Shared by [com.ivarna.fluxlinux.core.terminal.ChrootCommandBuilder] and
@@ -32,8 +34,27 @@ object ChrootPaths {
      */
     const val CHROOT_PATH = DEBIAN_CHROOT_PATH
 
-    /** On-device SSOT helper (assets/scripts/chroot/fluxlinux_chroot.sh). */
-    const val CHROOT_HELPER = "/data/local/tmp/fluxlinux_chroot.sh"
+    /**
+     * Root-only staging root (M14). `/data/local/tmp` is `0771 shell:shell`, so the shell uid
+     * (adb, Shizuku apps) could replace anything root later runs from there. `/data/adb` is
+     * root-only on Magisk / KernelSU / APatch; RootShell creates these dirs root:root 0700.
+     */
+    const val ROOT_STAGE_PARENT = "/data/adb/fluxlinux"
+
+    /** Per-package stage dir (both flavors may be installed side by side). */
+    const val ROOT_STAGE_DIR = ROOT_STAGE_PARENT + "/" + BuildConfig.APPLICATION_ID
+
+    /**
+     * On-device SSOT helper (assets/scripts/chroot/fluxlinux_chroot.sh), staged by
+     * [RootShell.ensureChrootHelper] and SHA-256-verified against the APK asset.
+     * `resolve_bb.sh` sits next to it ([BusyBoxPaths.RESOLVER_ON_DEVICE]) so the helper's
+     * `$(dirname "$0")/resolve_bb.sh` lookup finds the verified sidecar first.
+     */
+    const val CHROOT_HELPER = "$ROOT_STAGE_DIR/fluxlinux_chroot.sh"
+
+    /** Pre-M14 location (shell-writable). Only ever removed, never executed. */
+    const val LEGACY_CHROOT_HELPER = "/data/local/tmp/fluxlinux_chroot.sh"
+
     const val CHROOT_HELPER_ASSET = "scripts/chroot/fluxlinux_chroot.sh"
     /** Must match first `# fluxlinux-chroot vN` line in the asset. */
     const val CHROOT_HELPER_VERSION = "fluxlinux-chroot v2.9"

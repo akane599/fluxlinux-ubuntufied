@@ -62,16 +62,16 @@ object ChrootProcessManager {
                 error = "stage_failed"
             )
         }
-        val raw = try {
-            RootShell.capture("sh \"$staged\" list '$path'", timeoutMs = LIST_TIMEOUT_MS)
-        } catch (e: Exception) {
-            Log.w(TAG, "list failed: ${e.message}")
+        val cap = RootShell.captureResult("sh \"$staged\" list '$path'", timeoutMs = LIST_TIMEOUT_MS)
+        val raw = cap.stdout
+        captureError(cap.exitCode, raw)?.let { err ->
+            Log.w(TAG, "list failed: $err exit=${cap.exitCode}")
             return ListResult(
                 path = path,
                 processes = emptyList(),
-                raw = "",
-                rootOk = true,
-                error = "timeout"
+                raw = raw,
+                rootOk = err != "su_failed",
+                error = err
             )
         }
         Log.d(TAG, "list raw:\n${raw.take(800)}")
@@ -106,23 +106,32 @@ object ChrootProcessManager {
                 error = "stage_failed"
             )
         }
-        val raw = try {
-            RootShell.capture("sh \"$staged\" reap '$path'", timeoutMs = REAP_TIMEOUT_MS)
-        } catch (e: Exception) {
-            Log.w(TAG, "reap failed: ${e.message}")
+        val cap = RootShell.captureResult("sh \"$staged\" reap '$path'", timeoutMs = REAP_TIMEOUT_MS)
+        val raw = cap.stdout
+        captureError(cap.exitCode, raw)?.let { err ->
+            Log.w(TAG, "reap failed: $err exit=${cap.exitCode}")
             return KillResult(
                 killed = 0,
                 failed = 0,
                 remaining = emptyList(),
                 verifiedClean = false,
-                raw = "",
-                rootOk = true,
-                error = "timeout"
+                raw = raw,
+                rootOk = err != "su_failed",
+                error = err
             )
         }
         Log.d(TAG, "reap raw:\n${raw.take(1200)}")
         return parseKill(raw, path, rootOk = true)
     }
+
+    /**
+     * Error key when a root run produced no trustworthy report (L4): su timeout / failure, or
+     * the script never printed its header (e.g. su could not read the staged script). Without
+     * this an empty stdout parsed as "0 processes, verified clean".
+     */
+    internal fun captureError(exitCode: Int, raw: String): String? =
+        RootShell.failureReason(exitCode)
+            ?: if (!raw.contains("# chroot_processes v1")) "no_output" else null
 
     internal fun parseList(raw: String, defaultPath: String): ListResult {
         var path = defaultPath

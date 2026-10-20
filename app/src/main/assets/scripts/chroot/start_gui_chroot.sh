@@ -75,11 +75,15 @@ case "$DISTRO_HINT" in
     ;;
 esac
 ROOT_GUI_SCRIPT="$TERMUX_HOME/$ROOT_GUI_NAME"
-ROOT_GUI_TMP="/data/local/tmp/$ROOT_GUI_NAME"
 HELPER_SRC="$TERMUX_HOME/fluxlinux_chroot.sh"
-HELPER_TMP="/data/local/tmp/fluxlinux_chroot.sh"
 RESOLVER_SRC="$TERMUX_HOME/resolve_bb.sh"
-RESOLVER_TMP="/data/local/tmp/fluxlinux_resolve_bb.sh"
+# M14: root runs only copies in a root-only dir (root:root 0700; same path as
+# ChrootPaths.ROOT_STAGE_DIR). /data/local/tmp is shell-writable, so nothing is run from there.
+ROOT_STAGE_PARENT="/data/adb/fluxlinux"
+ROOT_STAGE="$ROOT_STAGE_PARENT/$PKG"
+ROOT_GUI_STAGED="$ROOT_STAGE/$ROOT_GUI_NAME"
+HELPER_STAGED="$ROOT_STAGE/fluxlinux_chroot.sh"
+RESOLVER_STAGED="$ROOT_STAGE/resolve_bb.sh"
 
 echo "========================================"
 echo "FluxLinux: START XFCE (chroot mode)"
@@ -103,12 +107,6 @@ if [ ! -f "$ROOT_GUI_SCRIPT" ]; then
   echo "FluxLinux: ERROR — missing $ROOT_GUI_SCRIPT (HostScriptDeployer failed?)"
   exit 1
 fi
-# Stage SSOT helper for root guest script (if present)
-if [ -f "$HELPER_SRC" ]; then
-  cp -f "$HELPER_SRC" "$HELPER_TMP" 2>/dev/null || true
-  chmod 755 "$HELPER_TMP" 2>/dev/null || true
-fi
-
 export PULSE_RUNTIME_PATH="${HOME}/.pulse"
 mkdir -p "$PULSE_RUNTIME_PATH" "$TMPDIR" 2>/dev/null
 
@@ -228,17 +226,10 @@ am start -n "$PKG/com.termux.x11.MainActivity" \
 am start -n "$PKG/com.termux.x11.MainActivity" 2>/dev/null
 sleep 1
 
-# Root stage: copy to /data/local/tmp (SELinux / exec-safe) then su
+# Root stage: as root, copy the guest launcher + helper + resolver from app-private HOME into
+# the root-only stage (temp + rename, so a running helper never sees a half-written file),
+# drop the old /data/local/tmp copies, then run from the stage.
 echo "FluxLinux: Entering chroot as root..."
-cp -f "$ROOT_GUI_SCRIPT" "$ROOT_GUI_TMP" 2>/dev/null || true
-if [ -f "$HELPER_SRC" ]; then
-  cp -f "$HELPER_SRC" "$HELPER_TMP" 2>/dev/null || true
-  chmod 755 "$HELPER_TMP" 2>/dev/null || true
-fi
-if [ -f "$RESOLVER_SRC" ]; then
-  cp -f "$RESOLVER_SRC" "$RESOLVER_TMP" 2>/dev/null || true
-  chmod 755 "$RESOLVER_TMP" 2>/dev/null || true
-fi
 SU_BIN=""
 for s in /system/bin/su /system/xbin/su /sbin/su; do
   if [ -x "$s" ]; then SU_BIN="$s"; break; fi
@@ -251,23 +242,20 @@ fi
 # Pass HELPER + path env so guest GUI scripts use SSOT mounts
 # DEBIANPATH = legacy name used by start_debian13_gui.sh
 # CHROOT_ROOT  = name used by start_alpine_gui.sh
-if [ -f "$ROOT_GUI_TMP" ] || cp -f "$ROOT_GUI_SCRIPT" "$ROOT_GUI_TMP" 2>/dev/null; then
-  "$SU_BIN" -c "cp -f '$ROOT_GUI_SCRIPT' '$ROOT_GUI_TMP' 2>/dev/null; \
-    [ -f '$HELPER_SRC' ] && cp -f '$HELPER_SRC' '$HELPER_TMP' 2>/dev/null; \
-    [ -f '$RESOLVER_SRC' ] && cp -f '$RESOLVER_SRC' '$RESOLVER_TMP' 2>/dev/null; \
-    chmod 755 '$ROOT_GUI_TMP' '$HELPER_TMP' '$RESOLVER_TMP' 2>/dev/null; \
-    DEBIANPATH='$CHROOT_PATH' CHROOT_ROOT='$CHROOT_PATH' FLUX_CHROOT='$CHROOT_PATH' \
-    TARGET_PREFIX='$TERMUX_PREFIX' HELPER='$HELPER_TMP' \
-    FLUX_DESKTOP='${FLUX_DESKTOP:-xfce4}' FLUX_GPU_RUNTIME='${FLUX_GPU_RUNTIME:-}' \
-    FLUX_BB='${FLUX_BB:-}' FLUX_RESOLVE_BB='$RESOLVER_TMP' sh '$ROOT_GUI_TMP'"
-else
-  "$SU_BIN" -c "cp -f '$ROOT_GUI_SCRIPT' '$ROOT_GUI_TMP' && chmod 755 '$ROOT_GUI_TMP' && \
-    [ -f '$RESOLVER_SRC' ] && cp -f '$RESOLVER_SRC' '$RESOLVER_TMP' 2>/dev/null; \
-    DEBIANPATH='$CHROOT_PATH' CHROOT_ROOT='$CHROOT_PATH' FLUX_CHROOT='$CHROOT_PATH' \
-    TARGET_PREFIX='$TERMUX_PREFIX' HELPER='$HELPER_TMP' \
-    FLUX_DESKTOP='${FLUX_DESKTOP:-xfce4}' FLUX_GPU_RUNTIME='${FLUX_GPU_RUNTIME:-}' \
-    FLUX_BB='${FLUX_BB:-}' FLUX_RESOLVE_BB='$RESOLVER_TMP' sh '$ROOT_GUI_TMP'"
-fi
+"$SU_BIN" -c "( umask 077; mkdir -p '$ROOT_STAGE' ) && [ ! -L '$ROOT_STAGE_PARENT' ] && [ ! -L '$ROOT_STAGE' ] && \
+    chown 0:0 '$ROOT_STAGE_PARENT' '$ROOT_STAGE' && chmod 0700 '$ROOT_STAGE_PARENT' '$ROOT_STAGE' || \
+    { echo 'FluxLinux: [ERROR] cannot create root-only stage $ROOT_STAGE' >&2; exit 1; }; \
+  _stage() { [ -f \"\$1\" ] || return 1; cp -f \"\$1\" \"\$2.stage.\$\$\" && chmod 0600 \"\$2.stage.\$\$\" && \
+    mv -f \"\$2.stage.\$\$\" \"\$2\" || { rm -f \"\$2.stage.\$\$\"; return 1; }; }; \
+  _stage '$ROOT_GUI_SCRIPT' '$ROOT_GUI_STAGED' || { echo 'FluxLinux: [ERROR] cannot stage $ROOT_GUI_NAME' >&2; exit 1; }; \
+  _stage '$HELPER_SRC' '$HELPER_STAGED'; \
+  _stage '$RESOLVER_SRC' '$RESOLVER_STAGED'; \
+  rm -f '/data/local/tmp/$ROOT_GUI_NAME' /data/local/tmp/fluxlinux_chroot.sh \
+    /data/local/tmp/fluxlinux_resolve_bb.sh /data/local/tmp/flux_busybox 2>/dev/null; \
+  DEBIANPATH='$CHROOT_PATH' CHROOT_ROOT='$CHROOT_PATH' FLUX_CHROOT='$CHROOT_PATH' \
+  TARGET_PREFIX='$TERMUX_PREFIX' HELPER='$HELPER_STAGED' \
+  FLUX_DESKTOP='${FLUX_DESKTOP:-xfce4}' FLUX_GPU_RUNTIME='${FLUX_GPU_RUNTIME:-}' \
+  FLUX_BB='${FLUX_BB:-}' FLUX_RESOLVE_BB='$RESOLVER_STAGED' sh '$ROOT_GUI_STAGED'"
 rc=$?
 echo "FluxLinux: chroot GUI exit=$rc"
 exit $rc
