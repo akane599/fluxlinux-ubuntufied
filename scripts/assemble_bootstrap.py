@@ -154,10 +154,17 @@ def add_loader(extract_dir: Path, target_prefix: str, loader_src: Path) -> None:
         print(f"[!] Warning: loader APK missing at {loader_src} — skip")
         return
     dest_dir = extract_dir / target_prefix / "usr/libexec/termux-x11"
+    created = [d for d in (dest_dir.parent, dest_dir) if not d.exists()]
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "loader.apk"
     print(f"[*] Copying loader.apk → {dest}")
     shutil.copy2(loader_src, dest)
+    # F-Droid reproducibility: mkdir/checkout modes follow the builder's umask
+    # (0775/0664 under umask 002, 0755/0644 under 022). Pin them to the
+    # owner-only modes every termux-packages deb entry already uses.
+    for d in created:
+        os.chmod(d, 0o700)
+    os.chmod(dest, 0o600)
 
 
 def verify_bootstrap(
