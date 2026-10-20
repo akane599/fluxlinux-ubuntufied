@@ -79,10 +79,31 @@ pkill -9 -f "app_process.*termux-x11" 2>/dev/null || true
 killall -9 Xwayland 2>/dev/null || true
 rm -rf "$TARGET_PREFIX/tmp/.X11-unix" "$TARGET_PREFIX/tmp/.X0-lock" "$TARGET_PREFIX/tmp/.X1-lock" 2>/dev/null || true
 
+# True while any host process is still rooted at the chroot (a terminal tab,
+# apt, a component run...). Single pass over /proc/*/root symlinks.
+chroot_in_use() {
+  ls -l /proc/[0-9]*/root 2>/dev/null \
+    | awk -v p="$CHROOT_ROOT" '$(NF-1) == "->" && $NF == p { f = 1 } END { exit !f }'
+}
+
 echo "[3/4] Unmount chroot binds (best-effort)..."
 if [ -n "$BB" ] && [ -d "$CHROOT_ROOT" ]; then
+  # The X11 bind belongs to the desktop only.
+  $BB umount "$CHROOT_ROOT/tmp/.X11-unix" 2>/dev/null \
+    || $BB umount -l "$CHROOT_ROOT/tmp/.X11-unix" 2>/dev/null || true
+  # Give the killed XFCE processes a moment to exit before deciding.
+  _w=0
+  while chroot_in_use && [ "$_w" -lt 10 ]; do
+    sleep 0.2 2>/dev/null || sleep 1
+    _w=$((_w + 1))
+  done
+fi
+if [ -n "$BB" ] && [ -d "$CHROOT_ROOT" ] && chroot_in_use; then
+  # M16: lazy unmount would pull /proc, /dev, /sys and /sdcard out from under
+  # open chroot sessions (broken ptys, /dev/null turning into a regular file).
+  echo "FluxLinux: chroot still in use by other sessions — keeping its mounts"
+elif [ -n "$BB" ] && [ -d "$CHROOT_ROOT" ]; then
   for m in \
-    "$CHROOT_ROOT/tmp/.X11-unix" \
     "$CHROOT_ROOT/mnt/host-tmp" \
     "$CHROOT_ROOT/sdcard" \
     "$CHROOT_ROOT/dev/shm" \
