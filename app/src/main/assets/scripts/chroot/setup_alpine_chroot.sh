@@ -17,18 +17,77 @@ progress() { printf "\033[1;36m[+] %s\033[0m\n" "$1"; }
 success()  { printf "\033[1;32m[✓] %s\033[0m\n" "$1"; }
 error()    { printf "\033[1;31m[!] %s\033[0m\n" "$1"; }
 
+PROC_MOUNTS=/proc/mounts
+
+AWK=""
+
+# awk from PATH, else the root BusyBox applet. Non-zero when neither works.
+pick_awk() {
+    [ -n "$AWK" ] && return 0
+    for _a in awk "${BB:+$BB awk}"; do
+        [ -n "$_a" ] || continue
+        # shellcheck disable=SC2086
+        if [ "$(echo ok | $_a '{ print $1 }' 2>/dev/null)" = ok ]; then
+            AWK="$_a"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Mount points at or below $1, deepest first (exact path match, no regex).
+# Fails closed: non-zero when /proc/mounts is unreadable or awk is unavailable.
+mounts_under() {
+    { [ -r "$PROC_MOUNTS" ] && pick_awk; } || return 1
+    # shellcheck disable=SC2086
+    $AWK -v p="$1" '
+        $2 == p || index($2, p "/") == 1 { m[n++] = $2 }
+        END {
+            for (i = 0; i < n; i++)
+                for (j = i + 1; j < n; j++)
+                    if (length(m[j]) > length(m[i])) { t = m[i]; m[i] = m[j]; m[j] = t }
+            for (i = 0; i < n; i++) print m[i]
+        }' "$PROC_MOUNTS"
+}
+
+# Independent of awk: 0 only when $PROC_MOUNTS is readable and lists no mount
+# point at or below $1 (fixed-string match; grep status 1 = no match).
+no_mounts_at_or_under() {
+    [ -r "$PROC_MOUNTS" ] || return 1
+    _grep=grep
+    command -v grep >/dev/null 2>&1 || _grep="${BB:+$BB grep}"
+    [ -n "$_grep" ] || return 1
+    # shellcheck disable=SC2086
+    $_grep -F -e " $1 " -e " $1/" "$PROC_MOUNTS" >/dev/null 2>&1
+    [ "$?" -eq 1 ]
+}
+
+# Unmount everything under the rootfs, looping while anything is still mounted
+# (stacked layers need several passes). 0 only when nothing remains (L6).
 cleanup_mounts() {
     progress "Safety Check: Unmounting filesystems..."
-    $BB umount "$ALPINEPATH/sdcard" 2>/dev/null || true
-    $BB umount "$ALPINEPATH/mnt/host-tmp" 2>/dev/null || true
-    $BB umount "$ALPINEPATH/dev/shm" 2>/dev/null || true
-    $BB umount "$ALPINEPATH/dev/pts" 2>/dev/null || true
-    $BB umount "$ALPINEPATH/proc" 2>/dev/null || true
-    $BB umount "$ALPINEPATH/sys" 2>/dev/null || true
-    $BB umount "$ALPINEPATH/dev" 2>/dev/null || true
-    $BB umount "$ALPINEPATH/tmp" 2>/dev/null || true
-    return 0
+    _pass=0
+    while [ "$_pass" -lt 5 ]; do
+        # Fail closed (H4 review): unknown mount state counts as still mounted.
+        _mnts=$(mounts_under "$ALPINEPATH") || break
+        if [ -z "$_mnts" ]; then
+            no_mounts_at_or_under "$ALPINEPATH" && return 0
+            break
+        fi
+        for _mnt in $_mnts; do
+            $BB umount "$_mnt" 2>/dev/null || $BB umount -l "$_mnt" 2>/dev/null || true
+        done
+        _pass=$((_pass + 1))
+    done
+    if _mnts=$(mounts_under "$ALPINEPATH") && [ -z "$_mnts" ] \
+        && no_mounts_at_or_under "$ALPINEPATH"; then
+        return 0
+    fi
+    error "Still mounted (or mounts unreadable) under $ALPINEPATH:"
+    grep -F " $ALPINEPATH" "$PROC_MOUNTS" 2>/dev/null
+    return 1
 }
+
 
 goodbye() {
     error "Something went wrong."
@@ -77,16 +136,10 @@ download_file() {
     goodbye
 }
 
-extract_file() {
+extract_archive() {
     _dest="$1"
     _archive="${2:-$_dest/$ROOTFS_NAME}"
     progress "Extracting file from $_archive ..."
-    # bin/sh may be absolute symlink to /bin/busybox — host -e is false.
-    if [ -L "$_dest/bin/sh" ] || [ -e "$_dest/bin/sh" ] || \
-       [ -x "$_dest/bin/busybox" ] || [ -e "$_dest/sbin/apk" ]; then
-        printf "\033[1;33m[!] Rootfs appears populated: %s\033[0m\n" "$_dest"
-        return 0
-    fi
     if [ ! -f "$_archive" ] || [ ! -s "$_archive" ]; then
         error "Rootfs archive missing: $_archive"
         goodbye
@@ -102,6 +155,35 @@ extract_file() {
     fi
     error "Extraction Failed!"
     goodbye
+}
+
+# M2: .flux_extract_ok is written only after tar exits 0. A tree that has a
+# shell but no marker was interrupted mid-extraction and is re-extracted over.
+# .flux_configured (written after a past full extract) grandfathers old installs.
+EXTRACT_MARKER=".flux_extract_ok"
+
+mark_extracted() {
+    printf '%s\n' "${ROOTFS_SHA256:-unknown}" > "$1/$EXTRACT_MARKER" || goodbye
+}
+
+extract_file() {
+    _dest="$1"
+    if [ -e "$_dest/$EXTRACT_MARKER" ] || [ -e "$_dest/.flux_configured" ]; then
+        printf "\033[1;33m[!] Rootfs already extracted: %s\033[0m\n" "$_dest"
+        return 0
+    fi
+    if [ -L "$_dest/bin/sh" ] || [ -e "$_dest/bin/sh" ] || \
+       [ -x "$_dest/bin/busybox" ] || [ -e "$_dest/sbin/apk" ]; then
+        printf "\033[1;33m[!] Rootfs is incomplete (no %s) — re-extracting: %s\033[0m\n" \
+            "$EXTRACT_MARKER" "$_dest"
+    fi
+    # Never let tar write through a leftover bind (/dev, /sdcard) into the host.
+    if ! cleanup_mounts; then
+        error "Refusing to extract while filesystems are mounted under $_dest"
+        goodbye
+    fi
+    extract_archive "$@"
+    mark_extracted "$_dest"
 }
 
 ensure_chroot_tmp() {
@@ -319,4 +401,4 @@ fi
     exit 0
 }
 
-main "$@"
+[ "${FLUX_SETUP_LIB:-0}" = "1" ] || main "$@"
