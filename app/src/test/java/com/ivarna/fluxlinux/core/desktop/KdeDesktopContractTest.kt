@@ -1,7 +1,6 @@
 package com.ivarna.fluxlinux.core.desktop
 
 import java.io.File
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,8 +28,14 @@ class KdeDesktopContractTest {
 
     @Test
     fun kdeLaunch_hasNoExternalTermuxIntent() {
-        val factory = asset("src/main/kotlin/com/ivarna/fluxlinux/core/data/TermuxIntentFactory.kt")
-        assertFalse(factory.contains("buildLaunchKdeGui"))
-        assertFalse(factory.contains("buildStopKdeGui"))
+        val cwd = File("").absoluteFile
+        val src = listOf(File(cwd, "src/main/kotlin"), File(cwd, "app/src/main/kotlin"))
+            .first { it.isDirectory }
+        val offenders = src.walkTopDown()
+            .filter { it.isFile && it.name.endsWith(".kt") }
+            .filter { f -> f.readText().let { it.contains("buildLaunchKdeGui") || it.contains("buildStopKdeGui") } }
+            .map { it.name }
+            .toList()
+        assertTrue("KDE must not launch via a Termux intent: $offenders", offenders.isEmpty())
     }
 }

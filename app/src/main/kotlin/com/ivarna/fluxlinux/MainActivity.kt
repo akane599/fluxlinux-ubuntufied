@@ -43,7 +43,6 @@ import com.ivarna.fluxlinux.ui.screens.UBUNTU_DISTRO_ID
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -68,7 +67,6 @@ enum class Screen {
     SETTINGS_PROOT_DETAIL,
     SETTINGS_LEGACY_TERMUX,
     TROUBLESHOOTING,
-    ROOT_ACCESS,
     INSTALL_WIZARD,
     DISTRO_SETTINGS,
     TERMINAL
@@ -246,21 +244,6 @@ class MainActivity : ComponentActivity() {
         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    /**
-     * Component chain after a successful base install (M1): runs the wizard's
-     * selected components sequentially in the parent distro's terminal component.
-     * Each step only advances after the previous session exits 0 (B3 gate).
-     */
-    private fun runComponentChain(
-        distro: com.ivarna.fluxlinux.core.data.Distro,
-        components: List<com.ivarna.fluxlinux.core.data.DistroComponent>,
-        theme: String,
-        gpu: String
-    ) {
-        if (components.isEmpty()) return
-        runComponentStep(distro, components, 0, theme, gpu)
-    }
-
     private fun isCustomizationComponent(component: com.ivarna.fluxlinux.core.data.DistroComponent): Boolean =
         component.id == "customization" || component.id == "kde_customization" ||
             component.scriptName.contains("setup_customization")
@@ -350,76 +333,6 @@ class MainActivity : ComponentActivity() {
             merged["FLUX_SKIP_POKEMON"] = "0"
         }
         return merged
-    }
-
-    private fun runComponentStep(
-        distro: com.ivarna.fluxlinux.core.data.Distro,
-        components: List<com.ivarna.fluxlinux.core.data.DistroComponent>,
-        index: Int,
-        theme: String,
-        gpu: String
-    ) {
-        if (index >= components.size) return
-        val component = components[index]
-        val baseEnv = if (component.id == "hw_accel") {
-            val det = com.ivarna.fluxlinux.core.terminal.GpuAccelDetector.detect()
-            com.ivarna.fluxlinux.core.terminal.GpuAccelDetector.persist(this, det)
-            val mode = com.ivarna.fluxlinux.core.terminal.GpuAccelDetector.resolveFluxGpu(gpu)
-            mapOf("FLUX_GPU" to mode, "FLUX_GPU_VENDOR" to det.vendorHint)
-        } else {
-            mapOf("FLUX_THEME" to theme)
-        }
-        fun openWith(extraEnv: Map<String, String>) {
-            val scriptContent = try {
-                loadGuestComponentScript(this, component, extraEnv)
-            } catch (e: Exception) {
-                android.util.Log.e("FluxLinux", "Failed to load ${component.scriptName}", e)
-                null
-            }
-            if (scriptContent == null) {
-                runComponentStep(distro, components, index + 1, theme, gpu)
-                return
-            }
-            val opened = com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager.openComponentSession(
-                this,
-                distro = distro,
-                scriptContent = scriptContent,
-                title = component.name,
-                extraEnv = extraEnv,
-                isUninstall = false,
-                onFinished = {
-                    com.ivarna.fluxlinux.core.utils.StateManager.setComponentInstalled(
-                        this, distro.id, component.id, true
-                    )
-                    if (component.id == "hw_accel") refreshDriverMarker(distro)
-                    com.ivarna.fluxlinux.core.utils.StateManager.triggerRefresh()
-                    runComponentStep(distro, components, index + 1, theme, gpu)
-                }
-            )
-            if (!opened) {
-                android.widget.Toast.makeText(
-                    this, "Max tabs reached — ${component.name} skipped (retry in Distro Settings)",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-                runComponentStep(distro, components, index + 1, theme, gpu)
-            }
-        }
-        if (isCustomizationComponent(component)) {
-            Thread {
-                val env = stageCustomizationHostEnv(this, baseEnv, distro.id)
-                runOnUiThread { openWith(env) }
-            }.start()
-        } else if (component.id == "hw_accel" && baseEnv["FLUX_GPU"] in listOf("turnip", "panvk")) {
-            Thread {
-                val env = baseEnv + GpuDriverInstaller.guestEnv(this, distro.id)
-                runOnUiThread {
-                    if (GpuDriverInstaller.pendingDistro(this) != null) armDriverResume()
-                    openWith(env)
-                }
-            }.start()
-        } else {
-            openWith(baseEnv)
-        }
     }
 
     /**
@@ -743,8 +656,7 @@ class MainActivity : ComponentActivity() {
                         || currentScreen == Screen.SETTINGS_AUDIO
                         || currentScreen == Screen.SETTINGS_CHROOT
                         || currentScreen == Screen.SETTINGS_PROOT
-                        || currentScreen == Screen.SETTINGS_LEGACY_TERMUX
-                        || currentScreen == Screen.ROOT_ACCESS) {
+                        || currentScreen == Screen.SETTINGS_LEGACY_TERMUX) {
                         currentScreen = Screen.SETTINGS
                     } else if (currentScreen == Screen.TROUBLESHOOTING) {
                         currentScreen = troubleshootingReturn
@@ -1077,7 +989,6 @@ class MainActivity : ComponentActivity() {
                                 currentScreen = Screen.ONBOARDING
                             },
                             onNavigateToTroubleshooting = { openTroubleshooting(Screen.SETTINGS) },
-                            onNavigateToRootCheck = { currentScreen = Screen.ROOT_ACCESS },
                             onNavigateToTerminalSettings = {
                                 currentScreen = Screen.SETTINGS_TERMINAL
                             },
@@ -1207,15 +1118,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     Screen.PREREQUISITES -> { currentScreen = Screen.HOME }
-                    Screen.ROOT_ACCESS -> {
-                        com.ivarna.fluxlinux.ui.screens.RootAccessScreen(
-                            onBack = { currentScreen = Screen.SETTINGS },
-                            onEnableChroot = {
-                                android.widget.Toast.makeText(this@MainActivity, "Chroot Mode Enabled", android.widget.Toast.LENGTH_SHORT).show()
-                                currentScreen = Screen.SETTINGS
-                            }
-                        )
-                    }
                     Screen.INSTALL_WIZARD -> {
                          val hazeState = remember { HazeState() }
                          if (selectedDistro != null) {
