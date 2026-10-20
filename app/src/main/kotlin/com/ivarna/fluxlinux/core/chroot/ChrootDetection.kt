@@ -31,7 +31,9 @@ object ChrootDetection {
         val markerOk: Boolean,
         val dirExists: Boolean,
         val viaRoot: Boolean,
-        val rootOk: Boolean
+        val rootOk: Boolean,
+        /** False when the root probe failed / timed out: app-visible facts only, never cache. */
+        val conclusive: Boolean = true,
     )
 
     fun chrootPath(): String = ChrootPaths.CHROOT_PATH
@@ -77,7 +79,7 @@ object ChrootDetection {
         }
 
         val snap = probe(forceRoot = true, path = path)
-        putCache(path, snap.installed)
+        if (snap.conclusive) putCache(path, snap.installed)
         return snap.installed
     }
 
@@ -132,46 +134,34 @@ object ChrootDetection {
         }
 
         val root = path
-        val out = try {
-            RootShell.capture(
-                "M=0; D=0; S=0; " +
-                    "[ -e '$root/.flux_configured' ] && M=1; " +
-                    "[ -d '$root' ] && D=1; " +
-                    // Alpine: bin/sh -> /bin/busybox (absolute); -e fails on host.
-                    "{ [ -L '$root/bin/sh' ] || [ -e '$root/bin/sh' ] || " +
-                    "[ -x '$root/bin/busybox' ] || [ -e '$root/usr/bin/bash' ] || " +
-                    "[ -e '$root/usr/bin/sh' ] || [ -e '$root/sbin/apk' ]; } && S=1; " +
-                    "echo MARKER=\$M DIR=\$D SHELL=\$S",
-                timeoutMs = 8_000L
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "probe failed: ${e.message}")
+        val cap = RootShell.captureResult(
+            "M=0; D=0; S=0; " +
+                "[ -e '$root/.flux_configured' ] && M=1; " +
+                "[ -d '$root' ] && D=1; " +
+                // Alpine: bin/sh -> /bin/busybox (absolute); -e fails on host.
+                "{ [ -L '$root/bin/sh' ] || [ -e '$root/bin/sh' ] || " +
+                "[ -x '$root/bin/busybox' ] || [ -e '$root/usr/bin/bash' ] || " +
+                "[ -e '$root/usr/bin/sh' ] || [ -e '$root/sbin/apk' ]; } && S=1; " +
+                "echo MARKER=\$M DIR=\$D SHELL=\$S",
+            timeoutMs = 8_000L
+        )
+        val flags = parseRootProbe(cap.exitCode, cap.stdout)
+        if (flags == null) {
+            // su timeout / failure (L4): report app-visible facts, flagged inconclusive so
+            // isInstalled() does not cache a false "not installed" for 30 s.
+            Log.w(TAG, "probe inconclusive exit=${cap.exitCode} out=${cap.stdout.take(120)}")
             return Snapshot(
                 installed = markerApp || shellApp,
                 markerOk = markerApp,
                 dirExists = dirApp,
                 viaRoot = false,
-                rootOk = true
+                rootOk = cap.exitCode != -1,
+                conclusive = false
             )
         }
-
-        var marker = markerApp
-        var dir = dirApp
-        var shell = shellApp
-        for (line in out.lineSequence()) {
-            val t = line.trim()
-            if (!t.contains("MARKER=")) continue
-            t.split(Regex("\\s+")).forEach { tok ->
-                when {
-                    tok.startsWith("MARKER=") ->
-                        marker = tok.removePrefix("MARKER=") == "1"
-                    tok.startsWith("DIR=") ->
-                        dir = tok.removePrefix("DIR=") == "1"
-                    tok.startsWith("SHELL=") ->
-                        shell = tok.removePrefix("SHELL=") == "1"
-                }
-            }
-        }
+        val marker = markerApp || flags.marker
+        val dir = dirApp || flags.dir
+        val shell = shellApp || flags.shell
 
         // A leftover empty directory after uninstall is not an install.
         val installed = marker || shell
@@ -200,6 +190,26 @@ object ChrootDetection {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** Root probe flags; null when the probe did not run cleanly (non-zero exit / no line). */
+    internal data class RootProbeFlags(val marker: Boolean, val dir: Boolean, val shell: Boolean)
+
+    internal fun parseRootProbe(exitCode: Int, out: String): RootProbeFlags? {
+        if (exitCode != 0) return null
+        val line = out.lineSequence().map { it.trim() }.lastOrNull { it.contains("MARKER=") }
+            ?: return null
+        var marker = false
+        var dir = false
+        var shell = false
+        line.split(Regex("\\s+")).forEach { tok ->
+            when {
+                tok.startsWith("MARKER=") -> marker = tok.removePrefix("MARKER=") == "1"
+                tok.startsWith("DIR=") -> dir = tok.removePrefix("DIR=") == "1"
+                tok.startsWith("SHELL=") -> shell = tok.removePrefix("SHELL=") == "1"
+            }
+        }
+        return RootProbeFlags(marker, dir, shell)
     }
 
     private fun shellPresentToApp(path: String = ChrootPaths.CHROOT_PATH): Boolean {

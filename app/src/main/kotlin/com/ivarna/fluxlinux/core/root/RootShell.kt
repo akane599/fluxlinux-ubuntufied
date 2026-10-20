@@ -81,7 +81,20 @@ object RootShell {
     data class CaptureResult(val exitCode: Int, val stdout: String)
 
     /**
-     * Capture stdout of a root command (blocking). Empty string on failure.
+     * Stable error key for a [CaptureResult.exitCode] that means the command never really ran:
+     * -2 → "timeout", -1 → "su_failed", otherwise null (a real exit status of the command).
+     * Callers must not read an empty stdout from these as "nothing found" (L4).
+     */
+    fun failureReason(exitCode: Int): String? = when (exitCode) {
+        -2 -> "timeout"
+        -1 -> "su_failed"
+        else -> null
+    }
+
+    /**
+     * Capture stdout of a root command (blocking). Empty string on failure, and the exit code
+     * is dropped: probes whose empty output would mean "absent"/"clean" must use
+     * [captureResult] + [failureReason] instead.
      * Background thread only. [timeoutMs] > 0 aborts hung su (exit -2).
      */
     fun capture(cmd: String, timeoutMs: Long = 0L): String =
