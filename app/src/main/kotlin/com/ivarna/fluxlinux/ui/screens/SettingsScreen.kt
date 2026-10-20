@@ -96,7 +96,6 @@ fun SettingsScreen(
     onStartActivity: (Intent) -> Unit,
     onNavigateToOnboarding: (() -> Unit)? = null,
     onNavigateToTroubleshooting: (() -> Unit)? = null,
-    onNavigateToRootCheck: (() -> Unit)? = null,
     onNavigateToTerminalSettings: (() -> Unit)? = null,
     onNavigateToX11Settings: (() -> Unit)? = null,
     onNavigateToAudioSettings: (() -> Unit)? = null,
@@ -117,8 +116,6 @@ fun SettingsScreen(
     val _onThemeChanged = onThemeChanged
     @Suppress("UNUSED_PARAMETER")
     val _currentTheme = currentTheme
-    @Suppress("UNUSED_PARAMETER")
-    val _onNavigateToRootCheck = onNavigateToRootCheck
 
     val context = LocalContext.current
 

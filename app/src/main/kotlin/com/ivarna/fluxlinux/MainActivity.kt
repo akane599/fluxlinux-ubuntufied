@@ -68,7 +68,6 @@ enum class Screen {
     SETTINGS_PROOT_DETAIL,
     SETTINGS_LEGACY_TERMUX,
     TROUBLESHOOTING,
-    ROOT_ACCESS,
     INSTALL_WIZARD,
     DISTRO_SETTINGS,
     TERMINAL
@@ -743,8 +742,7 @@ class MainActivity : ComponentActivity() {
                         || currentScreen == Screen.SETTINGS_AUDIO
                         || currentScreen == Screen.SETTINGS_CHROOT
                         || currentScreen == Screen.SETTINGS_PROOT
-                        || currentScreen == Screen.SETTINGS_LEGACY_TERMUX
-                        || currentScreen == Screen.ROOT_ACCESS) {
+                        || currentScreen == Screen.SETTINGS_LEGACY_TERMUX) {
                         currentScreen = Screen.SETTINGS
                     } else if (currentScreen == Screen.TROUBLESHOOTING) {
                         currentScreen = troubleshootingReturn
@@ -1077,7 +1075,6 @@ class MainActivity : ComponentActivity() {
                                 currentScreen = Screen.ONBOARDING
                             },
                             onNavigateToTroubleshooting = { openTroubleshooting(Screen.SETTINGS) },
-                            onNavigateToRootCheck = { currentScreen = Screen.ROOT_ACCESS },
                             onNavigateToTerminalSettings = {
                                 currentScreen = Screen.SETTINGS_TERMINAL
                             },
@@ -1207,15 +1204,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     Screen.PREREQUISITES -> { currentScreen = Screen.HOME }
-                    Screen.ROOT_ACCESS -> {
-                        com.ivarna.fluxlinux.ui.screens.RootAccessScreen(
-                            onBack = { currentScreen = Screen.SETTINGS },
-                            onEnableChroot = {
-                                android.widget.Toast.makeText(this@MainActivity, "Chroot Mode Enabled", android.widget.Toast.LENGTH_SHORT).show()
-                                currentScreen = Screen.SETTINGS
-                            }
-                        )
-                    }
                     Screen.INSTALL_WIZARD -> {
                          val hazeState = remember { HazeState() }
                          if (selectedDistro != null) {
