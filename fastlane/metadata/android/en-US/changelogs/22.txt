@@ -1,0 +1,3 @@
+- Fixed Ubuntu commands (ls, wc, uname…) failing with "Security violation" after apt upgrade
+- Broken installs are repaired automatically on the next terminal or desktop start
+- Ubuntu setup now switches the guest to GNU coreutils so upgrades can't break it again
