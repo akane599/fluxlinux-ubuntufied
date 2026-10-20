@@ -5,6 +5,11 @@
 # Paths (Must match setup_debian13_chroot.sh)
 DEBIANPATH="/data/local/tmp/chrootDebian13"
 LAUNCH_SCRIPTS="/data/local/tmp/start_debian13.sh /data/local/tmp/start_debian13_gui.sh /data/local/tmp/enter_debian13.sh /data/local/tmp/enter_debian13_root.sh /data/local/tmp/run_debian13_root.sh /data/local/tmp/stop_debian13_gui.sh /data/local/tmp/uninstall_debian13_chroot.sh /data/local/tmp/fluxlinux_chroot.sh"
+# Compat launchers setup writes into the root-only stage (M14); this script runs from there.
+_stage_dir=$(dirname "$0")
+case "$_stage_dir" in
+  /data/adb/fluxlinux/*) LAUNCH_SCRIPTS="$LAUNCH_SCRIPTS $_stage_dir/start_debian13.sh $_stage_dir/enter_debian13.sh $_stage_dir/enter_debian13_root.sh $_stage_dir/run_debian13_root.sh" ;;
+esac
 
 # Error Handler
 error() {

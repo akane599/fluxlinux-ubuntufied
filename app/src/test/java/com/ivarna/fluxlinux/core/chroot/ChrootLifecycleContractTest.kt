@@ -129,17 +129,22 @@ class ChrootLifecycleContractTest {
                 assertFalse("$f loads a legacy chroot setup", src.contains("chroot/setup/"))
             }
         }
-        // FOLLOW-UP (owned by another remediation worker at the time of writing): these still
-        // write root-run compat launchers to /data/local/tmp; drop once moved to the stage.
-        val pendingFollowUp = setOf(
-            "chroot/setup_debian13_chroot.sh",
-            "chroot/setup_alpine_chroot.sh",
-        )
         val offenders = allAssetScripts()
-            .filterKeys { it !in legacyNoCaller && it !in pendingFollowUp }
+            .filterKeys { it !in legacyNoCaller }
             .mapValues { dataLocalTmpWriteOrExec(it.value) }
             .filterValues { it.isNotEmpty() }
         assertTrue("write-then-exec under /data/local/tmp: $offenders", offenders.isEmpty())
+    }
+
+    @Test
+    fun debianAlpineSetup_writeCompatLaunchersOnlyIntoRootStage() {
+        for (name in listOf("setup_debian13_chroot.sh", "setup_alpine_chroot.sh")) {
+            val src = chrootScript(name)
+            assertTrue(name, src.contains("STAGE_DIR=\"\$STAGE_PARENT/\$PKG\""))
+            assertTrue(name, src.contains("chmod 0700 \"\$STAGE_PARENT\" \"\$STAGE_DIR\""))
+        }
+        assertTrue(chrootScript("uninstall_debian13_chroot.sh").contains("\$_stage_dir/run_debian13_root.sh"))
+        assertTrue(chrootScript("uninstall_alpine_chroot.sh").contains("\$_stage_dir/enter_alpine.sh"))
     }
 
     @Test

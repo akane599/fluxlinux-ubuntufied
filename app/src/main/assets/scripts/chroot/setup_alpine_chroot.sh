@@ -287,17 +287,27 @@ configure_alpine_chroot() {
     # the root-only, SHA-256-verified stage (/data/adb/fluxlinux/<pkg>). Nothing that
     # root later executes is copied to shell-writable /data/local/tmp any more.
 
-    # Thin CLI launcher (runs the verified helper from the root-only stage)
-    CLI_SCRIPT="/data/local/tmp/enter_alpine.sh"
-    cat > "$CLI_SCRIPT" <<EOF
+    # Thin CLI launcher, kept in the root-only stage next to the verified helper: a root-run
+    # wrapper in shell-writable /data/local/tmp could be swapped before su runs it (M14).
+    STAGE_PARENT="/data/adb/fluxlinux"
+    STAGE_DIR="$STAGE_PARENT/$PKG"
+    rm -f /data/local/tmp/enter_alpine.sh 2>/dev/null || true
+    if { ( umask 077; mkdir -p "$STAGE_DIR" ) && [ ! -L "$STAGE_PARENT" ] && [ ! -L "$STAGE_DIR" ] && \
+        chown 0:0 "$STAGE_PARENT" "$STAGE_DIR" && chmod 0700 "$STAGE_PARENT" "$STAGE_DIR"; }; then
+        CLI_SCRIPT="$STAGE_DIR/enter_alpine.sh"
+        cat > "$CLI_SCRIPT" <<EOF
 #!/system/bin/sh
-HELPER=/data/adb/fluxlinux/${PKG}/fluxlinux_chroot.sh
+HELPER=$STAGE_DIR/fluxlinux_chroot.sh
 [ -f "\$HELPER" ] || { echo "fluxlinux_chroot.sh missing" >&2; exit 127; }
 export FLUX_CHROOT="\${FLUX_CHROOT:-/data/local/tmp/chrootAlpine}"
 echo "Entering Alpine Chroot (CLI)..."
 exec sh "\$HELPER" login --user flux --shell zsh
 EOF
-    chmod 755 "$CLI_SCRIPT"
+        chmod 700 "$CLI_SCRIPT"
+        success "CLI Launcher created: su -c sh $CLI_SCRIPT"
+    else
+        printf "\033[1;33m[!] Root-only stage %s unavailable; CLI launcher skipped\033[0m\n" "$STAGE_DIR"
+    fi
 
     cleanup_mounts
     success "FluxLinux: Alpine Chroot Setup Complete!"

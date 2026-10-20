@@ -374,16 +374,28 @@ configure_debian_chroot() {
     rm -rf "$DEBIANPATH/.flux_uninstalling" 2>/dev/null || true
     success "Debian Environment Configured!"
 
-    # --- GENERATE GUI LAUNCH SCRIPT (thin → SSOT GUI / helper) ---
-    LAUNCH_SCRIPT="/data/local/tmp/start_debian13.sh"
+    # --- thin compat wrappers (M14) ---
+    # The app stages fluxlinux_chroot.sh, resolve_bb.sh and the GUI start/stop scripts into
+    # the root-only, SHA-256-verified stage. Root-run wrappers live there too, never in
+    # shell-writable /data/local/tmp (the shell uid could swap them before su runs them).
+    STAGE_PARENT="/data/adb/fluxlinux"
+    STAGE_DIR="$STAGE_PARENT/$PKG"
+    rm -f /data/local/tmp/start_debian13.sh /data/local/tmp/stop_debian13_gui.sh \
+        /data/local/tmp/run_debian13_root.sh /data/local/tmp/enter_debian13.sh \
+        /data/local/tmp/enter_debian13_root.sh 2>/dev/null || true
+    if ! { ( umask 077; mkdir -p "$STAGE_DIR" ) && [ ! -L "$STAGE_PARENT" ] && [ ! -L "$STAGE_DIR" ] && \
+        chown 0:0 "$STAGE_PARENT" "$STAGE_DIR" && chmod 0700 "$STAGE_PARENT" "$STAGE_DIR"; }; then
+        printf "\033[1;33m[!] Root-only stage %s unavailable; compat launchers skipped\033[0m\n" "$STAGE_DIR"
+    else
+    LAUNCH_SCRIPT="$STAGE_DIR/start_debian13.sh"
     progress "Creating thin GUI launch script at $LAUNCH_SCRIPT..."
 
-    # Expand APP_PREFIX / PKG at write time (unquoted EOF); keep runtime vars escaped.
+    # Expand STAGE_DIR / APP_PREFIX / PKG at write time (unquoted EOF); keep runtime vars escaped.
     cat <<EOF > "$LAUNCH_SCRIPT"
 #!/system/bin/sh
 # Compat one-shot GUI → prefer start_debian13_gui.sh (app SSOT) else helper mount --x11 + xfce
-GUI=/data/adb/fluxlinux/$PKG/start_debian13_gui.sh
-HELPER=/data/adb/fluxlinux/$PKG/fluxlinux_chroot.sh
+GUI=$STAGE_DIR/start_debian13_gui.sh
+HELPER=$STAGE_DIR/fluxlinux_chroot.sh
 DEBIANPATH="\${DEBIANPATH:-/data/local/tmp/chrootDebian13}"
 TARGET_PREFIX="\${TARGET_PREFIX:-$APP_PREFIX}"
 USERNAME="\${USERNAME:-flux}"
@@ -410,44 +422,12 @@ echo "NOTE: Prefer app Settings START (start_gui_chroot.sh) for Pulse/X11 host s
 exec sh "\$HELPER" sh --user "\$USERNAME" -- \\
   'export DISPLAY=:0 PULSE_SERVER=unix:/mnt/host-tmp/pulse-native XDG_RUNTIME_DIR=/tmp VTEST_SOCKET_NAME=/mnt/host-tmp/.virgl_test; xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null; exec dbus-launch --exit-with-session startxfce4'
 EOF
-    chmod 755 "$LAUNCH_SCRIPT"
+    chmod 700 "$LAUNCH_SCRIPT"
     success "GUI Launch script created (SSOT thin wrapper)."
+    # No separate stop wrapper: the app stages the verified stop_debian13_gui.sh into
+    # $STAGE_DIR on every desktop Stop (stop_gui_chroot.sh).
 
-    # Prefer asset SSOT stop when present under app home (redeployed by app)
-    STOP_LAUNCHER="/data/local/tmp/stop_debian13_gui.sh"
-    progress "Creating GUI Stop Script at $STOP_LAUNCHER..."
-    APP_STOP="$APP_HOME/stop_debian13_gui.sh"
-    if [ -f "$APP_STOP" ]; then
-        cp -f "$APP_STOP" "$STOP_LAUNCHER"
-        chmod +x "$STOP_LAUNCHER"
-        success "GUI Stop Script copied from app assets: $STOP_LAUNCHER"
-    else
-    cat <<EOF > "$STOP_LAUNCHER"
-#!/bin/sh
-DEBIANPATH="/data/local/tmp/chrootDebian13"
-BB="$BB"
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
-TARGET_TERMUX_PREFIX="$APP_PREFIX"
-
-echo "Terminating Debian 13 Chroot GUI processes..."
-\$BB chroot \$DEBIANPATH /bin/su - root -c "killall -9 xfce4-session xfwm4 xfdesktop xfce4-panel dbus-launch dbus-daemon" >/dev/null 2>&1
-
-pkill -9 -f termux-x11 >/dev/null 2>&1
-pkill -9 -f "app_process.*termux-x11" >/dev/null 2>&1
-rm -rf \$TARGET_TERMUX_PREFIX/tmp/.X11-unix \$TARGET_TERMUX_PREFIX/tmp/.X0-lock 2>/dev/null
-echo "Debian 13 GUI Stopped."
-EOF
-    chmod +x "$STOP_LAUNCHER"
-    success "GUI Stop Script created: $STOP_LAUNCHER"
-    fi
-
-    # --- thin compat wrappers ---
-    # M14: the app stages fluxlinux_chroot.sh, resolve_bb.sh and start_debian13_gui.sh
-    # into the root-only, SHA-256-verified stage; nothing root executes is copied to
-    # shell-writable /data/local/tmp. The wrappers below point at that stage.
-    STAGE_DIR="/data/adb/fluxlinux/$PKG"
-
-    ROOT_RUNNER="/data/local/tmp/run_debian13_root.sh"
+    ROOT_RUNNER="$STAGE_DIR/run_debian13_root.sh"
     progress "Creating thin root runner → SSOT at $ROOT_RUNNER..."
     cat <<'EOF' > "$ROOT_RUNNER"
 #!/system/bin/sh
@@ -464,10 +444,10 @@ fi
 exec sh "$HELPER" exec --user root -- "$@"
 EOF
     sed -i "s|@FLUX_STAGE_DIR@|$STAGE_DIR|" "$ROOT_RUNNER"
-    chmod 755 "$ROOT_RUNNER"
+    chmod 700 "$ROOT_RUNNER"
     success "Root runner created (SSOT wrapper)."
 
-    CLI_SCRIPT="/data/local/tmp/enter_debian13.sh"
+    CLI_SCRIPT="$STAGE_DIR/enter_debian13.sh"
     progress "Creating thin CLI launcher at $CLI_SCRIPT..."
     cat <<'EOF' > "$CLI_SCRIPT"
 #!/system/bin/sh
@@ -478,10 +458,10 @@ echo "Entering Debian 13 Chroot (CLI)..."
 exec sh "$HELPER" login --user flux --shell zsh
 EOF
     sed -i "s|@FLUX_STAGE_DIR@|$STAGE_DIR|" "$CLI_SCRIPT"
-    chmod 755 "$CLI_SCRIPT"
-    success "CLI Launcher created: $CLI_SCRIPT"
+    chmod 700 "$CLI_SCRIPT"
+    success "CLI Launcher created: su -c sh $CLI_SCRIPT"
 
-    ROOT_CLI_SCRIPT="/data/local/tmp/enter_debian13_root.sh"
+    ROOT_CLI_SCRIPT="$STAGE_DIR/enter_debian13_root.sh"
     progress "Creating thin root CLI launcher at $ROOT_CLI_SCRIPT..."
     cat <<'EOF' > "$ROOT_CLI_SCRIPT"
 #!/system/bin/sh
@@ -492,8 +472,9 @@ echo "Entering Debian 13 Chroot as ROOT..."
 exec sh "$HELPER" login --user root --shell bash
 EOF
     sed -i "s|@FLUX_STAGE_DIR@|$STAGE_DIR|" "$ROOT_CLI_SCRIPT"
-    chmod 755 "$ROOT_CLI_SCRIPT"
-    success "Root CLI Launcher created: $ROOT_CLI_SCRIPT"
+    chmod 700 "$ROOT_CLI_SCRIPT"
+    success "Root CLI Launcher created: su -c sh $ROOT_CLI_SCRIPT"
+    fi
 
     cleanup_mounts
     success "NativeCode: Chroot Setup Complete!"

@@ -3,6 +3,11 @@
 
 ALPINEPATH="${FLUX_CHROOT:-/data/local/tmp/chrootAlpine}"
 LAUNCH_SCRIPTS="/data/local/tmp/start_alpine_gui.sh /data/local/tmp/stop_alpine_gui.sh /data/local/tmp/enter_alpine.sh /data/local/tmp/uninstall_alpine_chroot.sh"
+# Compat launchers setup writes into the root-only stage (M14); this script runs from there.
+_stage_dir=$(dirname "$0")
+case "$_stage_dir" in
+  /data/adb/fluxlinux/*) LAUNCH_SCRIPTS="$LAUNCH_SCRIPTS $_stage_dir/enter_alpine.sh" ;;
+esac
 
 error()    { printf "\033[1;31m[!] %s\033[0m\n" "$1"; }
 success()  { printf "\033[1;32m[✓] %s\033[0m\n" "$1"; }
