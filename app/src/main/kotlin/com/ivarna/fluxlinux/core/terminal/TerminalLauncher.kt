@@ -47,8 +47,28 @@ object TerminalLauncher {
      * returns false — so also accept busybox/apk/bash and symlink nodes.
      */
     fun isProotInstalled(ctx: Context, prootName: String): Boolean {
-        val root = File(ctx.filesDir, "usr/var/lib/proot-distro/containers/$prootName/rootfs")
-        return guestRootfsHasShell(root)
+        val container = File(ctx.filesDir, "usr/var/lib/proot-distro/containers/$prootName")
+        val root = File(container, "rootfs")
+        return guestRootfsHasShell(root) &&
+            prootExtractComplete(container, TermuxHostPaths.homeDir(ctx), prootName)
+    }
+
+    /** Written by flux_install.sh after a successful proot-distro install (M2). */
+    const val EXTRACT_MARKER = ".flux_extract_ok"
+
+    /**
+     * Mirrors `rootfs_extract_complete` in flux_install.sh (M2): an interrupted
+     * extraction already has a shell, so a shell alone is not "installed". Installs
+     * that predate the marker count when a full install provably finished (XFCE in
+     * the guest, or flux_install's `$HOME/.fluxlinux_distro_<name>_installed`); the
+     * script then adopts them by writing the marker on the next install run.
+     */
+    fun prootExtractComplete(container: File, homeDir: File, prootName: String): Boolean {
+        if (File(container, EXTRACT_MARKER).isFile) return true
+        val root = File(container, "rootfs")
+        return File(root, "usr/bin/startxfce4").exists() ||
+            File(root, "usr/sbin/startxfce4").exists() ||
+            File(homeDir, ".fluxlinux_distro_${prootName}_installed").isFile
     }
 
     /** Host-safe guest rootfs shell probe (absolute busybox symlinks OK). */

@@ -311,6 +311,45 @@ wipe_proot_container() {
     return 1
 }
 
+# M2: proot-distro extracts in place and only cleans up on Python exceptions, so a
+# killed/interrupted extraction leaves a tree that already has a shell. Completion is
+# recorded as <container>/.flux_extract_ok (holds the rootfs SHA256) right after a
+# successful install; wipe_proot_container removes it with the container.
+EXTRACT_MARKER_NAME=".flux_extract_ok"
+
+mark_extract_ok() {
+    _mk_dir="$PREFIX/var/lib/proot-distro/containers/$1"
+    printf '%s\n' "${ROOTFS_SHA256:-unpinned}" > "$_mk_dir/$EXTRACT_MARKER_NAME" 2>/dev/null || {
+        echo "FluxLinux: WARNING: could not write $_mk_dir/$EXTRACT_MARKER_NAME"
+        return 1
+    }
+}
+
+# True when the container finished extracting. Installs made before the marker
+# existed are adopted when a full FluxLinux install provably completed: XFCE was
+# installed into the guest, or the post-install marker below exists. Adoption
+# writes the marker so existing users never have to wipe a working container.
+rootfs_extract_complete() {
+    _ec_name="$1"
+    _ec_dir="$PREFIX/var/lib/proot-distro/containers/$_ec_name"
+    _ec_root="$_ec_dir/rootfs"
+    if [ -f "$_ec_dir/$EXTRACT_MARKER_NAME" ]; then
+        _ec_sha=$(head -n 1 "$_ec_dir/$EXTRACT_MARKER_NAME" 2>/dev/null)
+        if [ -n "${ROOTFS_SHA256:-}" ] && [ "$_ec_sha" != "$ROOTFS_SHA256" ]; then
+            # A complete tree from an older pin: keep it (re-extracting would wipe user data).
+            echo "FluxLinux: $_ec_name was extracted from another rootfs pin (${_ec_sha:-unknown}); keeping it"
+        fi
+        return 0
+    fi
+    if [ -e "$_ec_root/usr/bin/startxfce4" ] || [ -e "$_ec_root/usr/sbin/startxfce4" ] || \
+        [ -f "$HOME/.fluxlinux_distro_${_ec_name}_installed" ]; then
+        echo "FluxLinux: adopting existing $_ec_name install (pre-marker)"
+        mark_extract_ok "$_ec_name" || true
+        return 0
+    fi
+    return 1
+}
+
 guest_version_id() {
     _gr="$1"
     if [ -r "$_gr/usr/lib/os-release" ]; then
@@ -327,7 +366,9 @@ else
     DISTRO_ROOTFS="$PREFIX/var/lib/proot-distro/containers/$DISTRO/rootfs"
 
     SKIP_EXTRACT=0
-    if rootfs_has_shell "$DISTRO_ROOTFS"; then
+    if rootfs_has_shell "$DISTRO_ROOTFS" && ! rootfs_extract_complete "$DISTRO"; then
+        echo "FluxLinux: $DISTRO rootfs is incomplete (interrupted extraction) — re-extracting"
+    elif rootfs_has_shell "$DISTRO_ROOTFS"; then
         # Fedora pin moved 43 → 44. Re-extract when the guest is the old release.
         if [ "$DISTRO" = "fedora" ]; then
             _have_ver=$(guest_version_id "$DISTRO_ROOTFS")
@@ -350,6 +391,9 @@ else
             wipe_proot_container "$DISTRO" || exit 1
             "$PYTHON" "$PROOT_DISTRO" install "$DISTRO"
             EXIT_CODE=$?
+            if [ "$EXIT_CODE" -eq 0 ] && rootfs_has_shell "$DISTRO_ROOTFS"; then
+                mark_extract_ok "$DISTRO" || EXIT_CODE=1
+            fi
         else
             if ! resolve_rootfs_archive; then
                 echo "FluxLinux: Install Failed — no local rootfs archive"
@@ -372,6 +416,9 @@ else
             if [ "$EXIT_CODE" -eq 0 ] && ! rootfs_has_shell "$DISTRO_ROOTFS"; then
                 echo "FluxLinux: install reported OK but no shell/busybox under $DISTRO_ROOTFS"
                 EXIT_CODE=1
+            fi
+            if [ "$EXIT_CODE" -eq 0 ]; then
+                mark_extract_ok "$DISTRO" || EXIT_CODE=1
             fi
         fi
     fi
