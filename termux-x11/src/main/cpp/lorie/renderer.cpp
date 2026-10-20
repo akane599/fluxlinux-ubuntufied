@@ -547,10 +547,12 @@ void Renderer::addBuffer(LorieBuffer* buf) {
 void Renderer::removeBuffer(uint64_t id) {
     pthread_spin_lock(&bufferLock);
     LorieBuffer* buf = LorieBufferList_findById(&addedBuffers, id);
-    if (buf)
+    if (buf) {
         // Buffer was not attached to GL yet, it is safe to release it now.
+        // Unlink first so a buffer that still has other references can not stay in the list.
+        LorieBuffer_removeFromList(buf);
         LorieBuffer_release(buf);
-    else {
+    } else {
         buf = LorieBufferList_findById(&buffers, id);
         if (buf) {
             // The buffer is attached to GL so we should release it from renderer thread.
@@ -566,7 +568,9 @@ void Renderer::removeAllBuffers() {
 
     pthread_spin_lock(&bufferLock);
     while ((buf = LorieBufferList_first(&addedBuffers))) {
-        // These buffers are not yet attached to GL, it is safe to release them
+        // These buffers are not yet attached to GL, it is safe to release them.
+        // Unlink first: release only unlinks on the last reference, so this loop would spin otherwise.
+        LorieBuffer_removeFromList(buf);
         LorieBuffer_release(buf);
     }
     while ((buf = LorieBufferList_first(&buffers))) {
@@ -1120,8 +1124,11 @@ void Renderer::threadLoop() {
 
         pthread_spin_lock(&bufferLock);
         // Remove all buffers which were attached to GL.
-        while((buf = LorieBufferList_first(&removedBuffers)))
+        // Unlink first: release only unlinks on the last reference, so this loop would spin otherwise.
+        while((buf = LorieBufferList_first(&removedBuffers))) {
+            LorieBuffer_removeFromList(buf);
             LorieBuffer_release(buf);
+        }
         pthread_spin_unlock(&bufferLock);
         pthread_mutex_lock(&stateLock);
     }
@@ -1130,8 +1137,10 @@ void Renderer::threadLoop() {
     // Runs on the renderer thread: safe to touch GL/EGL here, they are thread-affine.
     removeAllBuffers();
     pthread_spin_lock(&bufferLock);
-    while ((buf = LorieBufferList_first(&removedBuffers)))
+    while ((buf = LorieBufferList_first(&removedBuffers))) {
+        LorieBuffer_removeFromList(buf);
         LorieBuffer_release(buf);
+    }
     pthread_spin_unlock(&bufferLock);
 
     if (state) {
