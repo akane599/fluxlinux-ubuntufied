@@ -9,6 +9,7 @@ import com.ivarna.fluxlinux.core.terminal.ProcessGroupLauncher
 import com.ivarna.fluxlinux.core.terminal.TermuxHostPaths
 import com.ivarna.fluxlinux.core.terminal.ZshPluginSet
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -23,10 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 object ProotZshBootstrap {
 
     private const val TAG = "ProotZshBootstrap"
-    private const val OMZ_URL = "https://github.com/ohmyzsh/ohmyzsh.git"
     private const val APT_TIMEOUT_SEC = 600L
-    private const val THEME_URL =
-        "https://raw.githubusercontent.com/zakaziko99/agnosterzak-ohmyzsh-theme/master/agnosterzak.zsh-theme"
+    private val FULL_SHA = Regex("[0-9a-f]{40}")
 
     fun omzDir(rootfs: File): File = File(rootfs, "home/flux/.oh-my-zsh")
 
@@ -69,8 +68,8 @@ object ProotZshBootstrap {
             return false
         }
 
-        onLog("Host git clone Oh My Zsh (shallow)…")
-        val cloneOk = hostGitClone(app, OMZ_URL, omz, timeoutSec = 180, onLog)
+        onLog("Host git fetch Oh My Zsh (pinned, shallow)…")
+        val cloneOk = hostGitClone(app, ZshPluginSet.OMZ, omz, timeoutSec = 180, onLog)
         if (!cloneOk || !isOmzInstalled(rootfs)) {
             onLog("Oh My Zsh host clone failed or incomplete")
             // Leave no half tree for guest rm to thrash on
@@ -113,8 +112,8 @@ object ProotZshBootstrap {
             try {
                 if (missingPlugins.isNotEmpty() && File(app.filesDir, "usr/bin/git").isFile) {
                     val plugins = File(omz, "custom/plugins").apply { mkdirs() }
-                    missingPlugins.forEach { (name, url) ->
-                        clonePluginIfMissing(app, File(plugins, name), url, log)
+                    missingPlugins.forEach { (name, pin) ->
+                        clonePluginIfMissing(app, File(plugins, name), pin, log)
                     }
                 }
                 if (missingPkgs.isNotEmpty() && File(TermuxHostPaths.PROOT_DISTRO).isFile) {
@@ -154,22 +153,28 @@ object ProotZshBootstrap {
         plugins.mkdirs()
         themes.mkdirs()
 
-        ZshPluginSet.externalPluginsFor(prootName).forEach { (name, url) ->
-            clonePluginIfMissing(app, File(plugins, name), url, onLog)
+        ZshPluginSet.externalPluginsFor(prootName).forEach { (name, pin) ->
+            clonePluginIfMissing(app, File(plugins, name), pin, onLog)
         }
         // Do NOT install zsh-autocomplete (known 30s+ startup under proot)
 
         val themeFile = File(themes, "agnosterzak.zsh-theme")
         if (!themeFile.isFile || themeFile.length() < 50) {
-            onLog("Fetching agnosterzak theme…")
-            httpGetToFile(THEME_URL, themeFile, onLog)
+            onLog("Fetching agnosterzak theme (pinned)…")
+            val partial = File(themes, themeFile.name + ".partial")
+            if (httpGetToFile(ZshPluginSet.AGNOSTERZAK_URL, partial, onLog) &&
+                !acceptIfSha256(partial, themeFile, ZshPluginSet.AGNOSTERZAK_SHA256)
+            ) {
+                onLog("agnosterzak theme sha256 mismatch — not installed")
+            }
+            partial.delete()
         }
     }
 
     private fun clonePluginIfMissing(
         app: Context,
         dest: File,
-        url: String,
+        pin: ZshPluginSet.GitPin,
         onLog: (String) -> Unit
     ) {
         if (dest.isDirectory && dest.list()?.isNotEmpty() == true) {
@@ -178,7 +183,7 @@ object ProotZshBootstrap {
         }
         if (dest.exists()) SafeFiles.deleteTree(dest)
         onLog("Host clone plugin ${dest.name}…")
-        if (!hostGitClone(app, url, dest, timeoutSec = 90, onLog)) {
+        if (!hostGitClone(app, pin, dest, timeoutSec = 90, onLog)) {
             onLog("Plugin ${dest.name} clone failed — skip")
             SafeFiles.deleteTree(dest)
         }
@@ -186,28 +191,70 @@ object ProotZshBootstrap {
 
     private fun hostGitClone(
         app: Context,
-        url: String,
+        pin: ZshPluginSet.GitPin,
         dest: File,
         timeoutSec: Long,
         onLog: (String) -> Unit
     ): Boolean {
         dest.parentFile?.mkdirs()
-        // Quote paths for shell
-        val destQ = dest.absolutePath.replace("'", "'\\''")
-        val script =
-            "set -e; " +
-                "export GIT_TERMINAL_PROMPT=0; " +
-                "export GIT_HTTP_LOW_SPEED_LIMIT=1000; " +
-                "export GIT_HTTP_LOW_SPEED_TIME=30; " +
-                "rm -rf '$destQ'; " +
-                "git clone --depth 1 --single-branch --quiet '$url' '$destQ'"
+        val script = runCatching { pinnedCloneScript(pin, dest.absolutePath) }.getOrElse {
+            onLog("invalid pin: ${it.message}")
+            return false
+        }
         val code = runHostBash(app, script, timeoutSec, onLog)
         if (code != 0) {
-            if (code != null) onLog("git clone exit $code: $url")
+            if (code != null) onLog("git fetch exit $code: ${pin.url} @ ${pin.commit}")
             SafeFiles.deleteTree(dest)
             return false
         }
         return dest.isDirectory
+    }
+
+    /**
+     * Host bash script fetching exactly [pin] (shallow) into [dest]: a re-run
+     * installs the reviewed commit, not whatever the default branch holds
+     * today. Fails (non-zero) unless HEAD ends up at the pinned SHA.
+     */
+    internal fun pinnedCloneScript(pin: ZshPluginSet.GitPin, dest: String): String {
+        require(FULL_SHA.matches(pin.commit)) { "not a full commit SHA: ${pin.commit}" }
+        require(pin.url.startsWith("https://") && "'" !in pin.url) { "bad pin url: ${pin.url}" }
+        val destQ = dest.replace("'", "'\\''")
+        return "set -e; " +
+            "export GIT_TERMINAL_PROMPT=0; " +
+            "export GIT_HTTP_LOW_SPEED_LIMIT=1000; " +
+            "export GIT_HTTP_LOW_SPEED_TIME=30; " +
+            "rm -rf '$destQ'; " +
+            "mkdir -p '$destQ'; " +
+            "git -C '$destQ' init -q; " +
+            "git -C '$destQ' fetch -q --depth 1 '${pin.url}' ${pin.commit}; " +
+            "git -C '$destQ' -c advice.detachedHead=false checkout -q --detach FETCH_HEAD; " +
+            "test \"$(git -C '$destQ' rev-parse HEAD)\" = ${pin.commit}; " +
+            "git -C '$destQ' remote add origin '${pin.url}' 2>/dev/null || true"
+    }
+
+    /**
+     * Move [partial] onto [dest] only when its sha256 is [sha256]; a mismatch
+     * leaves [dest] untouched.
+     */
+    internal fun acceptIfSha256(partial: File, dest: File, sha256: String): Boolean {
+        if (!partial.isFile || sha256Hex(partial) != sha256.lowercase()) return false
+        return partial.renameTo(dest) || runCatching {
+            partial.copyTo(dest, overwrite = true)
+            partial.delete()
+        }.isSuccess
+    }
+
+    internal fun sha256Hex(file: File): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
     }
 
     /**
@@ -250,7 +297,7 @@ object ProotZshBootstrap {
         }
     }
 
-    private fun httpGetToFile(url: String, dest: File, onLog: (String) -> Unit) {
+    private fun httpGetToFile(url: String, dest: File, onLog: (String) -> Unit): Boolean =
         try {
             dest.parentFile?.mkdirs()
             val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
@@ -262,9 +309,10 @@ object ProotZshBootstrap {
                 dest.outputStream().use { input.copyTo(it) }
             }
             conn.disconnect()
+            dest.length() > 0
         } catch (e: Exception) {
             onLog("theme download failed: ${e.message}")
             dest.delete()
+            false
         }
-    }
 }

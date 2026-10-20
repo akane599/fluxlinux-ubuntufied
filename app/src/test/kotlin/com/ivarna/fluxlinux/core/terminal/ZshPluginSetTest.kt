@@ -126,7 +126,20 @@ class ZshPluginSetTest {
         // Other distros sharing the script keep the legacy line.
         assertTrue(script.contains("  " + ZshPluginSet.LEGACY_PLUGINS_LINE + "\n"))
         ZshPluginSet.APT_PACKAGES.keys.forEach { pkg -> assertTrue(script.contains(pkg)) }
-        assertTrue(script.contains(ZshPluginSet.EXTERNAL_PLUGIN_URLS.getValue("fzf-tab")))
+        assertTrue(script.contains(ZshPluginSet.EXTERNAL_PLUGINS.getValue("fzf-tab").url))
+    }
+
+    @Test
+    fun sources_arePinnedToFullCommits() {
+        val pins = ZshPluginSet.EXTERNAL_PLUGINS.values + ZshPluginSet.OMZ
+        pins.forEach { pin ->
+            assertTrue("full SHA: $pin", Regex("[0-9a-f]{40}").matches(pin.commit))
+            assertTrue("https: $pin", pin.url.startsWith("https://"))
+        }
+        assertTrue(Regex("[0-9a-f]{40}").matches(ZshPluginSet.AGNOSTERZAK_COMMIT))
+        assertTrue(Regex("[0-9a-f]{64}").matches(ZshPluginSet.AGNOSTERZAK_SHA256))
+        assertTrue(ZshPluginSet.AGNOSTERZAK_URL.contains("/${ZshPluginSet.AGNOSTERZAK_COMMIT}/"))
+        assertFalse(ZshPluginSet.AGNOSTERZAK_URL.contains("/master/"))
     }
 
     @Test

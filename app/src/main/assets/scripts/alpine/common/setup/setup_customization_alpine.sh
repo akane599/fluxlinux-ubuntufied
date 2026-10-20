@@ -120,6 +120,19 @@ download_if_needed() {
     [ -s "$_out" ]
 }
 
+# $1 matches sha256 $2. Fails closed when no sha256 tool exists.
+_flux_sha256_ok() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        _got="$(sha256sum "$1" 2>/dev/null | cut -d' ' -f1)"
+    elif command -v shasum >/dev/null 2>&1; then
+        _got="$(shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1)"
+    else
+        echo "FluxLinux: WARNING: no sha256 tool — cannot verify $(basename "$1")"
+        return 1
+    fi
+    [ -n "$_got" ] && [ "$_got" = "$2" ]
+}
+
 # Theme selection
 if [ -n "${FLUX_THEME:-}" ]; then
     echo "FluxLinux: Auto-applying Theme: $FLUX_THEME"
@@ -211,13 +224,28 @@ FONT_DIR="/usr/share/fonts/jetbrains-mono-nerd"
 if ! fc-list 2>/dev/null | grep -qi "JetBrainsMono Nerd"; then
     echo "FluxLinux: Installing JetBrains Mono Nerd Font..."
     mkdir -p "$FONT_DIR"
-    TEMP_ZIP="/tmp/JetBrainsMono.zip"
-    NERD_FONT_URL="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
-    if wget -q -O "$TEMP_ZIP" "$NERD_FONT_URL" 2>/dev/null || curl -fL -o "$TEMP_ZIP" "$NERD_FONT_URL" 2>/dev/null; then
-        unzip -o -j "$TEMP_ZIP" "*.ttf" -d "$FONT_DIR" 2>/dev/null || unzip -o "$TEMP_ZIP" -d "$FONT_DIR" 2>/dev/null || true
-        fc-cache -f "$FONT_DIR" 2>/dev/null || true
+    # Pinned release; sha256 matches upstream SHA-256.txt (same pin as
+    # setup_customization_xfce.sh, checked 2026-10-20).
+    NERD_FONT_VERSION="v3.5.1"
+    NERD_FONT_SHA256="fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e"
+    NERD_FONT_URL="https://github.com/ryanoasis/nerd-fonts/releases/download/$NERD_FONT_VERSION/JetBrainsMono.zip"
+    _font_tmp="$(mktemp -d /tmp/flux-nerdfont.XXXXXX 2>/dev/null)" || _font_tmp=""
+    if [ -z "$_font_tmp" ]; then
+        echo "FluxLinux: WARNING: no temp dir for Nerd Font — continuing"
+    else
+        TEMP_ZIP="$_font_tmp/JetBrainsMono.zip"
+        if ! { wget -q -O "$TEMP_ZIP" "$NERD_FONT_URL" 2>/dev/null \
+            || curl -fL -o "$TEMP_ZIP" "$NERD_FONT_URL" 2>/dev/null; }; then
+            echo "FluxLinux: WARNING: Nerd Font download failed — continuing"
+        elif ! _flux_sha256_ok "$TEMP_ZIP" "$NERD_FONT_SHA256"; then
+            echo "FluxLinux: WARNING: Nerd Font sha256 mismatch — not installed"
+        elif unzip -o -j "$TEMP_ZIP" "*.ttf" -d "$FONT_DIR" 2>/dev/null; then
+            fc-cache -f "$FONT_DIR" 2>/dev/null || true
+        else
+            echo "FluxLinux: WARNING: Nerd Font unzip failed — continuing"
+        fi
+        rm -rf "$_font_tmp"
     fi
-    rm -f "$TEMP_ZIP"
 fi
 
 # XFCE settings XML
@@ -292,12 +320,33 @@ _flux_safe_rm_tree() {
     rm -rf "$_bak" 2>/dev/null || true
 }
 
+# Fetch exactly commit $3 of $1 into $2 (shallow). Pinned so a re-run
+# installs reviewed code, not whatever the default branch holds today.
 _flux_git_clone() {
-    _url="$1"; _dest="$2"; _secs="${3:-90}"
+    _url="$1"; _dest="$2"; _sha="$3"; _secs="${4:-90}"
     _flux_safe_rm_tree "$_dest"
-    mkdir -p "$(dirname "$_dest")"
-    _flux_run "$_secs" git clone --depth 1 --single-branch --quiet "$_url" "$_dest"
+    mkdir -p "$_dest" || return 1
+    if git -C "$_dest" init -q \
+        && _flux_run "$_secs" git -C "$_dest" fetch -q --depth 1 "$_url" "$_sha" \
+        && git -C "$_dest" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD \
+        && [ "$(git -C "$_dest" rev-parse HEAD 2>/dev/null)" = "$_sha" ]; then
+        git -C "$_dest" remote add origin "$_url" 2>/dev/null || true
+        return 0
+    fi
+    echo "FluxLinux: WARNING: could not fetch $_url at $_sha"
+    _flux_safe_rm_tree "$_dest"
+    return 1
 }
+
+# Pinned upstream commits — keep equal to setup_customization_xfce.sh and
+# ZshPluginSet.kt (CustomizationScriptPinsContractTest). Bump deliberately
+# after reviewing the upstream diff.
+OMZ_SHA="0650a250405af1e480b1ecf8c33bc960b9f333f5"            # ohmyzsh/ohmyzsh
+ZSH_AUTOSUGGEST_SHA="85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5" # zsh-users/zsh-autosuggestions
+ZSH_SYNTAX_HL_SHA="e6683f20e5c38d3e5447f45845d04ddda75d0f23"   # zsh-users/zsh-syntax-highlighting
+POKEMON_SHA="5802ff67520be2ff6117a0abc78a08501f6252ad"         # phoneybadger/pokemon-colorscripts
+AGNOSTERZAK_SHA="312f93f00b199d6c2506221f8366a7f216023100"     # zakaziko99/agnosterzak-ohmyzsh-theme
+AGNOSTERZAK_SHA256="b03b3de1a172097b0cf2695d705c1018b772ff4543562e624c972a9e5070dee2"
 
 # ── Oh My Zsh (prefer host pre-stage; never leave empty tree) ────────────────
 echo "FluxLinux: Installing Oh My Zsh..."
@@ -318,8 +367,8 @@ else
         echo "FluxLinux: FLUX_SKIP_OMZ set but oh-my-zsh.sh missing — guest fallback"
     fi
     if command -v git >/dev/null 2>&1; then
-        echo "FluxLinux: Shallow git clone Oh My Zsh (timeout 120s)…"
-        if _flux_git_clone "https://github.com/ohmyzsh/ohmyzsh.git" "$USER_HOME/.oh-my-zsh" 120 \
+        echo "FluxLinux: Pinned shallow fetch of Oh My Zsh (timeout 120s)…"
+        if _flux_git_clone "https://github.com/ohmyzsh/ohmyzsh.git" "$USER_HOME/.oh-my-zsh" "$OMZ_SHA" 120 \
             && [ -f "$USER_HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
             echo "FluxLinux: Oh My Zsh installed"
             OMZ_OK=1
@@ -342,7 +391,7 @@ if [ "$OMZ_OK" = "1" ]; then
         && [ ! -f "$ZSH_CUSTOM/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]; then
         if command -v git >/dev/null 2>&1; then
             _flux_git_clone "https://github.com/zsh-users/zsh-autosuggestions.git" \
-                "$ZSH_CUSTOM/plugins/zsh-autosuggestions" 60 || true
+                "$ZSH_CUSTOM/plugins/zsh-autosuggestions" "$ZSH_AUTOSUGGEST_SHA" 60 || true
         fi
     else
         echo "FluxLinux: zsh-autosuggestions already present — skip"
@@ -351,7 +400,7 @@ if [ "$OMZ_OK" = "1" ]; then
         && [ ! -f "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
         if command -v git >/dev/null 2>&1; then
             _flux_git_clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" \
-                "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" 60 || true
+                "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" "$ZSH_SYNTAX_HL_SHA" 60 || true
         fi
     else
         echo "FluxLinux: zsh-syntax-highlighting already present — skip"
@@ -359,9 +408,17 @@ if [ "$OMZ_OK" = "1" ]; then
 
     if [ ! -s "$ZSH_CUSTOM/themes/agnosterzak.zsh-theme" ]; then
         echo "FluxLinux: Installing agnosterzak theme…"
-        _flux_run 30 curl -fsSL --connect-timeout 10 --max-time 25 \
-            "https://raw.githubusercontent.com/zakaziko99/agnosterzak-ohmyzsh-theme/master/agnosterzak.zsh-theme" \
-            -o "$ZSH_CUSTOM/themes/agnosterzak.zsh-theme" 2>/dev/null || true
+        _az_url="https://raw.githubusercontent.com/zakaziko99/agnosterzak-ohmyzsh-theme/$AGNOSTERZAK_SHA/agnosterzak.zsh-theme"
+        _az_part="$ZSH_CUSTOM/themes/agnosterzak.zsh-theme.partial"
+        rm -f "$_az_part" 2>/dev/null || true
+        _flux_run 30 curl -fsSL --connect-timeout 10 --max-time 25 "$_az_url" \
+            -o "$_az_part" 2>/dev/null || true
+        if [ -s "$_az_part" ] && _flux_sha256_ok "$_az_part" "$AGNOSTERZAK_SHA256"; then
+            mv -f "$_az_part" "$ZSH_CUSTOM/themes/agnosterzak.zsh-theme"
+        else
+            echo "FluxLinux: WARNING: agnosterzak theme fetch failed or sha256 mismatch"
+            rm -f "$_az_part" 2>/dev/null || true
+        fi
     else
         echo "FluxLinux: agnosterzak theme already present — skip"
     fi
@@ -381,10 +438,34 @@ else
     echo "FluxLinux: Installing pokemon-colorscripts (optional, 60s budget)…"
     POKEMON_TEMP="/tmp/pokemon-colorscripts.$$"
     _flux_safe_rm_tree "$POKEMON_TEMP"
-    if _flux_git_clone "https://gitlab.com/phoneybadger/pokemon-colorscripts.git" "$POKEMON_TEMP" 60 \
-        && [ -f "$POKEMON_TEMP/install.sh" ]; then
-        (cd "$POKEMON_TEMP" && _flux_run 30 sh ./install.sh) 2>/dev/null \
-            || echo "FluxLinux: pokemon-colorscripts install skipped"
+    if _flux_git_clone "https://gitlab.com/phoneybadger/pokemon-colorscripts.git" "$POKEMON_TEMP" "$POKEMON_SHA" 60 \
+        && [ -d "$POKEMON_TEMP/colorscripts" ] \
+        && [ -f "$POKEMON_TEMP/pokemon-colorscripts.py" ] \
+        && [ -f "$POKEMON_TEMP/pokemon.json" ]; then
+        # Do what upstream install.sh does (copy into /usr/local/opt + symlink),
+        # without executing a fetched script as root.
+        _pk_dir="/usr/local/opt/pokemon-colorscripts"
+        _pk_new="$_pk_dir.flux-new.$$"
+        _flux_safe_rm_tree "$_pk_new"
+        if mkdir -p "$_pk_new" \
+            && cp -R "$POKEMON_TEMP/colorscripts" "$_pk_new/" \
+            && cp "$POKEMON_TEMP/pokemon-colorscripts.py" "$POKEMON_TEMP/pokemon.json" "$_pk_new/" \
+            && chmod 0755 "$_pk_new/pokemon-colorscripts.py"; then
+            _flux_safe_rm_tree "$_pk_dir"
+            mv "$_pk_new" "$_pk_dir" \
+                && mkdir -p /usr/local/bin \
+                && rm -f /usr/local/bin/pokemon-colorscripts \
+                && ln -s "$_pk_dir/pokemon-colorscripts.py" /usr/local/bin/pokemon-colorscripts \
+                || echo "FluxLinux: WARNING: pokemon-colorscripts link failed"
+        else
+            echo "FluxLinux: WARNING: pokemon-colorscripts copy failed"
+        fi
+        _flux_safe_rm_tree "$_pk_new"
+        if command -v pokemon-colorscripts >/dev/null 2>&1; then
+            echo "FluxLinux: pokemon-colorscripts installed"
+        else
+            echo "FluxLinux: WARNING: pokemon-colorscripts not on PATH after install"
+        fi
     else
         echo "FluxLinux: pokemon-colorscripts skipped (clone timeout/fail)"
     fi
