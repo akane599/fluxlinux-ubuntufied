@@ -3,7 +3,12 @@
     <string name="accessibility_service_description">FluxLinux Keyboard Toggle allows you to toggle the keyboard in Termux:X11 using a floating button.</string>
 
     <!-- Terminal -->
-    <string name="terminal_new_tab">New Ubuntu tab</string>
+    <string name="terminal_drawer_title">Sessions</string>
+    <string name="terminal_drawer_empty">No open sessions</string>
+    <string name="terminal_open_drawer">Sessions and options</string>
+    <string name="terminal_new_session">New Ubuntu session</string>
+    <string name="terminal_extra_keys">Extra keys</string>
+    <string name="terminal_back_home">Back to home</string>
     <string name="terminal_more_shells">More shells</string>
     <string name="terminal_shell_ubuntu_root">Ubuntu root shell</string>
     <string name="terminal_shell_ubuntu_chroot">Ubuntu chroot</string>
