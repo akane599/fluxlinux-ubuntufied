@@ -34,9 +34,10 @@ class BusyBoxPathsTest {
 
     @Test
     fun constants_exact() {
-        assertEquals("/data/local/tmp/flux_busybox", BusyBoxPaths.PINNED)
+        assertEquals("/data/local/tmp/flux_busybox", BusyBoxPaths.LEGACY_PINNED)
+        assertEquals("/data/local/tmp/fluxlinux_resolve_bb.sh", BusyBoxPaths.LEGACY_RESOLVER)
         assertEquals("scripts/chroot/resolve_bb.sh", BusyBoxPaths.RESOLVER_ASSET)
-        assertEquals("/data/local/tmp/fluxlinux_resolve_bb.sh", BusyBoxPaths.RESOLVER_ON_DEVICE)
+        assertEquals("${ChrootPaths.ROOT_STAGE_DIR}/resolve_bb.sh", BusyBoxPaths.RESOLVER_ON_DEVICE)
     }
 
     @Test

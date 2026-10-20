@@ -2,6 +2,8 @@
 # Shared BusyBox resolver for FluxLinux chroot.
 # Magisk / KernelSU / APatch built-in busybox is enough — NDK module not required.
 # Safe to source under set -u. No set -e.
+# M14: BusyBox is used in place from root-owned locations. Never pick or create a copy in a
+# shell-writable dir (/data/local/tmp is 0771 shell:shell — adb/Shizuku could swap it).
 
 bb_has() {
   "$1" --list 2>/dev/null | tr ' \t' '\n' | grep -qx "$2"
@@ -9,7 +11,7 @@ bb_has() {
 
 bb_ok() {
   [ -n "${1:-}" ] && [ -x "$1" ] || return 1
-  case "$1" in *com.termux*|*fluxlinux*|*nativecode*) return 1 ;; esac
+  case "$1" in *com.termux*|*fluxlinux*|*nativecode*|/data/local/tmp/*) return 1 ;; esac
   bb_has "$1" chroot && bb_has "$1" mount
 }
 
@@ -17,8 +19,6 @@ resolve_bb() {
   BB=""
   if [ -n "${FLUX_BB:-}" ] && bb_ok "$FLUX_BB"; then
     BB="$FLUX_BB"
-  elif bb_ok /data/local/tmp/flux_busybox; then
-    BB=/data/local/tmp/flux_busybox
   else
     for path in \
       /data/adb/ksu/bin/busybox \
@@ -53,11 +53,5 @@ resolve_bb() {
     fi
   fi
   [ -n "$BB" ] || return 1
-  if [ "$BB" != /data/local/tmp/flux_busybox ]; then
-    cp -f "$BB" /data/local/tmp/flux_busybox 2>/dev/null \
-      && chmod 755 /data/local/tmp/flux_busybox 2>/dev/null \
-      && bb_ok /data/local/tmp/flux_busybox \
-      && BB=/data/local/tmp/flux_busybox || true
-  fi
   return 0
 }

@@ -30,9 +30,6 @@ object RootShell {
     // Lazy so JVM unit tests never touch Looper unless a callback path runs.
     private val mainHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
 
-    /** Temp dir where asset scripts are staged before execution. */
-    private const val SCRIPTS_TMP = "/data/local/tmp/fluxlinux_scripts"
-
     /**
      * Working su argv prefix, e.g. `["/system/bin/su","-c"]` or `["/system/bin/sh","-c"]` with
      * embedded su. Discovered once via [resolveSuInvocation]; null if root unavailable.
@@ -385,7 +382,7 @@ object RootShell {
     }
 
     /**
-     * Copy an asset to /data/local/tmp/fluxlinux_scripts/, make it executable,
+     * Copy an asset to the app-private `staged_scripts/` dir ([stageAsset]),
      * then run it as root.
      */
     fun executeScriptAsset(
@@ -501,15 +498,21 @@ object RootShell {
     /**
      * Resolve a root-capable BusyBox via the staged shell resolver (su only).
      * Does not stage the sidecar — callers must [ensureBusyBoxResolver] first.
+     * The resolver is only sourced after its SHA-256 matches the APK asset (M14).
      * Background thread only. Caches the first success.
      */
     fun resolveBusyBox(): String? {
         cachedBusyBoxPath?.let { return it }
+        val sha = expectedSha(BusyBoxPaths.RESOLVER_ASSET) ?: run {
+            Log.w(TAG, "resolveBusyBox: resolver hash unknown (ensureBusyBoxResolver not run)")
+            return null
+        }
         val pkg = com.ivarna.fluxlinux.BuildConfig.APPLICATION_ID
+        val r = BusyBoxPaths.RESOLVER_ON_DEVICE
         val probe =
-            "export FLUX_PACKAGE='$pkg'; " +
-                "if [ -f ${BusyBoxPaths.RESOLVER_ON_DEVICE} ]; then " +
-                ". ${BusyBoxPaths.RESOLVER_ON_DEVICE}; " +
+            "export FLUX_PACKAGE='$pkg'; ${SHA_FN}; " +
+                "if ${shaMatches(r, sha)}; then " +
+                ". '$r'; " +
                 "resolve_bb && printf '%s\\n' \"\$BB\" && exit 0; " +
                 "fi; exit 1"
         val result = captureResult(probe, timeoutMs = 8_000L)
@@ -517,7 +520,7 @@ object RootShell {
         val path = result.stdout.lineSequence()
             .map { it.trim() }
             .lastOrNull { it.startsWith("/") }
-        if (path.isNullOrEmpty()) return null
+        if (path.isNullOrEmpty() || path.startsWith(LEGACY_SHELL_DIR)) return null
         cachedBusyBoxPath = path
         return path
     }
@@ -549,42 +552,11 @@ object RootShell {
     }
 
     /**
-     * Stage [BusyBoxPaths.RESOLVER_ASSET] to [BusyBoxPaths.RESOLVER_ON_DEVICE]
-     * using the same su cp/chmod pattern as [ensureChrootHelper].
+     * Stage [BusyBoxPaths.RESOLVER_ASSET] to [BusyBoxPaths.RESOLVER_ON_DEVICE] (root-only
+     * [ChrootPaths.ROOT_STAGE_DIR]) and verify its SHA-256 against the APK asset (M14).
      */
-    fun ensureBusyBoxResolver(ctx: Context): Boolean {
-        return try {
-            val staged = stageAsset(ctx, BusyBoxPaths.RESOLVER_ASSET)
-                ?: run {
-                    val tmp = File(ctx.cacheDir, "resolve_bb.sh")
-                    ctx.assets.open(BusyBoxPaths.RESOLVER_ASSET).use { input ->
-                        tmp.outputStream().use { input.copyTo(it) }
-                    }
-                    tmp.absolutePath
-                }
-            var code = executeSync(
-                "cp -f '$staged' ${BusyBoxPaths.RESOLVER_ON_DEVICE} && " +
-                    "chmod 755 ${BusyBoxPaths.RESOLVER_ON_DEVICE}"
-            )
-            if (code != 0) {
-                val bytes = ctx.assets.open(BusyBoxPaths.RESOLVER_ASSET).use { it.readBytes() }
-                val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                code = executeSync(
-                    "echo $b64 | base64 -d > ${BusyBoxPaths.RESOLVER_ON_DEVICE} && " +
-                        "chmod 755 ${BusyBoxPaths.RESOLVER_ON_DEVICE}"
-                )
-            }
-            if (code != 0) {
-                Log.w(TAG, "ensureBusyBoxResolver root stage failed exit=$code")
-                return false
-            }
-            Log.i(TAG, "ensureBusyBoxResolver staged ${BusyBoxPaths.RESOLVER_ON_DEVICE}")
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "ensureBusyBoxResolver failed: ${e.message}")
-            false
-        }
-    }
+    fun ensureBusyBoxResolver(ctx: Context): Boolean =
+        stageVerified(ctx, BusyBoxPaths.RESOLVER_ASSET, BusyBoxPaths.RESOLVER_ON_DEVICE)
 
     /**
      * Single shell snippet that runs [cmd] as root — for TerminalSession / `sh -c` only.
@@ -607,8 +579,9 @@ object RootShell {
     }
 
     /**
-     * Stage [ChrootPaths.CHROOT_HELPER] from assets when missing or version stamp
-     * mismatches. Uses [RootShell] su discovery (not hard-coded `/system/bin/su`).
+     * Stage [ChrootPaths.CHROOT_HELPER] (root-only [ChrootPaths.ROOT_STAGE_DIR]) from assets
+     * when missing or when its SHA-256 differs from the APK asset (M14). Uses [RootShell]
+     * su discovery (not hard-coded `/system/bin/su`).
      * Safe to call from a background thread; may briefly invoke su.
      *
      * Lives here (not in ChrootCommandBuilder) so RootShell stays su-only and the
@@ -619,47 +592,138 @@ object RootShell {
         if (chrootHelperReady.get()) return true
         return try {
             val bbOk = ensureBusyBoxResolver(ctx)
-            val existing = capture(
-                "head -n 2 ${ChrootPaths.CHROOT_HELPER} 2>/dev/null || true",
-                timeoutMs = 4_000L
-            )
-            if (existing.contains(ChrootPaths.CHROOT_HELPER_VERSION)) {
-                chrootHelperReady.set(bbOk)
-                return true
-            }
-
-            val staged = stageAsset(ctx, ChrootPaths.CHROOT_HELPER_ASSET)
-                ?: run {
-                    val tmp = File(ctx.cacheDir, "fluxlinux_chroot.sh")
-                    ctx.assets.open(ChrootPaths.CHROOT_HELPER_ASSET).use { input ->
-                        tmp.outputStream().use { input.copyTo(it) }
-                    }
-                    tmp.absolutePath
-                }
-
-            var code = executeSync(
-                "cp -f '$staged' ${ChrootPaths.CHROOT_HELPER} && " +
-                    "chmod 755 ${ChrootPaths.CHROOT_HELPER} && " +
-                    "grep -q '${ChrootPaths.CHROOT_HELPER_VERSION}' ${ChrootPaths.CHROOT_HELPER}"
-            )
-            if (code != 0) {
-                // Last resort: base64 stream (app cannot write /data/local/tmp)
-                val bytes = ctx.assets.open(ChrootPaths.CHROOT_HELPER_ASSET).use { it.readBytes() }
-                val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                code = executeSync(
-                    "echo $b64 | base64 -d > ${ChrootPaths.CHROOT_HELPER} && " +
-                        "chmod 755 ${ChrootPaths.CHROOT_HELPER}"
-                )
-            }
-            if (code != 0) {
-                Log.w(TAG, "ensureChrootHelper root stage failed exit=$code")
+            val ok = stageVerified(ctx, ChrootPaths.CHROOT_HELPER_ASSET, ChrootPaths.CHROOT_HELPER)
+            if (!ok) {
+                Log.w(TAG, "ensureChrootHelper: stage/verify failed")
                 return false
             }
-            Log.i(TAG, "ensureChrootHelper staged ${ChrootPaths.CHROOT_HELPER}")
             chrootHelperReady.set(bbOk)
             true
         } catch (e: Exception) {
             Log.w(TAG, "ensureChrootHelper failed: ${e.message}")
+            false
+        }
+    }
+
+    // ── M14: root-only staging with SHA-256 verification ────────────────────
+
+    /** Old shell-writable staging dir (uid 2000 owns it): never execute anything from it. */
+    private const val LEGACY_SHELL_DIR = "/data/local/tmp/"
+
+    /** Expected SHA-256 per asset, computed from the APK (the signed APK is the trust root). */
+    private val assetShaCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    @Volatile
+    private var appContext: Context? = null
+
+    internal fun sha256Hex(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+
+    private fun assetSha256(ctx: Context, asset: String): String? {
+        appContext = ctx.applicationContext ?: ctx
+        assetShaCache[asset]?.let { return it }
+        return try {
+            val sha = sha256Hex(ctx.assets.open(asset).use { it.readBytes() })
+            assetShaCache[asset] = sha
+            sha
+        } catch (e: Exception) {
+            Log.w(TAG, "assetSha256 $asset failed: ${e.message}")
+            null
+        }
+    }
+
+    /** Test-only: seed an asset's expected hash (JVM tests have no AssetManager). */
+    internal fun seedAssetShaForTest(asset: String, sha: String?) {
+        if (sha == null) assetShaCache.remove(asset) else assetShaCache[asset] = sha
+    }
+
+    private fun expectedSha(asset: String): String? =
+        assetShaCache[asset] ?: appContext?.let { assetSha256(it, asset) }
+
+    /**
+     * `_fsha FILE` prints the file's SHA-256 (toybox, then root-manager BusyBox fallbacks;
+     * never a BusyBox from a shell-writable dir).
+     */
+    internal const val SHA_FN =
+        "_fsha() { for _t in sha256sum 'toybox sha256sum' '/data/adb/magisk/busybox sha256sum' " +
+            "'/data/adb/ksu/bin/busybox sha256sum' '/data/adb/ap/bin/busybox sha256sum'; do " +
+            "_o=\$(\$_t \"\$1\" 2>/dev/null) && [ -n \"\$_o\" ] && { echo \"\${_o%% *}\"; return 0; }; " +
+            "done; return 1; }"
+
+    /** Shell condition: [file] exists, is not a symlink, and hashes to [sha]. Needs [SHA_FN]. */
+    internal fun shaMatches(file: String, sha: String): String =
+        "{ [ -f '$file' ] && [ ! -L '$file' ] && [ \"\$(_fsha '$file')\" = '$sha' ]; }"
+
+    /**
+     * Create [ChrootPaths.ROOT_STAGE_DIR] (and its parent) as root:root 0700 and refuse
+     * symlinks. Fails (non-zero) when not run as root, so nothing is staged in a dir another
+     * uid could write.
+     */
+    internal fun stageDirSnippet(
+        parent: String = ChrootPaths.ROOT_STAGE_PARENT,
+        dir: String = ChrootPaths.ROOT_STAGE_DIR,
+    ): String =
+        "( umask 077; mkdir -p '$dir' ) && [ ! -L '$parent' ] && [ ! -L '$dir' ] && " +
+            "chown 0:0 '$parent' '$dir' && chmod 0700 '$parent' '$dir'"
+
+    /**
+     * Write [dest] from a source file ([srcWord], an already-quoted shell word) or from
+     * [b64] via a same-dir temp file, verify the temp's SHA-256 and only then rename it in
+     * place (a running `sh helper` never sees a half-written file). Needs [SHA_FN].
+     */
+    internal fun installSnippet(dest: String, sha: String, srcWord: String? = null, b64: String? = null): String {
+        val write = when {
+            srcWord != null -> "cp -f $srcWord \"\$_T\""
+            b64 != null -> "echo '$b64' | base64 -d > \"\$_T\""
+            else -> error("installSnippet needs srcWord or b64")
+        }
+        return "{ _T='$dest.stage.'\$\$; rm -f \"\$_T\"; $write && chmod 0600 \"\$_T\" && " +
+            "[ \"\$(_fsha \"\$_T\")\" = '$sha' ] && mv -f \"\$_T\" '$dest' || " +
+            "{ rm -f \"\$_T\"; false; }; }"
+    }
+
+    /** Pre-M14 copies in /data/local/tmp; removed (never executed) once the new stage works. */
+    internal val LEGACY_ARTIFACTS: List<String> = listOf(
+        ChrootPaths.LEGACY_CHROOT_HELPER,
+        BusyBoxPaths.LEGACY_RESOLVER,
+        BusyBoxPaths.LEGACY_PINNED,
+    )
+
+    internal fun buildStageCommand(dest: String, sha: String, srcWord: String? = null, b64: String? = null): String =
+        "$SHA_FN; ${stageDirSnippet()} && ${installSnippet(dest, sha, srcWord, b64)} && " +
+            "{ rm -f ${LEGACY_ARTIFACTS.joinToString(" ") { "'$it'" }} 2>/dev/null; true; }"
+
+    /**
+     * Ensure [dest] (inside the root-only stage dir) holds exactly [asset]: no-op when the
+     * hash already matches, else copy from the app-private staged copy, else stream base64.
+     */
+    private fun stageVerified(ctx: Context, asset: String, dest: String): Boolean {
+        return try {
+            val sha = assetSha256(ctx, asset) ?: return false
+            if (captureResult("$SHA_FN; ${shaMatches(dest, sha)}", timeoutMs = 8_000L).exitCode == 0) {
+                return true
+            }
+            val staged = stageAsset(ctx, asset)
+            var code = if (staged != null) {
+                executeSync(buildStageCommand(dest, sha, srcWord = "'${staged.replace("'", "'\\''")}'"))
+            } else {
+                -1
+            }
+            if (code != 0) {
+                // su may be unable to read app-private storage: stream the bytes instead.
+                val bytes = ctx.assets.open(asset).use { it.readBytes() }
+                val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                code = executeSync(buildStageCommand(dest, sha, b64 = b64))
+            }
+            if (code != 0) {
+                Log.w(TAG, "stageVerified $asset -> $dest failed exit=$code")
+                return false
+            }
+            Log.i(TAG, "stageVerified $asset -> $dest")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "stageVerified $asset failed: ${e.message}")
             false
         }
     }
@@ -713,39 +777,38 @@ object RootShell {
     }
 
     /**
-     * Self-heal: if helper missing under /data/local/tmp, copy from app home/staged.
-     * Then `sh helper b64 …`.
+     * `sh helper b64 …` from the root-only stage, only after the helper's SHA-256 matches the
+     * APK asset (M14). Self-heal: when missing/mismatched, re-stage from the app-private copies
+     * (verified before the rename). Without a known hash it refuses to run (exit 127).
      */
-    private fun buildChrootHelperCmd(user: String, b64: String, chrootPath: String): String {
+    internal fun buildChrootHelperCmd(user: String, b64: String, chrootPath: String): String {
         val helper = ChrootPaths.CHROOT_HELPER
-        val resolver = BusyBoxPaths.RESOLVER_ON_DEVICE
         val pkg = com.ivarna.fluxlinux.BuildConfig.APPLICATION_ID
         val prefix = "/data/data/$pkg/files/usr"
         val hostTmp = "$prefix/tmp"
         val bb = cachedBusyBox()
         val fluxBb = if (!bb.isNullOrEmpty()) "export FLUX_BB='$bb'; " else ""
+        val sha = expectedSha(ChrootPaths.CHROOT_HELPER_ASSET)
         // Always pin package paths so zenithblue (and future flavors) do not fall
         // back to the script's ivarna defaults when FLUX_* is unset.
         //
         // Android /system/bin/sh rejects `VAR=val if …; then` (assignment before
         // compound command → "syntax error: unexpected 'then'"). Use export +
         // semicolons so the if-list is a normal compound statement.
-        return "${fluxBb}export FLUX_PACKAGE='$pkg' FLUX_PREFIX='$prefix' " +
-            "FLUX_HOST_TMP='$hostTmp' FLUX_CHROOT='$chrootPath'; " +
-            "if [ ! -f $helper ]; then " +
+        val env = "${fluxBb}export FLUX_PACKAGE='$pkg' FLUX_PREFIX='$prefix' " +
+            "FLUX_HOST_TMP='$hostTmp' FLUX_CHROOT='$chrootPath'; "
+        if (sha == null) {
+            return env + "echo '[RootShell] helper hash unknown — open a chroot session once to stage $helper' >&2; exit 127"
+        }
+        return env + "$SHA_FN; " +
+            "if ! ${shaMatches(helper, sha)}; then ${stageDirSnippet()} && " +
             "for _s in " +
-            "/data/data/$pkg/files/home/fluxlinux_chroot.sh " +
-            "/data/data/$pkg/files/staged_scripts/fluxlinux_chroot.sh; do " +
-            "[ -f \"\$_s\" ] && cp -f \"\$_s\" $helper && chmod 755 $helper && break; " +
+            "/data/data/$pkg/files/staged_scripts/fluxlinux_chroot.sh " +
+            "/data/data/$pkg/files/home/fluxlinux_chroot.sh; do " +
+            "[ -f \"\$_s\" ] && ${installSnippet(helper, sha, srcWord = "\"\$_s\"")} && break; " +
             "done; fi; " +
-            "if [ ! -f $resolver ]; then " +
-            "for _s in " +
-            "/data/data/$pkg/files/home/resolve_bb.sh " +
-            "/data/data/$pkg/files/staged_scripts/resolve_bb.sh; do " +
-            "[ -f \"\$_s\" ] && cp -f \"\$_s\" $resolver && chmod 755 $resolver && break; " +
-            "done; fi; " +
-            "if [ -f $helper ]; then sh $helper b64 --user $user -- $b64; " +
-            "else echo '[RootShell] missing $helper — reinstall chroot or open a chroot session once' >&2; exit 127; fi"
+            "if ${shaMatches(helper, sha)}; then sh '$helper' b64 --user $user -- $b64; " +
+            "else echo '[RootShell] $helper missing or failed SHA-256 check — reinstall chroot or open a chroot session once' >&2; exit 127; fi"
     }
 
     // ─────────────────────────────────────────────────────────────────────────
