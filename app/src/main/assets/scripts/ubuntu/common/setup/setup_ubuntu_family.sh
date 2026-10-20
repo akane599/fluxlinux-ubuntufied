@@ -80,6 +80,16 @@ if ! apt-get update; then
     }
 fi
 
+# GNU coreutils before anything else (proot and chroot alike, one tested path).
+# Under PRoot --link2symlink the uutils multicall's hard links become /.l2s links and
+# Ubuntu's uutils refuses every utility (argv[0] must match the binary; uutils #10135).
+# gnu-coreutils ships one real file per utility, so later upgrades stay safe. Re-running
+# setup switches installs that broke: the app has already repointed /usr/bin to gnu*.
+_flux_log "Switching to GNU coreutils (coreutils-from-gnu)..."
+if ! apt-get install -y --allow-remove-essential coreutils-from-gnu; then
+    _flux_log "WARNING: coreutils-from-gnu install failed — uutils may break after apt upgrade"
+fi
+
 _flux_log "Installing base packages..."
 apt-get install -y --no-install-recommends \
     bash sudo passwd adduser ca-certificates curl wget unzip tar xz-utils \
