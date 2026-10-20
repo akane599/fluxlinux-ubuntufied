@@ -56,7 +56,7 @@ class StopChrootInUseTest {
     private fun functions(name: String): String {
         val src = script(name).readText()
         return src.substringAfter("# awk from PATH, else the root BusyBox applet.")
-            .substringBefore("# Shared with fluxlinux_chroot.sh ensure_mounts")
+            .substringBefore("# --- mount lock (M16)")
     }
 
     private fun toolsDir(without: Set<String>): File {
