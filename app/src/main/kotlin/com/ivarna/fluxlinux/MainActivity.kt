@@ -195,15 +195,25 @@ class MainActivity : ComponentActivity() {
                      StateManager.triggerRefresh()
                  } else {
                      // Legacy / Standalone handling
-                     if (scriptName.startsWith("distro_install_")) {
-                         val distroId = scriptName.removePrefix("distro_install_")
-                         StateManager.setDistroInstalled(this, distroId, true)
-                         android.widget.Toast.makeText(this, "$distroId Installed! ✅", android.widget.Toast.LENGTH_LONG).show()
-                     } else if (scriptName.startsWith("distro_uninstall_")) {
-                         val distroId = scriptName.removePrefix("distro_uninstall_")
+                     // The callback is unauthenticated: only act on a known distro id.
+                     val knownIds = com.ivarna.fluxlinux.core.data.DistroRepository.supportedDistros.map { it.id }
+                     val installedId = com.ivarna.fluxlinux.core.service.LaunchTargets.callbackDistroId(
+                         scriptName, "distro_install_", knownIds,
+                     )
+                     val uninstalledId = com.ivarna.fluxlinux.core.service.LaunchTargets.callbackDistroId(
+                         scriptName, "distro_uninstall_", knownIds,
+                     )
+                     if (installedId != null) {
+                         StateManager.setDistroInstalled(this, installedId, true)
+                         android.widget.Toast.makeText(this, "$installedId Installed! ✅", android.widget.Toast.LENGTH_LONG).show()
+                     } else if (uninstalledId != null) {
                          com.ivarna.fluxlinux.core.terminal.TerminalLauncher
-                             .refreshInstalledAfterUninstall(this, distroId)
-                         android.widget.Toast.makeText(this, "$distroId Uninstalled! 🗑️", android.widget.Toast.LENGTH_LONG).show()
+                             .refreshInstalledAfterUninstall(this, uninstalledId)
+                         android.widget.Toast.makeText(this, "$uninstalledId Uninstalled! 🗑️", android.widget.Toast.LENGTH_LONG).show()
+                     } else if (scriptName.startsWith("distro_install_") ||
+                         scriptName.startsWith("distro_uninstall_")
+                     ) {
+                         android.util.Log.w("FluxLinux", "Ignored callback for unknown distro: $scriptName")
                      } else {
                          // Generic Script
                          StateManager.setScriptStatus(this, scriptName, true)
@@ -217,7 +227,9 @@ class MainActivity : ComponentActivity() {
             } else {
                  // Component failed
                  android.widget.Toast.makeText(this, "Task '$scriptName' failed! ❌", android.widget.Toast.LENGTH_LONG).show()
-                 com.ivarna.fluxlinux.core.utils.InstallationQueueManager.clear() // Stop queue on failure
+                 // Stop the queue only for the task actually running, not on any failure link.
+                 val queue = com.ivarna.fluxlinux.core.utils.InstallationQueueManager
+                 if (queue.currentTask?.id == scriptName) queue.clear()
             }
         }
     }
