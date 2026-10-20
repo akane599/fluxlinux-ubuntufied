@@ -66,15 +66,19 @@ class AudioSettingsContractTest {
     }
 
     @Test
-    fun supervisor_tcpOkUsesEnvI() {
+    fun supervisor_unixSocketUsesEnvINeverTcp() {
         val src = repoFile("src/main/assets/scripts/host/start_pulse_host.sh").readText()
         assertTrue(src.startsWith("#!/bin/bash"))
-        assertTrue(src.contains("pa_env PULSE_SERVER=tcp:127.0.0.1"))
+        assertTrue(src.contains("PULSE_SOCK=\"\$PREFIX/tmp/pulse-native\""))
+        assertTrue(src.contains("pa_env PULSE_SERVER=\"unix:\$PULSE_SOCK\""))
+        assertTrue(src.contains("load-module module-native-protocol-unix"))
         assertTrue(src.contains("first_pulse_pid"))
-        assertTrue(src.contains("tcp_ours_loopback"))
-        assertTrue(src.contains("tcp_foreign_uid"))
-        assertTrue(src.contains("tcp_bound_localhost_only || ! tcp_ok"))
-        assertFalse(src.contains("PULSE_SERVER=tcp:127.0.0.1 run_pactl"))
+        assertTrue(src.contains("unload_tcp_modules"))
+        assertTrue(src.contains("migrate_proot_guests"))
+        // M17: no anonymous loopback TCP listener (any app could connect or squat 4713).
+        assertFalse(src.contains("load-module module-native-protocol-tcp"))
+        assertFalse(src.contains("auth-ip-acl"))
+        assertFalse(src.contains("PULSE_SERVER=tcp:127.0.0.1"))
         assertTrue(src.contains("chmod 755"))
         assertTrue(src.contains("libsoxr.so"))
         assertTrue(src.contains("PD_PULSEAUDIO_BIN"))
@@ -97,6 +101,12 @@ class AudioSettingsContractTest {
         assertTrue(common.contains("pulse client already present"))
         assertTrue(common.contains("_flux_sed_i"))
         assertTrue(common.contains("_flux_guest_pactl"))
+        assertFalse(common.contains("tcp:127.0.0.1"))
+        assertTrue(
+            common.contains(
+                "FLUX_PULSE_SERVERS=\"unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native\""
+            )
+        )
         assertTrue(common.contains("/usr/bin/pactl /usr/sbin/pactl /bin/pactl"))
         assertFalse(
             common.contains(

@@ -50,10 +50,14 @@ class GuestShellScriptTest {
     fun familyRerunKeepsChosenGpuMode() = runNamed("gpu_mode_default_test.sh")
 
     @Test
+    fun pulseGuestsUseUnixSocketNeverTcp() = runNamed("pulse_unix_socket_test.sh")
+
+    @Test
     fun everyShellTestIsWiredHere() {
         val wired = setOf(
             "xfwm4_no_compositing_test.sh",
             "gpu_mode_default_test.sh",
+            "pulse_unix_socket_test.sh",
         )
         val present = repoDir("src/test/shell").listFiles { f -> f.name.endsWith("_test.sh") }
             .orEmpty().map { it.name }.toSet()

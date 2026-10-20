@@ -22,9 +22,10 @@ class ProotCommandBuilderTest {
     }
 
     @Test
-    fun guestLoginEnv_setsPulseTcpLocalhost() {
+    fun guestLoginEnv_setsPulseUnixSocketInSharedTmp() {
         val env = ProotCommandBuilder.guestLoginEnv("flux")
-        assertTrue(env.contains("PULSE_SERVER=tcp:127.0.0.1"))
+        assertTrue(env.contains("PULSE_SERVER=unix:/tmp/pulse-native"))
+        assertTrue(!env.contains("tcp:127.0.0.1"))
         assertTrue(env.startsWith("env -i "))
         assertTrue(!env.contains("LD_LIBRARY_PATH"))
     }
@@ -57,7 +58,7 @@ class ProotCommandBuilderTest {
         assertTrue(!joined.contains("login debian"))
         assertTrue(joined.contains("env -i"))
         assertTrue(joined.contains("TMPDIR=/tmp"))
-        assertTrue(joined.contains("PULSE_SERVER=tcp:127.0.0.1"))
+        assertTrue(joined.contains("PULSE_SERVER=unix:/tmp/pulse-native"))
         assertTrue(joined.contains("LANG=C"))
         assertTrue(!joined.contains("LC_ALL=en_US.UTF-8"))
         assertTrue(!joined.contains("LANG=en_US.UTF-8"))

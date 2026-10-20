@@ -1,7 +1,10 @@
 #!/bin/bash
 # start_pulse_host.sh — SSOT host PulseAudio supervisor (app uid only).
-# Guests are clients on PULSE_SERVER=tcp:127.0.0.1. Never start as root or
-# --system. Exit 0 even if audio fails so desktop start is not blocked.
+# Guests are clients of a unix socket in the app-private shared tmp
+# ($PREFIX/tmp/pulse-native = guest /tmp/pulse-native under proot --shared-tmp,
+# /mnt/host-tmp/pulse-native in chroot). No TCP listener: 127.0.0.1:4713 is
+# reachable (and squattable) by every app. Never start as root or --system.
+# Exit 0 even if audio fails so desktop start is not blocked.
 # Invoked via libbash; shebang is a fallback for a raw exec.
 
 PKG="${TERMUX_APP__PACKAGE_NAME:-com.ivarna.fluxlinux}"
@@ -69,7 +72,7 @@ export PULSE_RUNTIME_PATH="${HOME}/.pulse"
 export XDG_RUNTIME_DIR="${HOME}/.pulse-runtime"
 # A set PULSE_SERVER makes pulseaudio refuse to spawn a daemon (client-only).
 unset PULSE_SERVER
-mkdir -p "$PULSE_RUNTIME_PATH" "$XDG_RUNTIME_DIR" "$TMPDIR" "$HOME/.config/pulse" 2>/dev/null || true
+mkdir -p "$PULSE_RUNTIME_PATH" "$XDG_RUNTIME_DIR" "$TMPDIR" "$PREFIX/tmp" "$HOME/.config/pulse" 2>/dev/null || true
 chmod 700 "$PULSE_RUNTIME_PATH" "$XDG_RUNTIME_DIR" 2>/dev/null || true
 # pactl autospawn creates a 20s-idle daemon. Host clients must never do that.
 if [ -f "$HOME/.config/pulse/client.conf" ]; then
@@ -114,10 +117,15 @@ done
 _ver=$(run_pa --version 2>&1) || \
   audio_fail "pulseaudio cannot exec (${_ver:-missing runtime libs})"
 
+# Unix socket guests use. $PREFIX/tmp is the shared tmp both proot
+# (--shared-tmp → /tmp) and chroot (/mnt/host-tmp bind) guests already see;
+# it lives under the app-private data dir, so other apps cannot connect.
+PULSE_SOCK="$PREFIX/tmp/pulse-native"
+
 # Must pass PULSE_SERVER inside env -i. A prefix assignment is discarded.
 # Command is /system/bin/sh (no `=`). $PACTL is $0 of that sh, never env COMMAND.
-tcp_ok() {
-  pa_env PULSE_SERVER=tcp:127.0.0.1 /system/bin/sh -c 'bin="$1"; shift; exec "$bin" "$@"' x "$PACTL" info >/dev/null 2>&1
+sock_ok() {
+  pa_env PULSE_SERVER="unix:$PULSE_SOCK" /system/bin/sh -c 'bin="$1"; shift; exec "$bin" "$@"' x "$PACTL" info >/dev/null 2>&1
 }
 
 sink_name() {
@@ -129,41 +137,53 @@ is_real_sink() {
   [ -n "$_s" ] && [ "$_s" != "auto_null" ] && [ "$_s" != "null" ]
 }
 
-# 4713 = 0x1269. 127.0.0.1 = 0100007F; 0.0.0.0 = 00000000.
-# After uninstall/reinstall Android assigns a new app uid. A leftover Pulse
-# from the old uid can keep 127.0.0.1:4713 — that is not *our* TCP.
-tcp_our_uid() { id -u; }
-
-tcp_wildcard() {
-  [ -r /proc/net/tcp ] && awk '$2 == "00000000:1269" && $4 == "0A" { found=1 } END { exit !found }' /proc/net/tcp
+# Our guest socket module (the daemon's own runtime-dir unix module is separate).
+# Suffix match: 99-fluxlinux.pa and this script may spell the prefix differently
+# (/data/data vs /data/user/0); sock_ok proves our path reaches it.
+our_sock_module() {
+  run_pactl list short modules 2>/dev/null \
+    | grep 'module-native-protocol-unix' | grep -q 'socket=[^[:space:]]*/tmp/pulse-native'
 }
 
-tcp_ours_loopback() {
-  [ -r /proc/net/tcp ] || return 1
-  awk -v u="$(tcp_our_uid)" \
-    '$2 == "0100007F:1269" && $4 == "0A" && $8 == u { found=1 } END { exit !found }' \
-    /proc/net/tcp
+# Any module-native-protocol-tcp (older FluxLinux loaded an anonymous one on
+# 127.0.0.1:4713). Never keep it: any app could record or load modules.
+tcp_module_ids() {
+  run_pactl list short modules 2>/dev/null | awk '$2 == "module-native-protocol-tcp" {print $1}'
 }
 
-tcp_foreign_uid() {
-  [ -r /proc/net/tcp ] || return 1
-  awk -v u="$(tcp_our_uid)" \
-    '$2 ~ /:1269$/ && $4 == "0A" && $8 != u { print $8; exit }' \
-    /proc/net/tcp
+unload_tcp_modules() {
+  for _idx in $(tcp_module_ids); do
+    run_pactl unload-module "$_idx" >/dev/null 2>&1 || true
+    echo "FluxLinux: [AUDIO] unloaded TCP module #$_idx"
+  done
 }
 
-our_tcp_module() {
-  run_pactl list short modules 2>/dev/null | grep -q module-native-protocol-tcp
+# Existing proot guests were configured for tcp:127.0.0.1. Rewrite only those
+# exact FluxLinux-written lines to the socket list (proot path first, chroot
+# path second; libpulse tries each in turn). Regular files only, never links.
+GUEST_PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native"
+migrate_guest_file() {
+  _f=$1
+  [ -f "$_f" ] && [ ! -L "$_f" ] || return 0
+  grep -q 'tcp:127\.0\.0\.1' "$_f" 2>/dev/null || return 0
+  sed -e "s#^export PULSE_SERVER=tcp:127\.0\.0\.1\$#export PULSE_SERVER=\"$GUEST_PULSE_SERVER\"#" \
+      -e "s#^PULSE_SERVER=tcp:127\.0\.0\.1\$#PULSE_SERVER=\"$GUEST_PULSE_SERVER\"#" \
+      -e "s#^default-server = tcp:127\.0\.0\.1\$#default-server = $GUEST_PULSE_SERVER#" \
+      "$_f" > "$_f.flux-tmp" 2>/dev/null \
+    && cat "$_f.flux-tmp" > "$_f" \
+    && echo "FluxLinux: [AUDIO] migrated ${_f#"$PREFIX"/} to unix socket"
+  rm -f "$_f.flux-tmp"
 }
-
-tcp_bound_localhost_only() {
-  our_tcp_module || return 1
-  if [ -r /proc/net/tcp ]; then
-    tcp_wildcard && return 1
-    tcp_ours_loopback || return 1
-    return 0
-  fi
-  tcp_ok
+migrate_proot_guests() {
+  for _rootfs in "$PREFIX"/var/lib/proot-distro/containers/*/rootfs \
+                 "$PREFIX"/var/lib/proot-distro/installed-rootfs/*; do
+    [ -d "$_rootfs/etc" ] || continue
+    for _rel in etc/profile.d/flux-pulse.sh etc/environment \
+                etc/pulse/client.conf etc/pulse/client.conf.d/99-fluxlinux.conf \
+                home/flux/.vnc/xstartup; do
+      migrate_guest_file "$_rootfs/$_rel"
+    done
+  done
 }
 
 # First pulseaudio PID only. W^X argv0 is libpulseaudio.so.
@@ -214,16 +234,19 @@ if daemon_alive; then
   fi
 fi
 
+migrate_proot_guests
+
 already_good() {
   daemon_alive || return 1
   is_real_sink || return 1
-  tcp_bound_localhost_only || return 1
-  tcp_ok || return 1
+  [ -z "$(tcp_module_ids)" ] || return 1
+  our_sock_module || return 1
+  sock_ok || return 1
   return 0
 }
 
 if already_good; then
-  echo "FluxLinux: [AUDIO] already running sink=$(sink_name) tcp=127.0.0.1:4713"
+  echo "FluxLinux: [AUDIO] already running sink=$(sink_name) unix=$PULSE_SOCK"
   exit 0
 fi
 
@@ -250,13 +273,14 @@ if ! is_real_sink; then
   load_mod module-sles-sink
 fi
 
-TCP_LOAD_ERR=""
-if ! tcp_bound_localhost_only; then
-  run_pactl list short modules 2>/dev/null | awk '/module-native-protocol-tcp/{print $1}' | while read -r idx; do
-    [ -n "$idx" ] && run_pactl unload-module "$idx" >/dev/null 2>&1 || true
-  done
-  TCP_LOAD_ERR=$(run_pactl load-module module-native-protocol-tcp \
-    auth-ip-acl=127.0.0.1 auth-anonymous=1 listen=127.0.0.1 2>&1) || true
+unload_tcp_modules
+
+SOCK_LOAD_ERR=""
+if ! our_sock_module; then
+  # Only same-uid / root processes can reach $PREFIX/tmp, so anonymous auth
+  # is scoped to FluxLinux and its guests (chroot guests run as other uids).
+  SOCK_LOAD_ERR=$(run_pactl load-module module-native-protocol-unix \
+    socket="$PULSE_SOCK" auth-anonymous=1 2>&1) || true
   sleep 0.3
 fi
 
@@ -264,13 +288,13 @@ if ! is_real_sink; then
   audio_fail "no real sink (aaudio/sles failed, sink=$(sink_name))"
 fi
 
-if ! tcp_bound_localhost_only || ! tcp_ok; then
-  _held=$(tcp_foreign_uid || true)
-  if [ -n "$_held" ]; then
-    audio_fail "sink=$(sink_name) tcp:127.0.0.1:4713 held by other uid=$_held (stale Pulse after reinstall)"
-  fi
-  audio_fail "sink=$(sink_name) but tcp:127.0.0.1:4713 not reachable${TCP_LOAD_ERR:+ load=$TCP_LOAD_ERR}"
+if [ -n "$(tcp_module_ids)" ]; then
+  audio_fail "sink=$(sink_name) but a TCP module is still loaded (refusing anonymous 127.0.0.1:4713)"
 fi
 
-echo "FluxLinux: [AUDIO] sink=$(sink_name) tcp=127.0.0.1:4713"
+if ! our_sock_module || ! sock_ok; then
+  audio_fail "sink=$(sink_name) but unix:$PULSE_SOCK not reachable${SOCK_LOAD_ERR:+ load=$SOCK_LOAD_ERR}"
+fi
+
+echo "FluxLinux: [AUDIO] sink=$(sink_name) unix=$PULSE_SOCK"
 exit 0
