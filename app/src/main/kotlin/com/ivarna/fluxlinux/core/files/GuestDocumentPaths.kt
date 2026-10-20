@@ -24,6 +24,10 @@ import java.nio.file.Path
  * opened, written and created in, but never deleted, renamed or moved, and a tree grant
  * never extends across a link. Otherwise a client-driven recursive move/delete of a
  * folder holding `~/storage/shared` would empty the device's shared storage.
+ *
+ * A link whose target leaves the container ([finalLinkLeavesContainer], e.g.
+ * `~/storage/shared` itself, or a file link into shared storage) is never part of a tree
+ * grant and is never opened, so a grant on "Ubuntu home" cannot reach shared storage.
  */
 object GuestDocumentPaths {
     const val ROOT_HOME = "ubuntu_home"
@@ -87,8 +91,23 @@ object GuestDocumentPaths {
      * [isChild] for tree grants: false when [doc] is reached through a link, so a grant on a
      * Ubuntu root never extends to a link's target (e.g. shared storage via `storage/shared`).
      */
-    fun isChildWithoutLink(rootfs: File, parent: DocId, doc: DocId): Boolean =
-        isChild(parent, doc) && !traversesLink(rootfs, guestPath(rootBase(rootfs, doc.rootId), doc))
+    fun isChildWithoutLink(rootfs: File, parent: DocId, doc: DocId): Boolean {
+        if (!isChild(parent, doc)) return false
+        val path = guestPath(rootBase(rootfs, doc.rootId), doc)
+        return !traversesLink(rootfs, path) && !finalLinkLeavesContainer(rootfs, path)
+    }
+
+    /**
+     * True when the final component of [guestPath] is a symlink whose guest-style target is
+     * outside the container (shared storage, an escape) or cannot be resolved. Resolution
+     * runs without a shared storage root, so any link into shared storage counts. Links
+     * that stay inside the container (`/bin -> usr/bin`, proot `.l2s` links) are false.
+     */
+    fun finalLinkLeavesContainer(rootfs: File, guestPath: String): Boolean {
+        val entry = resolveEntry(rootfs, guestPath, null) ?: return false
+        if (!Files.isSymbolicLink(entry.toPath())) return false
+        return resolve(rootfs, guestPath, null) == null
+    }
 
     /**
      * True when any NON-final component of [guestPath] is a symlink, walking lexically from

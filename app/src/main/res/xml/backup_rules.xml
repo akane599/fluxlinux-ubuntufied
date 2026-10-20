@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <include domain="sharedpref" path="."/>
+    <!--
+      Device-local state that describes this device's rootfs, not user settings. Restored on a
+      device with no rootfs it would skip onboarding, suppress guest repairs and claim a GPU
+      driver that is not installed. Keep in sync with data_extraction_rules.xml.
+    -->
+    <exclude domain="sharedpref" path="fluxlinux_state.xml"/>
+    <exclude domain="sharedpref" path="flux_guest_repairs.xml"/>
+    <exclude domain="sharedpref" path="fluxlinux_gpu_driver.xml"/>
 </full-backup-content>

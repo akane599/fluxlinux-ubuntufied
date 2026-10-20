@@ -33,6 +33,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ivarna.fluxlinux.core.utils.TermuxX11Preferences
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.components.GlassSettingCard
@@ -79,6 +83,27 @@ fun X11SettingsScreen(
     }
     var scancodeWorkaround by remember {
         mutableStateOf(TermuxX11Preferences.getScancodeWorkaround(context))
+    }
+
+    // termux-x11's own preferences screen (LoriePreferences) edits the same keys while this
+    // screen is in the back stack: re-read them on every resume, as SettingsScreen does.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                displayScale = TermuxX11Preferences.getDisplayScale(context).toFloat()
+                fullscreen = TermuxX11Preferences.getFullscreen(context)
+                hideCutout = TermuxX11Preferences.getHideCutout(context)
+                keepScreenOn = TermuxX11Preferences.getKeepScreenOn(context)
+                capturePointer = TermuxX11Preferences.getCapturePointer(context)
+                showAdditionalKbd = TermuxX11Preferences.getShowAdditionalKeyboard(context)
+                showIME = TermuxX11Preferences.getShowIME(context)
+                preferScancodes = TermuxX11Preferences.getPreferScancodes(context)
+                scancodeWorkaround = TermuxX11Preferences.getScancodeWorkaround(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Scaffold(

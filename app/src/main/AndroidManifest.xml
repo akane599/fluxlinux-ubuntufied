@@ -75,11 +75,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Deep Link for Script Callbacks -->
+            <!--
+              Script callbacks (`am start -d fluxlinux://callback?...` from install scripts).
+              Not BROWSABLE: web pages must not be able to fire it.
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="fluxlinux" android:host="callback" />
             </intent-filter>
         </activity>

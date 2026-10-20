@@ -7,8 +7,11 @@ import com.ivarna.fluxlinux.core.system.SafeFiles
 import com.ivarna.fluxlinux.core.terminal.TermuxHostPaths
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * Host-side XFCE theme/icon/cursor/wallpaper install into the **proot rootfs**.
@@ -125,7 +128,7 @@ object ProotXfceAssetInstaller {
             return true
         }
 
-        val cache = File(app.cacheDir, "flux_xfce_assets").also { it.mkdirs() }
+        val cache = assetCacheDir(app, "flux_xfce_assets")
         // Guest /tmp maps here with proot --shared-tmp (fallback path for script).
         val shared = File(TermuxHostPaths.TMPDIR, "flux_xfce_assets").also { it.mkdirs() }
 
@@ -142,6 +145,7 @@ object ProotXfceAssetInstaller {
                 )
                 val dest = File(rootfs, "usr/share/themes").also { it.mkdirs() }
                 if (tar == null || !hostTarExtract(tar, dest, stripXz = true, onlyPrefix = null, onLog)) {
+                    tar?.let { discardCached(it, shared) }
                     onLog("Theme extract failed for ${sel.themeName}")
                     ok = false
                 }
@@ -177,6 +181,7 @@ object ProotXfceAssetInstaller {
                                     onLog
                                 )
                             ) {
+                                discardCached(iconsTar, shared)
                                 onLog("Icon extract failed for $ICON_NAME")
                                 ok = false
                             }
@@ -200,6 +205,7 @@ object ProotXfceAssetInstaller {
                                     onLog
                                 )
                             ) {
+                                discardCached(iconsTar, shared)
                                 onLog("Icon extract failed for $ICON_NAME")
                                 ok = false
                             }
@@ -225,6 +231,7 @@ object ProotXfceAssetInstaller {
                 )
                 val dest = File(rootfs, "usr/share/icons").also { it.mkdirs() }
                 if (tar == null || !hostTarExtract(tar, dest, stripXz = true, onlyPrefix = null, onLog)) {
+                    tar?.let { discardCached(it, shared) }
                     onLog("Cursor extract failed for ${sel.cursorName}")
                     ok = false
                 }
@@ -266,7 +273,7 @@ object ProotXfceAssetInstaller {
     ): Boolean {
         val app = ctx.applicationContext
         val sel = selectionFor(theme)
-        val cache = File(app.cacheDir, "flux_chroot_assets").also { it.mkdirs() }
+        val cache = assetCacheDir(app, "flux_chroot_assets")
         val assets = listOf(
             sel.themeAsset to File(sel.themeAsset).name,
             ICON_ASSET to ICON_FILE,
@@ -279,12 +286,11 @@ object ProotXfceAssetInstaller {
         for ((asset, name) in assets) {
             val f = File(cache, name)
             if (!f.isFile || f.length() < 1024) {
-                try {
-                    app.assets.open(asset).use { input ->
-                        f.outputStream().use { input.copyTo(it) }
-                    }
-                } catch (e: Exception) {
-                    onLog("chroot asset missing: $asset (${e.message})")
+                val copied = writeAtomically(f) { out ->
+                    app.assets.open(asset).use { input -> input.copyTo(out) }
+                }
+                if (!copied) {
+                    onLog("chroot asset missing: $asset")
                     allOk = false
                     continue
                 }
@@ -319,7 +325,7 @@ object ProotXfceAssetInstaller {
 
     /** Stage + extract XFCE category extras onto Papirus-Dark (existing + new). */
     private fun stageCategoryExtras(app: Context, rootfs: File, onLog: (String) -> Unit) {
-        val cache = File(app.cacheDir, "flux_xfce_assets").also { it.mkdirs() }
+        val cache = assetCacheDir(app, "flux_xfce_assets")
         val shared = File(TermuxHostPaths.TMPDIR, "flux_xfce_assets").also { it.mkdirs() }
         val tar = materialize(
             app, cache, shared,
@@ -332,6 +338,8 @@ object ProotXfceAssetInstaller {
         dest.mkdirs()
         if (hostTarExtract(tar, dest, stripXz = true, onlyPrefix = null, onLog)) {
             onLog("Seeded Papirus XFCE category icons")
+        } else {
+            discardCached(tar, shared)
         }
     }
 
@@ -344,13 +352,9 @@ object ProotXfceAssetInstaller {
         val destDir = File(rootfs, "home/flux/Pictures/Wallpapers").also { it.mkdirs() }
         val dest = File(destDir, sel.wallpaperFileName)
         if (dest.isFile && dest.length() > 10_000) return
-        try {
-            app.assets.open(sel.wallpaperAsset).use { input ->
-                FileOutputStream(dest).use { input.copyTo(it) }
-            }
+        // Optional; atomic so a failed copy never leaves a truncated wallpaper behind.
+        if (writeAtomically(dest) { out -> app.assets.open(sel.wallpaperAsset).use { it.copyTo(out) } }) {
             onLog("Wallpaper: ${sel.wallpaperFileName}")
-        } catch (_: Exception) {
-            // optional
         }
     }
 
@@ -363,31 +367,92 @@ object ProotXfceAssetInstaller {
         urlFallback: String?,
         onLog: (String) -> Unit
     ): File? {
+        // The cache dir is keyed by the APK's lastUpdateTime ([assetCacheDir]) and every
+        // file in it is written atomically, so a present file is a complete copy of the
+        // current APK's asset. A copy that fails to extract is dropped ([discardCached]).
         val cached = File(cache, fileName)
         if (cached.isFile && cached.length() > 1024) {
-            cached.copyTo(File(shared, fileName), overwrite = true)
+            stageShared(cached, shared)
             return cached
         }
         // APK assets (offline)
-        try {
-            app.assets.open(assetPath).use { input ->
-                FileOutputStream(cached).use { input.copyTo(it) }
-            }
-            if (cached.isFile && cached.length() > 1024) {
-                onLog("Staged $fileName from app assets")
-                cached.copyTo(File(shared, fileName), overwrite = true)
-                return cached
-            }
-        } catch (_: Exception) {
+        val fromAssets = writeAtomically(cached) { out ->
+            app.assets.open(assetPath).use { input -> input.copyTo(out) }
+        }
+        if (fromAssets && cached.isFile && cached.length() > 1024) {
+            onLog("Staged $fileName from app assets")
+            stageShared(cached, shared)
+            return cached
         }
         if (urlFallback != null) {
             onLog("Downloading $fileName…")
             if (httpDownload(urlFallback, cached, onLog)) {
-                cached.copyTo(File(shared, fileName), overwrite = true)
+                stageShared(cached, shared)
                 return cached
             }
         }
         return cached.takeIf { it.isFile && it.length() > 1024 }
+    }
+
+    /** Copy for the guest script's fallback path (`/tmp/flux_xfce_assets`), also atomic. */
+    private fun stageShared(cached: File, shared: File) {
+        writeAtomically(File(shared, cached.name)) { out -> cached.inputStream().use { it.copyTo(out) } }
+    }
+
+    /** Drops a cached archive (and its shared copy) that failed to extract, so the next run re-stages it. */
+    private fun discardCached(archive: File, shared: File) {
+        archive.delete()
+        File(shared, archive.name).delete()
+    }
+
+    private const val CACHE_STAMP = ".apk_last_update"
+
+    private fun assetCacheDir(app: Context, name: String): File {
+        val stamp = runCatching {
+            @Suppress("DEPRECATION")
+            app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime
+        }.getOrDefault(0L)
+        return versionedCacheDir(app.cacheDir, name, stamp)
+    }
+
+    /**
+     * `parent/name`, emptied when its stamp differs from [stamp] (the APK's lastUpdateTime),
+     * so an app update with new theme assets never reuses archives cached from the old APK.
+     */
+    internal fun versionedCacheDir(parent: File, name: String, stamp: Long): File {
+        val dir = File(parent, name)
+        val stampFile = File(dir, CACHE_STAMP)
+        val current = runCatching { stampFile.readText().trim() }.getOrNull()
+        if (current != stamp.toString()) {
+            SafeFiles.deleteTree(dir)
+            dir.mkdirs()
+            writeAtomically(stampFile) { it.write(stamp.toString().toByteArray()) }
+        } else {
+            dir.mkdirs()
+        }
+        return dir
+    }
+
+    /**
+     * Writes [dest] through a sibling `.tmp` file and an atomic rename, so an interrupted or
+     * failed write never leaves a truncated [dest]. Returns false (and removes the temp
+     * file) when [write] or the rename fails; an existing [dest] is then left untouched.
+     */
+    internal fun writeAtomically(dest: File, write: (OutputStream) -> Unit): Boolean {
+        val tmp = File(dest.parentFile, dest.name + ".tmp")
+        return try {
+            FileOutputStream(tmp).use { out ->
+                write(out)
+                out.flush()
+                out.fd.sync()
+            }
+            Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "write ${dest.name} failed: ${e.message}")
+            tmp.delete()
+            false
+        }
     }
 
     private fun httpDownload(url: String, dest: File, onLog: (String) -> Unit): Boolean {
@@ -397,14 +462,15 @@ object ProotXfceAssetInstaller {
                 readTimeout = 120_000
                 instanceFollowRedirects = true
             }
-            conn.inputStream.use { input ->
-                FileOutputStream(dest).use { input.copyTo(it) }
+            val ok = try {
+                writeAtomically(dest) { out -> conn.inputStream.use { it.copyTo(out) } }
+            } finally {
+                conn.disconnect()
             }
-            conn.disconnect()
-            dest.isFile && dest.length() > 1024
+            if (!ok) onLog("Download failed: $url")
+            ok && dest.isFile && dest.length() > 1024
         } catch (e: Exception) {
             onLog("Download failed: ${e.message}")
-            dest.delete()
             false
         }
     }
