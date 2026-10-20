@@ -210,12 +210,9 @@ resolve_rootfs_archive() {
         "$HOME/rootfs/$ROOTFS_NAME" \
         "$PREFIX/var/lib/proot-distro/cache/rootfs/$ROOTFS_NAME" \
         "/sdcard/Download/$ROOTFS_NAME" \
-        "/sdcard/Download/rootfs.tar.xz" \
-        "/sdcard/Download/rootfs.tar.gz" \
-        "/storage/emulated/0/Download/$ROOTFS_NAME" \
-        "/storage/emulated/0/Download/rootfs.tar.xz" \
-        "/storage/emulated/0/Download/rootfs.tar.gz"
+        "/storage/emulated/0/Download/$ROOTFS_NAME"
     do
+        # Only the pinned file name: a generic rootfs.tar.* could be any distro.
         if [ -f "$candidate" ] && [ -s "$candidate" ]; then
             ROOTFS_ARCHIVE="$candidate"
             echo "FluxLinux: rootfs found: $ROOTFS_ARCHIVE"
@@ -233,7 +230,9 @@ resolve_rootfs_archive() {
     DEST="$CACHE_DIR/$ROOTFS_NAME"
     echo "FluxLinux: rootfs not in app paths — downloading $ROOTFS_URL"
     if command -v curl >/dev/null 2>&1; then
+        # Verify before promoting into the cache, so a bad download is never kept.
         if curl -fL --retry 3 --retry-delay 2 -o "$DEST.partial" "$ROOTFS_URL" \
+            && verify_rootfs_sha "$DEST.partial" \
             && mv -f "$DEST.partial" "$DEST"; then
             ROOTFS_ARCHIVE="$DEST"
             echo "FluxLinux: rootfs downloaded: $ROOTFS_ARCHIVE"
@@ -241,7 +240,8 @@ resolve_rootfs_archive() {
         fi
         rm -f "$DEST.partial" 2>/dev/null || true
     elif command -v wget >/dev/null 2>&1; then
-        if wget -O "$DEST.partial" "$ROOTFS_URL" && mv -f "$DEST.partial" "$DEST"; then
+        if wget -O "$DEST.partial" "$ROOTFS_URL" && verify_rootfs_sha "$DEST.partial" \
+            && mv -f "$DEST.partial" "$DEST"; then
             ROOTFS_ARCHIVE="$DEST"
             echo "FluxLinux: rootfs downloaded: $ROOTFS_ARCHIVE"
             return 0
