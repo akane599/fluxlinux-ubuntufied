@@ -81,6 +81,13 @@ public class MainActivity extends AppCompatActivity {
     FrameLayout frm;
     private TouchInputHandler mInputHandler;
     protected ICmdEntryInterface service = null;
+    // The binder we hold a death recipient on, so a re-broadcast of the same server neither stacks
+    // recipients nor leaves one behind on an old server.
+    private IBinder linkedBinder = null;
+    private IBinder.DeathRecipient deathRecipient = null;
+    // One reconnect poll per activity: re-posting this instance replaces any pending run instead of
+    // starting another 250 ms chain, and onDestroy can cancel it.
+    private final Runnable tryConnectRunnable = this::tryConnect;
     public TermuxX11ExtraKeys mExtraKeys;
     private Notification mNotification;
     private final int mNotificationId = 7892;
@@ -258,7 +265,26 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         unregisterReceiver(receiver);
+        handler.removeCallbacks(tryConnectRunnable);
+        unlinkServiceDeath();
+        service = null;
         super.onDestroy();
+    }
+
+    private void scheduleTryConnect() {
+        handler.removeCallbacks(tryConnectRunnable);
+        if (!isDestroyed())
+            handler.postDelayed(tryConnectRunnable, 250);
+    }
+
+    private void unlinkServiceDeath() {
+        if (linkedBinder != null && deathRecipient != null) {
+            try {
+                linkedBinder.unlinkToDeath(deathRecipient, 0);
+            } catch (Exception ignored) {}
+        }
+        linkedBinder = null;
+        deathRecipient = null;
     }
 
     //Register the needed events to handle stylus as left, middle and right click
@@ -523,14 +549,30 @@ public class MainActivity extends AppCompatActivity {
         }
 
         service = ICmdEntryInterface.Stub.asInterface(ibinder);
-        try {
-            service.asBinder().linkToDeath(() -> {
-                service = null;
-
-                Log.v("Lorie", "Disconnected");
-                runOnUiThread(() -> { getLorieView().connect(-1); clientConnectedStateChanged();} );
-            }, 0);
-        } catch (RemoteException ignored) {}
+        if (ibinder != linkedBinder) {
+            unlinkServiceDeath();
+            IBinder.DeathRecipient recipient = new IBinder.DeathRecipient() {
+                @Override
+                public void binderDied() {
+                    Log.v("Lorie", "Disconnected");
+                    runOnUiThread(() -> {
+                        // Stale if the activity is gone or has since moved on to another server.
+                        if (isDestroyed() || linkedBinder != ibinder || deathRecipient != this)
+                            return;
+                        linkedBinder = null;
+                        deathRecipient = null;
+                        service = null;
+                        getLorieView().connect(-1);
+                        clientConnectedStateChanged();
+                    });
+                }
+            };
+            try {
+                ibinder.linkToDeath(recipient, 0);
+                linkedBinder = ibinder;
+                deathRecipient = recipient;
+            } catch (RemoteException ignored) {}
+        }
 
         try {
             if (service != null && service.asBinder().isBinderAlive()) {
@@ -553,12 +595,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     boolean tryConnect() {
-        if (getLorieView().connected())
+        if (isDestroyed() || getLorieView().connected())
             return false;
 
         if (service == null) {
             boolean sent = getLorieView().requestConnection();
-            handler.postDelayed(this::tryConnect, 250);
+            scheduleTryConnect();
             return true;
         }
 
@@ -572,12 +614,12 @@ public class MainActivity extends AppCompatActivity {
                 clientConnectedStateChanged();
                 getLorieView().reloadPreferences(prefs);
             } else
-                handler.postDelayed(this::tryConnect, 250);
+                scheduleTryConnect();
         } catch (Exception e) {
             Log.e("MainActivity", "Something went wrong while we were establishing connection", e);
             service = null;
 
-            handler.postDelayed(this::tryConnect, 250);
+            scheduleTryConnect();
         }
         return false;
     }
