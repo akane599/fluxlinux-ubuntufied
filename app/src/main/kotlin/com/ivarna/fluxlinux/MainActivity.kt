@@ -225,7 +225,9 @@ class MainActivity : ComponentActivity() {
             component.scriptName.contains("setup_customization")
 
     /**
-     * Load a component script and prepend flux_gpu_common.sh for hw_accel.
+     * Load a component script and prepend its helper library
+     * (flux_gpu_common.sh for hw_accel, flux_guest_common.sh for family
+     * scripts) — see [com.ivarna.fluxlinux.core.install.GuestComponentPayload].
      * [extraEnv] is already resolved (no FLUX_GPU=auto).
      */
     private fun loadGuestComponentScript(
@@ -234,22 +236,12 @@ class MainActivity : ComponentActivity() {
         extraEnv: Map<String, String>
     ): String? {
         val scriptManager = com.ivarna.fluxlinux.core.data.ScriptManager(ctx)
-        val envBlock = extraEnv.entries.joinToString("\n") {
-            "export ${it.key}=\"${it.value}\""
-        }
-        val base = scriptManager.getScriptContent(component.scriptName)
-        val common = if (component.id == "hw_accel") {
-            runCatching {
-                scriptManager.getScriptContent("common/setup/flux_gpu_common.sh")
-            }.getOrDefault("")
-        } else {
-            ""
-        }
-        return buildString {
-            if (extraEnv.isNotEmpty()) append(envBlock).append("\n\n")
-            if (common.isNotBlank()) append(common).append("\n\n")
-            append(base)
-        }
+        return com.ivarna.fluxlinux.core.install.GuestComponentPayload.build(
+            componentId = component.id,
+            scriptName = component.scriptName,
+            extraEnv = extraEnv,
+            readScript = scriptManager::getScriptContent,
+        )
     }
 
     /**

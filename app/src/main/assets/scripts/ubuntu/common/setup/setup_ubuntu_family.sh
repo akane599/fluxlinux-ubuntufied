@@ -16,6 +16,13 @@ if ! command -v _flux_setup_pulse >/dev/null 2>&1; then
         fi
     done
 fi
+# Fail clearly instead of running apt/locale/user steps with no helpers
+# (every _flux_* call would be "command not found").
+if ! command -v _flux_setup_pulse >/dev/null 2>&1 \
+    || ! command -v _flux_ensure_en_us_locale >/dev/null 2>&1; then
+    echo "FluxLinux: ERROR: flux_guest_common.sh missing — _flux_* helpers not defined" >&2
+    exit 2
+fi
 
 # setup_ubuntu_family.sh — Ubuntu 26.04 LTS (Resolute) XFCE (proot + chroot).
 # Debian-LIKE, not Debian: rewrite mirrors to ports.ubuntu.com, NEVER add debian.org.
