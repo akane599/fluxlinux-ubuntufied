@@ -329,28 +329,6 @@ object RootShell {
         Log.i(TAG, "killRootTree pid=${rootPid.pid} exit=$code")
     }
 
-    /**
-     * Execute a shell command as root.
-     * [onLine] is called on the Main thread for each stdout/stderr line.
-     * [onDone] is called on the Main thread with the exit code.
-     */
-    fun execute(
-        cmd: String,
-        onLine: (String) -> Unit = {},
-        onDone: (Int) -> Unit = {}
-    ) {
-        executor.execute {
-            val inv = resolveSuInvocation()
-            val code = if (inv == null) {
-                mainHandler.post { onLine("[RootShell] ERROR: no working su binary") }
-                -1
-            } else {
-                runCommand(buildSuArgs(inv, wrapWithPidMarker(cmd)), onLine, tracked = true)
-            }
-            mainHandler.post { onDone(code) }
-        }
-    }
-
     /** Default bound for [executeSync]: staging / probe commands finish in well under this. */
     const val SYNC_TIMEOUT_MS = 30_000L
 
@@ -367,52 +345,6 @@ object RootShell {
             timeoutMs = timeoutMs,
             tracked = true,
         )
-    }
-
-    /**
-     * Execute a shell script file as root.
-     * [scriptPath] must be an absolute path to a script on the device.
-     */
-    fun executeScript(
-        scriptPath: String,
-        onLine: (String) -> Unit = {},
-        onDone: (Int) -> Unit = {}
-    ) {
-        execute("sh \"$scriptPath\"", onLine, onDone)
-    }
-
-    /**
-     * Copy an asset to the app-private `staged_scripts/` dir ([stageAsset]),
-     * then run it as root.
-     */
-    fun executeScriptAsset(
-        context: Context,
-        assetName: String,
-        onLine: (String) -> Unit = {},
-        onDone: (Int) -> Unit = {}
-    ) {
-        executor.execute {
-            val stagedPath = stageAsset(context, assetName)
-            if (stagedPath == null) {
-                mainHandler.post {
-                    onLine("[RootShell] ERROR: Failed to stage asset '$assetName'")
-                    onDone(-1)
-                }
-                return@execute
-            }
-            val inv = resolveSuInvocation()
-            val code = if (inv == null) {
-                mainHandler.post { onLine("[RootShell] ERROR: no working su binary") }
-                -1
-            } else {
-                runCommand(
-                    buildSuArgs(inv, wrapWithPidMarker("sh \"$stagedPath\"")),
-                    onLine,
-                    tracked = true,
-                )
-            }
-            mainHandler.post { onDone(code) }
-        }
     }
 
     /** Serialises su discovery so concurrent callers never raise parallel grant prompts (L7). */
@@ -726,27 +658,6 @@ object RootShell {
             Log.w(TAG, "stageVerified $asset failed: ${e.message}")
             false
         }
-    }
-
-    /**
-     * Run a command inside the Debian 13 chroot as [user] via SSOT helper.
-     * Pass [context] so the helper is staged from assets when missing.
-     */
-    fun executeInChroot(
-        cmd: String,
-        user: String = "flux",
-        chrootPath: String = ChrootPaths.CHROOT_PATH,
-        onLine: (String) -> Unit = {},
-        onDone: (Int) -> Unit = {},
-        context: Context? = null
-    ) {
-        context?.let { ensureChrootHelper(it) }
-        val u = if (user == "root") "root" else "flux"
-        val b64 = android.util.Base64.encodeToString(
-            cmd.toByteArray(Charsets.UTF_8),
-            android.util.Base64.NO_WRAP
-        )
-        execute(buildChrootHelperCmd(u, b64, chrootPath), onLine, onDone)
     }
 
     /**
