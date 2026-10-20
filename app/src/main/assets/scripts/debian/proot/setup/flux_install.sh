@@ -325,10 +325,27 @@ mark_extract_ok() {
     }
 }
 
+# Pre-marker userland looks fully extracted: os-release plus a non-empty package
+# database (dpkg / apk / rpm / pacman / xbps). Covers a container whose extraction
+# finished but whose family setup failed, so a Retry never wipes it.
+rootfs_userland_complete() {
+    _uc_root="$1"
+    [ -e "$_uc_root/etc/os-release" ] || [ -e "$_uc_root/usr/lib/os-release" ] || return 1
+    [ -s "$_uc_root/var/lib/dpkg/status" ] && return 0
+    [ -s "$_uc_root/lib/apk/db/installed" ] && return 0
+    for _uc_db in usr/lib/sysimage/rpm var/lib/rpm var/lib/pacman/local var/db/xbps; do
+        if [ -d "$_uc_root/$_uc_db" ] && [ -n "$(ls -A "$_uc_root/$_uc_db" 2>/dev/null)" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # True when the container finished extracting. Installs made before the marker
-# existed are adopted when a full FluxLinux install provably completed: XFCE was
-# installed into the guest, or the post-install marker below exists. Adoption
-# writes the marker so existing users never have to wipe a working container.
+# existed are adopted when the extraction or a full FluxLinux install provably
+# completed: XFCE in the guest, the post-install marker below, or a complete
+# userland (rootfs_userland_complete). Adoption writes the marker so existing
+# users never have to wipe a working container.
 rootfs_extract_complete() {
     _ec_name="$1"
     _ec_dir="$PREFIX/var/lib/proot-distro/containers/$_ec_name"
@@ -342,7 +359,8 @@ rootfs_extract_complete() {
         return 0
     fi
     if [ -e "$_ec_root/usr/bin/startxfce4" ] || [ -e "$_ec_root/usr/sbin/startxfce4" ] || \
-        [ -f "$HOME/.fluxlinux_distro_${_ec_name}_installed" ]; then
+        [ -f "$HOME/.fluxlinux_distro_${_ec_name}_installed" ] || \
+        rootfs_userland_complete "$_ec_root"; then
         echo "FluxLinux: adopting existing $_ec_name install (pre-marker)"
         mark_extract_ok "$_ec_name" || true
         return 0

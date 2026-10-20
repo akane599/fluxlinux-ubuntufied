@@ -59,16 +59,32 @@ object TerminalLauncher {
     /**
      * Mirrors `rootfs_extract_complete` in flux_install.sh (M2): an interrupted
      * extraction already has a shell, so a shell alone is not "installed". Installs
-     * that predate the marker count when a full install provably finished (XFCE in
-     * the guest, or flux_install's `$HOME/.fluxlinux_distro_<name>_installed`); the
-     * script then adopts them by writing the marker on the next install run.
+     * that predate the marker count when the extraction or a full install provably
+     * finished (XFCE in the guest, flux_install's `$HOME/.fluxlinux_distro_<name>_installed`,
+     * or a complete userland); the script adopts them by writing the marker on the next run.
      */
     fun prootExtractComplete(container: File, homeDir: File, prootName: String): Boolean {
         if (File(container, EXTRACT_MARKER).isFile) return true
         val root = File(container, "rootfs")
         return File(root, "usr/bin/startxfce4").exists() ||
             File(root, "usr/sbin/startxfce4").exists() ||
-            File(homeDir, ".fluxlinux_distro_${prootName}_installed").isFile
+            File(homeDir, ".fluxlinux_distro_${prootName}_installed").isFile ||
+            userlandComplete(root)
+    }
+
+    /**
+     * Mirrors `rootfs_userland_complete` in flux_install.sh: os-release plus a
+     * non-empty package database. A pre-marker container whose extraction finished
+     * but whose family setup failed is kept (a Retry must not wipe it).
+     */
+    private fun userlandComplete(root: File): Boolean {
+        if (!File(root, "etc/os-release").exists() && !File(root, "usr/lib/os-release").exists()) {
+            return false
+        }
+        if (File(root, "var/lib/dpkg/status").length() > 0L) return true
+        if (File(root, "lib/apk/db/installed").length() > 0L) return true
+        return listOf("usr/lib/sysimage/rpm", "var/lib/rpm", "var/lib/pacman/local", "var/db/xbps")
+            .any { File(root, it).list()?.isNotEmpty() == true }
     }
 
     /** Host-safe guest rootfs shell probe (absolute busybox symlinks OK). */
