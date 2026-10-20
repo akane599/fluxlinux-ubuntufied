@@ -25,4 +25,6 @@
     <string name="terminal_error_chroot_failed">Chroot session failed to open</string>
     <string name="terminal_error_session_failed">Session failed to open</string>
     <string name="terminal_error_ubuntu_missing">Ubuntu is not installed yet. Install it from Home, then try again.</string>
+    <string name="install_starting">Starting…</string>
+    <string name="install_base_desktop_done">Base desktop installed</string>
 </resources>

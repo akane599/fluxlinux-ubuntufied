@@ -30,8 +30,9 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * Cancel: generation token + destroy active process; never mutates StateManager after cancel.
  * Overlapping [start] cancels the previous run first.
+ * Owned process-wide by [InstallController] (H2) — never by a composable.
  */
-class OnboardingInstallRunner(private val ctx: Context) {
+class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
 
     data class Progress(
         val phaseId: String,
@@ -59,7 +60,7 @@ class OnboardingInstallRunner(private val ctx: Context) {
     /** Last overall percent from real phase updates (log lines must not thrash). */
     @Volatile private var lastOverallPercent: Int = 0
 
-    fun cancel() {
+    override fun cancel() {
         cancelled.set(true)
         // Kills the job's whole process group (ShellCommandRunner / GroupKillingProcess).
         activeProcess.getAndSet(null)?.destroyForcibly()
@@ -77,9 +78,9 @@ class OnboardingInstallRunner(private val ctx: Context) {
      * Starts [BaseInstallService] FGS immediately so the system does not kill the
      * process during long rootfs / package work.
      */
-    fun start(
+    override fun start(
         distroId: String,
-        theme: String = "dark",
+        theme: String,
         onProgress: (Progress) -> Unit
     ) {
         // Invalidate any in-flight job before resetting cancel flag
