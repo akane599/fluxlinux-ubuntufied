@@ -1,12 +1,15 @@
 package com.ivarna.fluxlinux.core.install
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.FileNotFoundException
 
 class ProotXfceAssetInstallerTest {
 
@@ -118,5 +121,91 @@ class ProotXfceAssetInstallerTest {
         val again = ProotXfceAssetInstaller.versionedCacheDir(parent, "flux_xfce_assets", 200L)
         assertTrue(again.isDirectory)
         assertFalse(cached.exists())
+    }
+
+    // ---- host xz missing must never strip the guest's fallback copies ----------------
+
+    private val dark = ProotXfceAssetInstaller.selectionFor("dark")
+
+    /** Every archive [installInto] stages for the dark selection, by file name. */
+    private val darkArchives = listOf(
+        File(dark.themeAsset).name,
+        ProotXfceAssetInstaller.ICON_FILE,
+        ProotXfceAssetInstaller.ICON_CATEGORIES_FILE,
+        File(dark.cursorAsset).name,
+    )
+
+    private fun apkBytes(name: String) = ByteArray(4096) { (it + name.length).toByte() }
+
+    private fun openAsset(path: String) =
+        File(path).name.takeIf { it in darkArchives }?.let { ByteArrayInputStream(apkBytes(it)) }
+            ?: throw FileNotFoundException(path)
+
+    private fun installDark(
+        root: File,
+        extract: (File, File, String?) -> ProotXfceAssetInstaller.Extract,
+    ): Boolean = ProotXfceAssetInstaller.installInto(
+        rootfs = File(root, "rootfs").apply { mkdirs() },
+        sel = dark,
+        cache = File(root, "cache").apply { mkdirs() },
+        shared = File(root, "shared"),
+        openAsset = ::openAsset,
+        extract = extract,
+        onLog = {},
+    )
+
+    @Test
+    fun hostWithoutXz_keepsEveryGuestCopyAndCache() {
+        val root = tmp.newFolder("noxz")
+        val installed = installDark(root) { _, _, _ -> ProotXfceAssetInstaller.Extract.UNAVAILABLE }
+
+        assertFalse("nothing was extracted on the host", installed)
+        for (name in darkArchives) {
+            val shared = File(root, "shared/$name")
+            assertTrue("guest copy kept: $name", shared.isFile)
+            assertArrayEquals(name, apkBytes(name), shared.readBytes())
+            assertTrue("cache kept (not corrupt): $name", File(root, "cache/$name").isFile)
+        }
+    }
+
+    @Test
+    fun failedExtract_keepsGuestCopyAndRestagesCorruptCache() {
+        val root = tmp.newFolder("corrupt")
+        val icon = ProotXfceAssetInstaller.ICON_FILE
+        val cached = File(root, "cache/$icon").apply {
+            parentFile?.mkdirs()
+            writeBytes(ByteArray(4096) { 7 })
+        }
+        val seen = mutableListOf<String>()
+        // tar "fails" only on an archive that differs from the APK asset.
+        val extract = { archive: File, _: File, _: String? ->
+            seen += archive.name
+            if (archive.readBytes().contentEquals(apkBytes(archive.name))) {
+                ProotXfceAssetInstaller.Extract.OK
+            } else {
+                ProotXfceAssetInstaller.Extract.FAILED
+            }
+        }
+
+        installDark(root, extract)
+        assertFalse("corrupt cache dropped", cached.exists())
+        val shared = File(root, "shared/$icon")
+        assertTrue("guest copy kept after a failed extract", shared.isFile)
+        assertArrayEquals("guest copy re-staged from the APK", apkBytes(icon), shared.readBytes())
+
+        seen.clear()
+        installDark(root, extract)
+        assertArrayEquals("next run re-stages the cache", apkBytes(icon), cached.readBytes())
+        assertTrue("icons extracted on the next run", icon in seen)
+        assertTrue(File(root, "shared/$icon").isFile)
+    }
+
+    @Test
+    fun isMissingXz_detectsToyboxExecFailureOnly() {
+        assertTrue(ProotXfceAssetInstaller.isMissingXz(127, ""))
+        assertTrue(ProotXfceAssetInstaller.isMissingXz(1, "tar: exec xz: No such file or directory"))
+        assertTrue(ProotXfceAssetInstaller.isMissingXz(1, "sh: xz: not found"))
+        assertFalse(ProotXfceAssetInstaller.isMissingXz(2, "xz: (stdin): Compressed data is corrupt"))
+        assertFalse(ProotXfceAssetInstaller.isMissingXz(1, "tar: short read"))
     }
 }

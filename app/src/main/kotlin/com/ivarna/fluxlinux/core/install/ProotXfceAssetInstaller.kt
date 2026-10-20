@@ -7,9 +7,8 @@ import com.ivarna.fluxlinux.core.system.SafeFiles
 import com.ivarna.fluxlinux.core.terminal.TermuxHostPaths
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.io.OutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -103,6 +102,17 @@ object ProotXfceAssetInstaller {
             isIconInstalled(rootfs, sel.iconName) &&
             isCursorInstalled(rootfs, sel.cursorName)
 
+    /** Outcome of one host-side archive extract. */
+    internal enum class Extract {
+        OK,
+
+        /** tar ran and failed: the archive is suspect and is re-staged. */
+        FAILED,
+
+        /** The host can't extract this format (stock Android tar has no `xz`): left to the guest. */
+        UNAVAILABLE,
+    }
+
     /**
      * @return true if selected theme/icons/cursors are present after this call
      *   (already were, or host extract succeeded).
@@ -119,34 +129,50 @@ object ProotXfceAssetInstaller {
             onLog("Proot rootfs missing — skip host theme extract")
             return false
         }
-        val sel = selectionFor(theme)
+        return installInto(
+            rootfs = rootfs,
+            sel = selectionFor(theme),
+            cache = assetCacheDir(app, "flux_xfce_assets"),
+            // Guest /tmp maps here with proot --shared-tmp (fallback path for script).
+            shared = File(TermuxHostPaths.TMPDIR, "flux_xfce_assets"),
+            openAsset = { app.assets.open(it) },
+            extract = { archive, dest, onlyPrefix -> hostTarExtract(archive, dest, stripXz = true, onlyPrefix, onLog) },
+            onLog = onLog,
+        )
+    }
+
+    /**
+     * [install] without the Android [Context]: [openAsset] reads APK assets and [extract]
+     * runs the host tar. Every archive is staged into [shared] (the guest's
+     * `/tmp/flux_xfce_assets`) before extraction and stays there whatever the host
+     * extract does, so the guest script can always fall back to its own tar.
+     */
+    internal fun installInto(
+        rootfs: File,
+        sel: Selection,
+        cache: File,
+        shared: File,
+        openAsset: (String) -> InputStream,
+        extract: (archive: File, dest: File, onlyPrefix: String?) -> Extract,
+        onLog: (String) -> Unit,
+    ): Boolean {
+        shared.mkdirs()
+        val stager = Stager(cache, shared, openAsset, extract, onLog)
         if (isSelectionInstalled(rootfs, sel)) {
             onLog("Themes/icons already installed (${sel.themeName} + ${sel.iconName}) — skip extract")
             // Still ensure wallpaper if missing (cheap)
-            ensureWallpaper(app, rootfs, sel, onLog)
-            stageCategoryExtras(app, rootfs, onLog)
+            ensureWallpaper(openAsset, rootfs, sel, onLog)
+            stageCategoryExtras(stager, rootfs, onLog)
             return true
         }
-
-        val cache = assetCacheDir(app, "flux_xfce_assets")
-        // Guest /tmp maps here with proot --shared-tmp (fallback path for script).
-        val shared = File(TermuxHostPaths.TMPDIR, "flux_xfce_assets").also { it.mkdirs() }
 
         var ok = true
         try {
             if (!isThemeInstalled(rootfs, sel.themeName)) {
                 onLog("Host-extract theme: ${sel.themeName}")
-                val tar = materialize(
-                    app, cache, shared,
-                    assetPath = sel.themeAsset,
-                    fileName = File(sel.themeAsset).name,
-                    urlFallback = null,
-                    onLog
-                )
                 val dest = File(rootfs, "usr/share/themes").also { it.mkdirs() }
-                if (tar == null || !hostTarExtract(tar, dest, stripXz = true, onlyPrefix = null, onLog)) {
-                    tar?.let { discardCached(it, shared) }
-                    onLog("Theme extract failed for ${sel.themeName}")
+                if (stager.stageAndExtract(sel.themeAsset, File(sel.themeAsset).name, dest) != Extract.OK) {
+                    onLog("Theme ${sel.themeName} not extracted on host")
                     ok = false
                 }
             } else {
@@ -155,66 +181,12 @@ object ProotXfceAssetInstaller {
 
             if (!isIconInstalled(rootfs, sel.iconName)) {
                 onLog("Host-extract icons: $ICON_NAME (dark variant only)")
-                val iconsTar = materialize(
-                    app, cache, shared,
-                    assetPath = ICON_ASSET,
-                    fileName = ICON_FILE,
-                    urlFallback = null,
-                    onLog
-                )
                 val dest = File(rootfs, "usr/share/icons").also { it.mkdirs() }
-                when {
-                    iconsTar != null && iconsTar.name.endsWith(".tar.xz") -> {
-                        // Archive contains only Papirus-Dark/; still pass prefix for safety
-                        if (!hostTarExtract(
-                                iconsTar, dest,
-                                stripXz = true,
-                                onlyPrefix = ICON_NAME,
-                                onLog
-                            )
-                        ) {
-                            // Retry full extract if path filter fails on some tar builds
-                            if (!hostTarExtract(
-                                    iconsTar, dest,
-                                    stripXz = true,
-                                    onlyPrefix = null,
-                                    onLog
-                                )
-                            ) {
-                                discardCached(iconsTar, shared)
-                                onLog("Icon extract failed for $ICON_NAME")
-                                ok = false
-                            }
-                        }
-                    }
-                    iconsTar != null &&
-                        (iconsTar.name.endsWith(".tar.gz") || iconsTar.name.endsWith(".tgz")) -> {
-                        // Archive contains only Papirus-Dark/; still pass prefix for safety
-                        if (!hostTarExtract(
-                                iconsTar, dest,
-                                stripXz = false,
-                                onlyPrefix = ICON_NAME,
-                                onLog
-                            )
-                        ) {
-                            // Retry full extract if path filter fails on some tar builds
-                            if (!hostTarExtract(
-                                    iconsTar, dest,
-                                    stripXz = false,
-                                    onlyPrefix = null,
-                                    onLog
-                                )
-                            ) {
-                                discardCached(iconsTar, shared)
-                                onLog("Icon extract failed for $ICON_NAME")
-                                ok = false
-                            }
-                        }
-                    }
-                    else -> {
-                        onLog("No Papirus-Dark archive available ($ICON_FILE)")
-                        ok = false
-                    }
+                // Archive contains only Papirus-Dark/; pass the prefix for safety, retrying a
+                // full extract if the path filter fails on some tar builds.
+                if (stager.stageAndExtract(ICON_ASSET, ICON_FILE, dest, onlyPrefix = ICON_NAME) != Extract.OK) {
+                    onLog("Icons $ICON_NAME not extracted on host")
+                    ok = false
                 }
             } else {
                 onLog("Icons ${sel.iconName} already present — skip")
@@ -222,25 +194,17 @@ object ProotXfceAssetInstaller {
 
             if (!isCursorInstalled(rootfs, sel.cursorName)) {
                 onLog("Host-extract cursor: ${sel.cursorName}")
-                val tar = materialize(
-                    app, cache, shared,
-                    assetPath = sel.cursorAsset,
-                    fileName = File(sel.cursorAsset).name,
-                    urlFallback = null,
-                    onLog
-                )
                 val dest = File(rootfs, "usr/share/icons").also { it.mkdirs() }
-                if (tar == null || !hostTarExtract(tar, dest, stripXz = true, onlyPrefix = null, onLog)) {
-                    tar?.let { discardCached(it, shared) }
-                    onLog("Cursor extract failed for ${sel.cursorName}")
+                if (stager.stageAndExtract(sel.cursorAsset, File(sel.cursorAsset).name, dest) != Extract.OK) {
+                    onLog("Cursor ${sel.cursorName} not extracted on host")
                     ok = false
                 }
             } else {
                 onLog("Cursor ${sel.cursorName} already present — skip")
             }
 
-            ensureWallpaper(app, rootfs, sel, onLog)
-            stageCategoryExtras(app, rootfs, onLog)
+            ensureWallpaper(openAsset, rootfs, sel, onLog)
+            stageCategoryExtras(stager, rootfs, onLog)
         } catch (e: Exception) {
             Log.e(TAG, "install failed", e)
             onLog("Host XFCE asset install error: ${e.message}")
@@ -324,27 +288,15 @@ object ProotXfceAssetInstaller {
     }
 
     /** Stage + extract XFCE category extras onto Papirus-Dark (existing + new). */
-    private fun stageCategoryExtras(app: Context, rootfs: File, onLog: (String) -> Unit) {
-        val cache = assetCacheDir(app, "flux_xfce_assets")
-        val shared = File(TermuxHostPaths.TMPDIR, "flux_xfce_assets").also { it.mkdirs() }
-        val tar = materialize(
-            app, cache, shared,
-            assetPath = ICON_CATEGORIES_ASSET,
-            fileName = ICON_CATEGORIES_FILE,
-            urlFallback = null,
-            onLog
-        ) ?: return
-        val dest = File(rootfs, "usr/share/icons")
-        dest.mkdirs()
-        if (hostTarExtract(tar, dest, stripXz = true, onlyPrefix = null, onLog)) {
+    private fun stageCategoryExtras(stager: Stager, rootfs: File, onLog: (String) -> Unit) {
+        val dest = File(rootfs, "usr/share/icons").also { it.mkdirs() }
+        if (stager.stageAndExtract(ICON_CATEGORIES_ASSET, ICON_CATEGORIES_FILE, dest) == Extract.OK) {
             onLog("Seeded Papirus XFCE category icons")
-        } else {
-            discardCached(tar, shared)
         }
     }
 
     private fun ensureWallpaper(
-        app: Context,
+        openAsset: (String) -> InputStream,
         rootfs: File,
         sel: Selection,
         onLog: (String) -> Unit
@@ -353,56 +305,60 @@ object ProotXfceAssetInstaller {
         val dest = File(destDir, sel.wallpaperFileName)
         if (dest.isFile && dest.length() > 10_000) return
         // Optional; atomic so a failed copy never leaves a truncated wallpaper behind.
-        if (writeAtomically(dest) { out -> app.assets.open(sel.wallpaperAsset).use { it.copyTo(out) } }) {
+        if (writeAtomically(dest) { out -> openAsset(sel.wallpaperAsset).use { it.copyTo(out) } }) {
             onLog("Wallpaper: ${sel.wallpaperFileName}")
         }
     }
 
-    private fun materialize(
-        app: Context,
-        cache: File,
-        shared: File,
-        assetPath: String,
-        fileName: String,
-        urlFallback: String?,
-        onLog: (String) -> Unit
-    ): File? {
-        // The cache dir is keyed by the APK's lastUpdateTime ([assetCacheDir]) and every
-        // file in it is written atomically, so a present file is a complete copy of the
-        // current APK's asset. A copy that fails to extract is dropped ([discardCached]).
-        val cached = File(cache, fileName)
-        if (cached.isFile && cached.length() > 1024) {
-            stageShared(cached, shared)
-            return cached
-        }
-        // APK assets (offline)
-        val fromAssets = writeAtomically(cached) { out ->
-            app.assets.open(assetPath).use { input -> input.copyTo(out) }
-        }
-        if (fromAssets && cached.isFile && cached.length() > 1024) {
-            onLog("Staged $fileName from app assets")
-            stageShared(cached, shared)
-            return cached
-        }
-        if (urlFallback != null) {
-            onLog("Downloading $fileName…")
-            if (httpDownload(urlFallback, cached, onLog)) {
-                stageShared(cached, shared)
-                return cached
+    /**
+     * Stages APK archives into the versioned host [cache] and the guest's [shared] dir,
+     * then host-extracts them.
+     */
+    private class Stager(
+        private val cache: File,
+        private val shared: File,
+        private val openAsset: (String) -> InputStream,
+        private val extract: (archive: File, dest: File, onlyPrefix: String?) -> Extract,
+        private val onLog: (String) -> Unit,
+    ) {
+        /**
+         * Stages [assetPath] as [fileName] and extracts it into [dest]; with [onlyPrefix],
+         * a filtered extract is tried first, then a full one. On [Extract.FAILED] the cached
+         * copy is dropped so the next run re-stages it, and the shared copy is refreshed
+         * from the APK, never removed: the guest script extracts it itself.
+         */
+        fun stageAndExtract(assetPath: String, fileName: String, dest: File, onlyPrefix: String? = null): Extract {
+            val tar = materialize(assetPath, fileName) ?: run {
+                onLog("No archive available ($fileName)")
+                return Extract.FAILED
             }
+            var result = if (onlyPrefix != null) extract(tar, dest, onlyPrefix) else Extract.FAILED
+            if (result == Extract.FAILED) result = extract(tar, dest, null)
+            if (result == Extract.FAILED) {
+                onLog("Host extract failed for $fileName — re-staging it")
+                tar.delete()
+                writeAtomically(File(shared, fileName)) { out -> openAsset(assetPath).use { it.copyTo(out) } }
+            }
+            return result
         }
-        return cached.takeIf { it.isFile && it.length() > 1024 }
-    }
 
-    /** Copy for the guest script's fallback path (`/tmp/flux_xfce_assets`), also atomic. */
-    private fun stageShared(cached: File, shared: File) {
-        writeAtomically(File(shared, cached.name)) { out -> cached.inputStream().use { it.copyTo(out) } }
-    }
-
-    /** Drops a cached archive (and its shared copy) that failed to extract, so the next run re-stages it. */
-    private fun discardCached(archive: File, shared: File) {
-        archive.delete()
-        File(shared, archive.name).delete()
+        private fun materialize(assetPath: String, fileName: String): File? {
+            // The cache dir is keyed by the APK's lastUpdateTime ([assetCacheDir]) and every
+            // file in it is written atomically, so a present file is a complete copy of the
+            // current APK's asset. A copy that fails to extract is dropped ([stageAndExtract]).
+            val cached = File(cache, fileName)
+            if (!(cached.isFile && cached.length() > 1024)) {
+                // APK assets (offline)
+                val fromAssets = writeAtomically(cached) { out ->
+                    openAsset(assetPath).use { input -> input.copyTo(out) }
+                }
+                if (!(fromAssets && cached.isFile && cached.length() > 1024)) return null
+                onLog("Staged $fileName from app assets")
+            }
+            // Copy for the guest script's fallback path (`/tmp/flux_xfce_assets`), also atomic.
+            writeAtomically(File(shared, fileName)) { out -> cached.inputStream().use { it.copyTo(out) } }
+            return cached
+        }
     }
 
     private const val CACHE_STAMP = ".apk_last_update"
@@ -455,25 +411,16 @@ object ProotXfceAssetInstaller {
         }
     }
 
-    private fun httpDownload(url: String, dest: File, onLog: (String) -> Unit): Boolean {
-        return try {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 30_000
-                readTimeout = 120_000
-                instanceFollowRedirects = true
-            }
-            val ok = try {
-                writeAtomically(dest) { out -> conn.inputStream.use { it.copyTo(out) } }
-            } finally {
-                conn.disconnect()
-            }
-            if (!ok) onLog("Download failed: $url")
-            ok && dest.isFile && dest.length() > 1024
-        } catch (e: Exception) {
-            onLog("Download failed: ${e.message}")
-            false
-        }
-    }
+    /**
+     * Stock Android toybox `tar -J` execs an external `xz`, which the device lacks. Probed by
+     * the first `.xz` extract; once missing, host `.xz` extracts are skipped for this process.
+     */
+    @Volatile
+    private var hostXzMissing = false
+
+    /** toybox reports `tar: exec xz: No such file or directory` (rc 127 from the child). */
+    internal fun isMissingXz(exitCode: Int, output: String): Boolean =
+        exitCode == 127 || output.contains("exec xz") || Regex("""\bxz: (not found|No such file)""").containsMatchIn(output)
 
     /**
      * @param onlyPrefix if set, pass as additional tar path args (e.g. "Papirus-Dark")
@@ -484,7 +431,9 @@ object ProotXfceAssetInstaller {
         stripXz: Boolean,
         onlyPrefix: String?,
         onLog: (String) -> Unit
-    ): Boolean {
+    ): Extract {
+        val xz = archive.name.endsWith(".tar.xz") || stripXz && archive.name.endsWith(".xz")
+        if (xz && hostXzMissing) return Extract.UNAVAILABLE
         destDir.mkdirs()
         val tarBin = when {
             File("/system/bin/tar").canExecute() -> "/system/bin/tar"
@@ -492,7 +441,7 @@ object ProotXfceAssetInstaller {
         }
         val args = mutableListOf(tarBin)
         when {
-            archive.name.endsWith(".tar.xz") || stripXz && archive.name.endsWith(".xz") -> {
+            xz -> {
                 args += listOf("-xJf", archive.absolutePath, "-C", destDir.absolutePath)
             }
             archive.name.endsWith(".tar.gz") || archive.name.endsWith(".tgz") -> {
@@ -512,15 +461,21 @@ object ProotXfceAssetInstaller {
             val proc = pb.start()
             val out = proc.inputStream.bufferedReader().readText()
             val code = proc.waitFor()
-            if (code != 0) {
-                onLog("tar exit $code: ${out.take(400)}")
-                false
-            } else {
-                true
+            when {
+                code == 0 -> Extract.OK
+                xz && isMissingXz(code, out) -> {
+                    hostXzMissing = true
+                    onLog("Host tar has no xz — leaving .tar.xz archives to the guest")
+                    Extract.UNAVAILABLE
+                }
+                else -> {
+                    onLog("tar exit $code: ${out.take(400)}")
+                    Extract.FAILED
+                }
             }
         } catch (e: Exception) {
             onLog("tar failed: ${e.message}")
-            false
+            Extract.FAILED
         }
     }
 
@@ -556,12 +511,12 @@ object ProotXfceAssetInstaller {
                     stripXz = t.name.endsWith(".xz"),
                     onlyPrefix = onlyIcon,
                     onLog
-                )
+                ) == Extract.OK
                 if (ok) any = true
             }
             // If path filter failed (archive layout differs), full extract of first tar
             if (!any && tars.isNotEmpty()) {
-                any = hostTarExtract(tars.first(), destDir, stripXz = false, onlyPrefix = null, onLog)
+                any = hostTarExtract(tars.first(), destDir, stripXz = false, onlyPrefix = null, onLog) == Extract.OK
             }
             any
         } catch (e: Exception) {
