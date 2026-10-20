@@ -12,6 +12,7 @@ object TerminalPreferences {
     private const val PREFS_NAME = "flux_terminal_prefs"
     private const val KEY_FONT_SIZE = "font_size"
     private const val KEY_SHOW_EXTRA_KEYS = "show_extra_keys"
+    private const val KEY_KEY_REPEAT_ACCELERATED = "key_repeat_accelerated"
     private const val KEY_GUEST_LOGIN_SHELL = "guest_login_shell"
     private const val KEY_LEGACY_PROOT_LAUNCHER = "legacy_proot_launcher"
 
@@ -36,6 +37,17 @@ object TerminalPreferences {
 
     fun setExtraKeysEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_SHOW_EXTRA_KEYS, enabled).apply()
+    }
+
+    /**
+     * true → held extra keys speed up (`KeyRepeat` accelerated schedule);
+     * false (default) → Termux-style constant repeat speed.
+     */
+    fun isKeyRepeatAccelerated(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_KEY_REPEAT_ACCELERATED, false)
+
+    fun setKeyRepeatAccelerated(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_KEY_REPEAT_ACCELERATED, enabled).apply()
     }
 
     fun getGuestLoginShell(context: Context): GuestLoginShell =

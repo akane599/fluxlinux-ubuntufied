@@ -136,6 +136,9 @@ fun TerminalScreen(
     var showExtraKeys by remember {
         mutableStateOf(TerminalPreferences.isExtraKeysEnabled(context))
     }
+    var accelerateKeys by remember {
+        mutableStateOf(TerminalPreferences.isKeyRepeatAccelerated(context))
+    }
     var terminalViewRef by remember { mutableStateOf<TerminalView?>(null) }
     var showShellMenu by remember { mutableStateOf(false) }
     // Empty-state auto-open runs once per entry; a failure leaves a retry button, never a loop.
@@ -155,6 +158,7 @@ fun TerminalScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 fontSize = TerminalPreferences.getFontSize(context)
                 showExtraKeys = TerminalPreferences.isExtraKeysEnabled(context)
+                accelerateKeys = TerminalPreferences.isKeyRepeatAccelerated(context)
                 terminalViewRef?.setTextSize(fontSize)
             }
         }
@@ -487,6 +491,7 @@ fun TerminalScreen(
                 TerminalExtraKeys(
                     modState = modState,
                     terminalView = { terminalViewRef },
+                    accelerateRepeat = accelerateKeys,
                     modifier = Modifier.fillMaxWidth()
                 )
             }

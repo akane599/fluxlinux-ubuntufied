@@ -36,4 +36,17 @@ class TerminalPreferencesTest {
         ctx.prefs.edit().putString("guest_login_shell", "fish").apply()
         assertEquals(GuestLoginShell.ZSH, TerminalPreferences.getGuestLoginShell(ctx))
     }
+
+    @Test
+    fun keyRepeatAccelerated_unset_defaultsToConstantSpeed() {
+        assertFalse(TerminalPreferences.isKeyRepeatAccelerated(ctx))
+    }
+
+    @Test
+    fun keyRepeatAccelerated_roundTrips() {
+        TerminalPreferences.setKeyRepeatAccelerated(ctx, true)
+        assertTrue(TerminalPreferences.isKeyRepeatAccelerated(ctx))
+        TerminalPreferences.setKeyRepeatAccelerated(ctx, false)
+        assertFalse(TerminalPreferences.isKeyRepeatAccelerated(ctx))
+    }
 }

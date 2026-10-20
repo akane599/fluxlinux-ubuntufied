@@ -29,4 +29,6 @@
     <string name="install_base_desktop_done">Base desktop installed</string>
     <string name="home_repair_blocked_install">Host files are in use by an install or another repair. Try again when it finishes.</string>
     <string name="install_blocked_uninstall">A distro is being uninstalled. Close the uninstall tab when it finishes, then install again.</string>
+    <string name="terminal_settings_accelerate_keys">Accelerate held keys</string>
+    <string name="terminal_settings_accelerate_keys_summary">Held arrows and delete speed up over time. Off repeats at a steady Termux-like speed.</string>
 </resources>

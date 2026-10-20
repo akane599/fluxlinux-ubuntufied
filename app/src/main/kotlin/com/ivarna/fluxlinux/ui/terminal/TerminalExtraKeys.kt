@@ -31,6 +31,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -205,6 +207,9 @@ object TerminalKeyInjector {
     }
 }
 
+/** Hold-to-repeat schedule for the toolbar keys: [KeyRepeat] accelerated vs constant mode. */
+private val LocalKeyRepeatAccelerated = compositionLocalOf { false }
+
 /**
  * Nativecode-style special-keys toolbar (2 rows + optional F-keys row).
  *
@@ -216,7 +221,8 @@ object TerminalKeyInjector {
 fun TerminalExtraKeys(
     modState: TerminalModifierState,
     terminalView: () -> TerminalView?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    accelerateRepeat: Boolean = false,
 ) {
     val row2Scroll = rememberScrollState()
     val fRowScroll = rememberScrollState()
@@ -249,53 +255,55 @@ fun TerminalExtraKeys(
     fun onHoldEnd(key: String): (() -> Unit)? =
         if (KeyRepeat.isRepeatable(key)) { { modState.consumeModifiers() } } else null
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
-    ) {
-        // ── Row 1: modifiers + core keys (equal weight, 44dp) ───────────────
-        Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
-            ModifierKey("CTRL", modState.ctrlActive, modState.ctrlLocked, { modState.toggleCtrl() }, { modState.lockCtrl() }, Modifier.weight(1f))
-            ModifierKey("ALT", modState.altActive, modState.altLocked, { modState.toggleAlt() }, { modState.lockAlt() }, Modifier.weight(1f))
-            ModifierKey("SHFT", modState.shiftActive, modState.shiftLocked, { modState.toggleShift() }, { modState.lockShift() }, Modifier.weight(1f))
-            CoreKey("ESC", { press("ESC") }, Modifier.weight(1f))
-            CoreKey("TAB", { press("TAB") }, Modifier.weight(1f))
-            CoreKey("ENT", { press("ENTER") }, Modifier.weight(1f))
-            CoreKey("BKSP", onFire("BKSP"), Modifier.weight(1f), onHoldEnd("BKSP"))
-        }
-
-        // ── Row 2: scrollable special keys ──────────────────────────────────
-        Row(
-            modifier = Modifier
+    CompositionLocalProvider(LocalKeyRepeatAccelerated provides accelerateRepeat) {
+        Column(
+            modifier = modifier
                 .fillMaxWidth()
-                .horizontalScroll(row2Scroll)
-                .padding(vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
         ) {
-            IconKey(painterResource(R.drawable.ic_arrow_left), "Arrow left", onFire("LEFT"), keyWidth, onHoldEnd("LEFT"))
-            IconKey(painterResource(R.drawable.ic_arrow_up), "Arrow up", onFire("UP"), keyWidth, onHoldEnd("UP"))
-            IconKey(painterResource(R.drawable.ic_arrow_down), "Arrow down", onFire("DOWN"), keyWidth, onHoldEnd("DOWN"))
-            IconKey(painterResource(R.drawable.ic_arrow_right), "Arrow right", onFire("RIGHT"), keyWidth, onHoldEnd("RIGHT"))
-            IconKey(painterResource(R.drawable.ic_backspace), "Delete", onFire("DEL"), keyWidth, onHoldEnd("DEL"))
-            TextKey("Ins", { press("INS") }, keyWidth)
-            listOf("/", "|", "~", "-", "_", "\\").forEach { sym ->
-                TextKey(sym, { press(sym) }, keyWidth)
+            // ── Row 1: modifiers + core keys (equal weight, 44dp) ───────────────
+            Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+                ModifierKey("CTRL", modState.ctrlActive, modState.ctrlLocked, { modState.toggleCtrl() }, { modState.lockCtrl() }, Modifier.weight(1f))
+                ModifierKey("ALT", modState.altActive, modState.altLocked, { modState.toggleAlt() }, { modState.lockAlt() }, Modifier.weight(1f))
+                ModifierKey("SHFT", modState.shiftActive, modState.shiftLocked, { modState.toggleShift() }, { modState.lockShift() }, Modifier.weight(1f))
+                CoreKey("ESC", { press("ESC") }, Modifier.weight(1f))
+                CoreKey("TAB", { press("TAB") }, Modifier.weight(1f))
+                CoreKey("ENT", { press("ENTER") }, Modifier.weight(1f))
+                CoreKey("BKSP", onFire("BKSP"), Modifier.weight(1f), onHoldEnd("BKSP"))
             }
-            TextKey("Fn", { fnVisible = !fnVisible }, keyWidth, active = fnVisible)
-        }
 
-        // ── Row 3: F-keys (toggle via Fn) ───────────────────────────────────
-        if (fnVisible) {
+            // ── Row 2: scrollable special keys ──────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(fRowScroll)
-                    .padding(bottom = 2.dp),
+                    .horizontalScroll(row2Scroll)
+                    .padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                (1..12).forEach { n ->
-                    TextKey("F$n", { press("F$n") }, keyWidth)
+                IconKey(painterResource(R.drawable.ic_arrow_left), "Arrow left", onFire("LEFT"), keyWidth, onHoldEnd("LEFT"))
+                IconKey(painterResource(R.drawable.ic_arrow_up), "Arrow up", onFire("UP"), keyWidth, onHoldEnd("UP"))
+                IconKey(painterResource(R.drawable.ic_arrow_down), "Arrow down", onFire("DOWN"), keyWidth, onHoldEnd("DOWN"))
+                IconKey(painterResource(R.drawable.ic_arrow_right), "Arrow right", onFire("RIGHT"), keyWidth, onHoldEnd("RIGHT"))
+                IconKey(painterResource(R.drawable.ic_backspace), "Delete", onFire("DEL"), keyWidth, onHoldEnd("DEL"))
+                TextKey("Ins", { press("INS") }, keyWidth)
+                listOf("/", "|", "~", "-", "_", "\\").forEach { sym ->
+                    TextKey(sym, { press(sym) }, keyWidth)
+                }
+                TextKey("Fn", { fnVisible = !fnVisible }, keyWidth, active = fnVisible)
+            }
+
+            // ── Row 3: F-keys (toggle via Fn) ───────────────────────────────────
+            if (fnVisible) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(fRowScroll)
+                        .padding(bottom = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    (1..12).forEach { n ->
+                        TextKey("F$n", { press("F$n") }, keyWidth)
+                    }
                 }
             }
         }
@@ -348,7 +356,8 @@ private fun ModifierKey(
 
 /**
  * Click handling for a toolbar key. Without [onHoldEnd] it is a plain click.
- * With it the key repeats while held on the [KeyRepeat] schedule: [onClick] runs
+ * With it the key repeats while held on the [KeyRepeat] schedule (constant or
+ * accelerated per [LocalKeyRepeatAccelerated], read live on every repeat): [onClick] runs
  * once for a tap or on every fire of a hold, then [onHoldEnd] runs once when the
  * press ends (release, cancel, or leaving composition). A swipe that the toolbar
  * row's scroll claims before [KeyRepeat.PRESS_CONFIRM_DELAY_MS] sends nothing.
@@ -359,6 +368,7 @@ private fun keyClickModifier(onClick: () -> Unit, onHoldEnd: (() -> Unit)?): Mod
     if (onHoldEnd == null) return Modifier.combinedClickable(onClick = onClick)
     val fire by rememberUpdatedState(onClick)
     val end by rememberUpdatedState(onHoldEnd)
+    val accelerated by rememberUpdatedState(LocalKeyRepeatAccelerated.current)
     val interactionSource = remember { MutableInteractionSource() }
     return Modifier
         .indication(interactionSource, LocalIndication.current)
@@ -382,7 +392,7 @@ private fun keyClickModifier(onClick: () -> Unit, onHoldEnd: (() -> Unit)?): Mod
                         fire()
                         var repeat = 0
                         while (true) {
-                            delay(KeyRepeat.delayBeforeRepeat(repeat++))
+                            delay(KeyRepeat.delayBeforeRepeat(repeat++, accelerated))
                             fire()
                         }
                     }

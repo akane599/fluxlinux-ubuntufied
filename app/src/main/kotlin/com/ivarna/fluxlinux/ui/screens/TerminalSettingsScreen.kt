@@ -40,11 +40,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.terminal.GuestLoginShell
 import com.ivarna.fluxlinux.core.utils.TerminalPreferences
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
@@ -65,6 +67,9 @@ fun TerminalSettingsScreen(
     }
     var showExtraKeys by remember {
         mutableStateOf(TerminalPreferences.isExtraKeysEnabled(context))
+    }
+    var accelerateKeys by remember {
+        mutableStateOf(TerminalPreferences.isKeyRepeatAccelerated(context))
     }
     var guestShellZsh by remember {
         mutableStateOf(TerminalPreferences.preferZsh(context))
@@ -183,38 +188,25 @@ fun TerminalSettingsScreen(
                 }
             }
 
-            GlassSettingCard {
-                Row(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "Extra keyboard rows",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Show CTRL, ALT, ESC, arrows and symbols under the terminal.",
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
-                            color = fluxMutedText()
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    FluxSwitch(
-                        checked = showExtraKeys,
-                        onCheckedChange = {
-                            showExtraKeys = it
-                            TerminalPreferences.setExtraKeysEnabled(context, it)
-                        }
-                    )
+            TerminalSwitchSettingCard(
+                title = "Extra keyboard rows",
+                description = "Show CTRL, ALT, ESC, arrows and symbols under the terminal.",
+                checked = showExtraKeys,
+                onCheckedChange = {
+                    showExtraKeys = it
+                    TerminalPreferences.setExtraKeysEnabled(context, it)
                 }
-            }
+            )
+
+            TerminalSwitchSettingCard(
+                title = stringResource(R.string.terminal_settings_accelerate_keys),
+                description = stringResource(R.string.terminal_settings_accelerate_keys_summary),
+                checked = accelerateKeys,
+                onCheckedChange = {
+                    accelerateKeys = it
+                    TerminalPreferences.setKeyRepeatAccelerated(context, it)
+                }
+            )
 
             GlassSettingCard {
                 Row(
@@ -308,6 +300,47 @@ fun TerminalSettingsScreen(
             }
 
             Spacer(Modifier.height(40.dp))
+        }
+    }
+}
+
+/** Title + one-line description + switch, the card pattern of this screen's toggles. */
+@Composable
+fun TerminalSwitchSettingCard(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    GlassSettingCard(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .padding(20.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    description,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
+                    color = fluxMutedText()
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            FluxSwitch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier.semantics { contentDescription = title }
+            )
         }
     }
 }
