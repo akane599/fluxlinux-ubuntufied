@@ -75,4 +75,48 @@ class ProotXfceAssetInstallerTest {
         File(root, "usr/share/icons/${sel.cursorName}/cursors").mkdirs()
         assertTrue(ProotXfceAssetInstaller.isSelectionInstalled(root, sel))
     }
+
+    // ---- L19: atomic, APK-versioned asset cache ------------------------------------
+
+    @Test
+    fun writeAtomically_failedWriteLeavesNoPartialFileAndKeepsOld() {
+        val dir = tmp.newFolder("cache")
+        val dest = File(dir, "theme.tar.xz")
+        assertFalse(
+            ProotXfceAssetInstaller.writeAtomically(dest) { out ->
+                out.write(ByteArray(2048))
+                throw java.io.IOException("truncated")
+            },
+        )
+        assertFalse("no truncated cache file", dest.exists())
+        assertFalse("temp file removed", File(dir, "theme.tar.xz.tmp").exists())
+
+        dest.writeText("complete")
+        assertFalse(ProotXfceAssetInstaller.writeAtomically(dest) { throw java.io.IOException("x") })
+        assertEquals("complete", dest.readText())
+    }
+
+    @Test
+    fun writeAtomically_successReplacesDest() {
+        val dest = File(tmp.newFolder("cache2"), "icons.tar.xz").apply { writeText("old") }
+        assertTrue(ProotXfceAssetInstaller.writeAtomically(dest) { it.write("new".toByteArray()) })
+        assertEquals("new", dest.readText())
+        assertFalse(File(dest.parentFile, "icons.tar.xz.tmp").exists())
+    }
+
+    @Test
+    fun versionedCacheDir_dropsFilesFromAnotherApkVersion() {
+        val parent = tmp.newFolder("cacheRoot")
+        val dir = ProotXfceAssetInstaller.versionedCacheDir(parent, "flux_xfce_assets", 100L)
+        val cached = File(dir, "theme.tar.xz").apply { writeText("v100") }
+
+        // Same APK: the cache is reused.
+        assertEquals(dir, ProotXfceAssetInstaller.versionedCacheDir(parent, "flux_xfce_assets", 100L))
+        assertTrue(cached.isFile)
+
+        // Updated APK: stale archives are dropped.
+        val again = ProotXfceAssetInstaller.versionedCacheDir(parent, "flux_xfce_assets", 200L)
+        assertTrue(again.isDirectory)
+        assertFalse(cached.exists())
+    }
 }
