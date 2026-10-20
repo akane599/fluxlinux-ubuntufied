@@ -31,6 +31,9 @@
 
 #include "lorie.h"
 
+/* Upper bound for clipboard payloads handled here, so they are never sized by peers unchecked. */
+#define LORIE_CLIPBOARD_MAX_BYTES (16u * 1024u * 1024u)
+
 /* utility functions for text conversion */
 
 static inline void lorieConvertLF(const char* src, char *dst, size_t bytes) {
@@ -49,18 +52,20 @@ static inline void lorieLatin1ToUTF8(unsigned char* out, const unsigned char* in
 }
 
 static inline int lorieCheckUTF8(const unsigned char *utf, size_t size) {
-    int ix;
+    size_t ix = 0;
     unsigned char c;
 
-    for (ix = 0; (c = utf[ix]) && ix < size;) {
+    // Never read past `size`: X property data is not NUL-terminated, and a sequence
+    // truncated by the end of the buffer is treated as invalid.
+    while (ix < size && (c = utf[ix])) {
         if (c & 0x80) {
-            if ((utf[ix + 1] & 0xc0) != 0x80)
+            if (ix + 1 >= size || (utf[ix + 1] & 0xc0) != 0x80)
                 return 0;
             if ((c & 0xe0) == 0xe0) {
-                if ((utf[ix + 2] & 0xc0) != 0x80)
+                if (ix + 2 >= size || (utf[ix + 2] & 0xc0) != 0x80)
                     return 0;
                 if ((c & 0xf0) == 0xf0) {
-                    if ((c & 0xf8) != 0xf0 || (utf[ix + 3] & 0xc0) != 0x80)
+                    if ((c & 0xf8) != 0xf0 || ix + 3 >= size || (utf[ix + 3] & 0xc0) != 0x80)
                         return 0;
                     ix += 4;
                     /* 4-byte code */
@@ -154,9 +159,12 @@ static const char *lorieUtf8ToLatin1(const char *src) {
         sz++;
     }
 
-    // Reserve space
-    unsigned char out[sz + 1];
-    memset(out, 0, sz + 1);
+    // Reserve space (on the heap: the size is controlled by the Android clipboard)
+    if (sz > LORIE_CLIPBOARD_MAX_BYTES)
+        return NULL;
+    unsigned char *out = calloc(1, sz + 1);
+    if (!out)
+        return NULL;
     size_t position = 0;
 
     // And convert
@@ -176,7 +184,7 @@ static const char *lorieUtf8ToLatin1(const char *src) {
             out[position++] = (unsigned char)ucs;
     }
 
-    return strdup((const char*) out);
+    return (const char*) out;
 }
 
 /* end utility functions */
@@ -249,27 +257,41 @@ static void lorieHandleSelection(Atom target) {
         if (prop->format != 8 || prop->type != xaSTRING)
             return;
 
-        char filtered[prop->size + 1], utf8[(prop->size + 1) * 2];
-        memset(filtered, 0, sizeof(filtered));
-        memset(utf8, 0, sizeof(utf8));
+        if (prop->size > LORIE_CLIPBOARD_MAX_BYTES) {
+            log(ERROR, "Clipboard selection too large (%lu bytes), not syncing it\n", (unsigned long) prop->size);
+            return;
+        }
 
-        lorieConvertLF(prop->data,  filtered, prop->size);
-        lorieLatin1ToUTF8((unsigned char*) utf8, (unsigned char*) filtered);
-        log(DEBUG, "Sending clipboard to clients (%zu bytes)\n", strlen(utf8));
-        lorieSendClipboardData(utf8);
+        // Heap, not stack: the size is chosen by the X client owning the selection.
+        char *filtered = calloc(1, prop->size + 1), *utf8 = calloc(2, prop->size + 1);
+        if (filtered && utf8) {
+            lorieConvertLF(prop->data, filtered, prop->size);
+            lorieLatin1ToUTF8((unsigned char*) utf8, (unsigned char*) filtered);
+            log(DEBUG, "Sending clipboard to clients (%zu bytes)\n", strlen(utf8));
+            lorieSendClipboardData(utf8);
+        }
+        free(filtered);
+        free(utf8);
     } else if (target == xaUTF8_STRING && prop->type == xaUTF8_STRING && prop->format == 8) {
-        char filtered[prop->size + 1];
+        if (prop->size > LORIE_CLIPBOARD_MAX_BYTES) {
+            log(ERROR, "Clipboard selection too large (%lu bytes), not syncing it\n", (unsigned long) prop->size);
+            return;
+        }
 
         if (!lorieCheckUTF8(prop->data, prop->size)) {
             dprintf(2, "Invalid UTF-8 sequence in clipboard\n");
             return;
         }
 
-        memset(filtered, 0, prop->size + 1);
+        // Heap, not stack: the size is chosen by the X client owning the selection.
+        char *filtered = calloc(1, prop->size + 1);
+        if (!filtered)
+            return;
         lorieConvertLF(prop->data, filtered, prop->size);
 
         log(DEBUG, "Sending clipboard to clients (%zu bytes)\n", strlen(filtered));
         lorieSendClipboardData(filtered);
+        free(filtered);
     }
 }
 
