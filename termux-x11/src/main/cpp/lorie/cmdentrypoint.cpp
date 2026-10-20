@@ -103,6 +103,7 @@ Java_com_termux_x11_CmdEntryPoint_start(JNIEnv *env, __unused jclass cls, jobjec
 
     {
         cpu_set_t mask;
+        CPU_ZERO(&mask);
         long num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
         for (int i = num_cpus/2; i < num_cpus; i++)
@@ -592,8 +593,8 @@ Java_com_termux_x11_CmdEntryPoint_getLogcatOutput(JNIEnv *env, __unused jobject 
         fchmod(p[1], 0777);
         pthread_create(&t, nullptr, +[](void *arg) -> void* {
             char buffer[4096];
-            size_t len;
-            while((len = read((int) (int64_t) arg, buffer, 4096)) >=0)
+            ssize_t len;
+            while((len = read((int) (int64_t) arg, buffer, 4096)) > 0)
                 write(2, buffer, len);
             close((int) (int64_t) arg);
             return nullptr;

@@ -488,6 +488,10 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
                 lastInputTimestampMs = nowMs();
                 auto* r = (LorieViewResources*) ptr;
                 if (r && r->connFd != -1) {
+                    // Keycodes past the table (stylus/macro keys, newer Android keys) have no mapping.
+                    const int tableSize = (int) (sizeof(android_to_linux_keycode) / sizeof(android_to_linux_keycode[0]));
+                    if (!scan_code && (key_code < 0 || key_code >= tableSize))
+                        return true;
                     int code = (scan_code) ?: android_to_linux_keycode[key_code];
                     sendEvent(r, .key = { .t = EVENT_KEY, .key = (uint16_t) (code + 8), .state = key_down });
                 }
