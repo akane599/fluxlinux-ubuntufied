@@ -8,6 +8,7 @@ import com.ivarna.fluxlinux.core.chroot.ChrootDetection
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.concurrent.withLock
 
 /**
  * Entry point for card actions that need the embedded host before a terminal
@@ -171,11 +172,23 @@ object TerminalLauncher {
         }
     }
 
-    /** Blocking variant (background thread only) used by tests / RootShell flows. */
+    /**
+     * Blocking variant (background thread only) used by tests / RootShell flows.
+     * Serialised with every other extraction via [BootstrapInstaller.extractLock] (M1):
+     * a concurrent "Repair host" finishes before this checks or deploys anything.
+     */
     fun prepareHostBlocking(
         ctx: Context,
         forceHostSetup: Boolean = false,
         progress: (done: Long, total: Long, phase: String) -> Unit = { _, _, _ -> }
+    ): Boolean = BootstrapInstaller.extractLock.withLock {
+        prepareHostLocked(ctx, forceHostSetup, progress)
+    }
+
+    private fun prepareHostLocked(
+        ctx: Context,
+        forceHostSetup: Boolean,
+        progress: (done: Long, total: Long, phase: String) -> Unit,
     ): Boolean {
         // Fast path (proot-opt-01): host already set up + bootstrap extracted →
         // skip ensureExtracted / deployScripts / tree sweeps entirely and return

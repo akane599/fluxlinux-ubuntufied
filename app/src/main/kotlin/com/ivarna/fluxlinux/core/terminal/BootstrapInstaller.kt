@@ -12,6 +12,11 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Extracts the host `bootstrap.tar` into the app filesDir as the embedded host PREFIX,
@@ -44,6 +49,20 @@ object BootstrapInstaller {
     const val EXTRACT_VERSION = 2
 
     private const val MARKER_REL = "home/.fluxlinux/bootstrap.extracted"
+
+    /**
+     * Serialises every prefix extraction (M1). Held by [ensureExtracted] and by
+     * [TerminalLauncher.prepareHostBlocking], so "Repair host" can never race a
+     * terminal/desktop/onboarding preparation over `usr/`, the shared
+     * [TMP_DIR] or the preserved proot-distro aside. Reentrant: prepareHostBlocking
+     * calls ensureExtracted while holding it.
+     */
+    internal val extractLock = ReentrantLock()
+
+    private val _busy = MutableStateFlow(false)
+
+    /** True while a (re-)extraction of the host prefix is running. */
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     fun extractMarker(ctx: Context): File =
         File(ctx.filesDir, MARKER_REL)
@@ -86,6 +105,12 @@ object BootstrapInstaller {
         ctx: Context,
         force: Boolean = false,
         onProgress: (done: Long, total: Long, phase: String) -> Unit = { _, _, _ -> }
+    ): Boolean = extractLock.withLock { ensureExtractedLocked(ctx, force, onProgress) }
+
+    private fun ensureExtractedLocked(
+        ctx: Context,
+        force: Boolean,
+        onProgress: (done: Long, total: Long, phase: String) -> Unit,
     ): Boolean {
         val recovery = recoverStrandedAside(ctx.filesDir)
         if (recovery == AsideRecovery.FAILED) {
@@ -100,6 +125,7 @@ object BootstrapInstaller {
             // full re-extract path below re-applies applyPackageToExtractedPrefix.
             return true
         }
+        _busy.value = true
         return try {
             val tmpDir = File(ctx.filesDir, TMP_DIR)
             SafeFiles.deleteTree(tmpDir)
@@ -133,6 +159,8 @@ object BootstrapInstaller {
             clearMarker(ctx)
             SafeFiles.deleteTree(File(ctx.filesDir, TMP_DIR))
             false
+        } finally {
+            _busy.value = false
         }
     }
 
