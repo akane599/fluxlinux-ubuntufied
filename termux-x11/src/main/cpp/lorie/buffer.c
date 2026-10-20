@@ -24,6 +24,7 @@
 #include <android/sharedmem.h>
 #include "list.h"
 #include "buffer.h"
+#include "conn_io.h"
 
 // libEGL exports this only since API 26, weak so the library still loads below that.
 __attribute__((weak)) EGLClientBuffer eglGetNativeClientBufferANDROID(const struct AHardwareBuffer* buffer);
@@ -371,7 +372,9 @@ __LIBC_HIDDEN__ void LorieBuffer_sendHandleToUnixSocket(LorieBuffer* _Nonnull bu
     if (socketFd < 0 || !buffer)
         return;
 
-    write(socketFd, buffer, sizeof(*buffer));
+    // A short write would misframe every later event; then the handle isn't sent either.
+    if (!lorie_write_full(socketFd, buffer, sizeof(*buffer)))
+        return;
     if (buffer->desc.type == LORIEBUFFER_FD)
         ancil_send_fd(socketFd, buffer->fd);
     else if (buffer->desc.type == LORIEBUFFER_AHARDWAREBUFFER) {
@@ -391,7 +394,7 @@ __LIBC_HIDDEN__ void LorieBuffer_recvHandleFromUnixSocket(int socketFd, LorieBuf
         return;
 
     // We should read buffer from socket despite outbuffer is NULL, otherwise we will get protocol error
-    if (read(socketFd, &received, sizeof(received)) != (ssize_t) sizeof(received))
+    if (!lorie_read_full(socketFd, &received, sizeof(received)))
         return;
 
     // Only the description is meaningful across processes. Everything else in the sender's struct

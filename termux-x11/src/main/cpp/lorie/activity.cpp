@@ -434,6 +434,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
                     if (length < 0 || (uint32_t) length > LORIE_MAX_PAYLOAD)
                         length = 0;
                     jbyte* str = env->GetByteArrayElements(text, NULL);
+                    if (!str)
+                        length = 0; // never announce bytes we can't send
                     lorieEvent e = { .clipboardSend = { .t = EVENT_CLIPBOARD_SEND, .count = (uint32_t) length } };
                     lorieActivitySend(&r->connFd, &e, sizeof(e), str, length);
                     if (str)
