@@ -20,14 +20,22 @@ data class DesktopSession(
 }
 
 object DesktopSessionQuery {
-    fun current(context: Context, ui: DesktopLauncher.UiState): DesktopSession? {
+    /**
+     * @param startInFlight a claimed start counts as active even if the UI phase reads Idle,
+     *   so a second start cannot slip past it (M5).
+     */
+    fun current(
+        context: Context,
+        ui: DesktopLauncher.UiState,
+        startInFlight: Boolean = DesktopLauncher.isStartInFlight(),
+    ): DesktopSession? {
         // Live DesktopLauncher state is authoritative and takes precedence over stored preferences.
-        if ((ui.phase == DesktopLauncher.Phase.Starting || ui.phase == DesktopLauncher.Phase.Running) && ui.distroId != null) {
+        val live = ui.phase != DesktopLauncher.Phase.Idle || startInFlight
+        if (live && ui.distroId != null) {
             val name = resolveDistroName(ui.distroId)
             val phase = when (ui.phase) {
-                DesktopLauncher.Phase.Starting -> DesktopSession.Phase.Starting
                 DesktopLauncher.Phase.Running -> DesktopSession.Phase.Running
-                else -> DesktopSession.Phase.Running
+                else -> DesktopSession.Phase.Starting
             }
             return DesktopSession(
                 distroId = ui.distroId,
