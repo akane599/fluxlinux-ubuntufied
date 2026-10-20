@@ -198,7 +198,7 @@ configure_alpine_chroot() {
     # XFCE is installed by setup_alpine_family.sh in onboarding (cleaner single owner)
     touch "$ALPINEPATH/.flux_configured"
     # A failed earlier uninstall may have left this; the tree is valid again.
-    rm -f "$ALPINEPATH/.flux_uninstalling" 2>/dev/null || true
+    rm -rf "$ALPINEPATH/.flux_uninstalling" 2>/dev/null || true
     success "Alpine Environment Configured (rootfs + user; XFCE via family phase)!"
 
     # M14: the app stages fluxlinux_chroot.sh, resolve_bb.sh and the GUI scripts into

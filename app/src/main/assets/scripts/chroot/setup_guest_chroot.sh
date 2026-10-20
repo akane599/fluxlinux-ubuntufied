@@ -30,10 +30,47 @@ is_mounted() {
     grep -q " $1 " "$PROC_MOUNTS" 2>/dev/null
 }
 
+AWK=""
+
+# awk from PATH, else the root BusyBox applet. Non-zero when neither works.
+pick_awk() {
+    [ -n "$AWK" ] && return 0
+    for _a in awk "${BB:+$BB awk}"; do
+        [ -n "$_a" ] || continue
+        # shellcheck disable=SC2086
+        if [ "$(echo ok | $_a '{ print $1 }' 2>/dev/null)" = ok ]; then
+            AWK="$_a"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Mount points at or below $1, deepest first (exact path match, no regex).
+# Fails closed: non-zero when /proc/mounts is unreadable or awk is unavailable.
 mounts_under() {
-    awk -v p="$1" '$2 == p || index($2, p "/") == 1 { print $2 }' \
-        "$PROC_MOUNTS" 2>/dev/null | sort -r
+    { [ -r "$PROC_MOUNTS" ] && pick_awk; } || return 1
+    # shellcheck disable=SC2086
+    $AWK -v p="$1" '
+        $2 == p || index($2, p "/") == 1 { m[n++] = $2 }
+        END {
+            for (i = 0; i < n; i++)
+                for (j = i + 1; j < n; j++)
+                    if (length(m[j]) > length(m[i])) { t = m[i]; m[i] = m[j]; m[j] = t }
+            for (i = 0; i < n; i++) print m[i]
+        }' "$PROC_MOUNTS"
+}
+
+# Independent of awk: 0 only when $PROC_MOUNTS is readable and lists no mount
+# point at or below $1 (fixed-string match; grep status 1 = no match).
+no_mounts_at_or_under() {
+    [ -r "$PROC_MOUNTS" ] || return 1
+    _grep=grep
+    command -v grep >/dev/null 2>&1 || _grep="${BB:+$BB grep}"
+    [ -n "$_grep" ] || return 1
+    # shellcheck disable=SC2086
+    $_grep -F -e " $1 " -e " $1/" "$PROC_MOUNTS" >/dev/null 2>&1
+    [ "$?" -eq 1 ]
 }
 
 # L6: never stack a second layer on a target that is already mounted.
@@ -61,19 +98,24 @@ cleanup_mounts() {
     progress "Safety Check: Unmounting filesystems..."
     _pass=0
     while [ "$_pass" -lt 5 ]; do
-        _mnts=$(mounts_under "$GUESTPATH")
-        [ -z "$_mnts" ] && return 0
+        # Fail closed (H4 review): unknown mount state counts as still mounted.
+        _mnts=$(mounts_under "$GUESTPATH") || break
+        if [ -z "$_mnts" ]; then
+            no_mounts_at_or_under "$GUESTPATH" && return 0
+            break
+        fi
         for _mnt in $_mnts; do
             $BB umount "$_mnt" 2>/dev/null || $BB umount -l "$_mnt" 2>/dev/null || true
         done
         _pass=$((_pass + 1))
     done
-    if [ -n "$(mounts_under "$GUESTPATH")" ]; then
-        error "Still mounted under $GUESTPATH:"
-        mounts_under "$GUESTPATH"
-        return 1
+    if _mnts=$(mounts_under "$GUESTPATH") && [ -z "$_mnts" ] \
+        && no_mounts_at_or_under "$GUESTPATH"; then
+        return 0
     fi
-    return 0
+    error "Still mounted (or mounts unreadable) under $GUESTPATH:"
+    grep -F " $GUESTPATH" "$PROC_MOUNTS" 2>/dev/null
+    return 1
 }
 
 goodbye() {
@@ -264,7 +306,7 @@ configure_guest_chroot() {
 
     touch "$GUESTPATH/.flux_configured"
     # A failed earlier uninstall may have left this; the tree is valid again.
-    rm -f "$GUESTPATH/.flux_uninstalling" 2>/dev/null || true
+    rm -rf "$GUESTPATH/.flux_uninstalling" 2>/dev/null || true
     success "$DISTRO_LABEL environment configured (rootfs + user; XFCE via family phase)!"
 
     # M14: the app stages fluxlinux_chroot.sh, resolve_bb.sh and the GUI scripts into

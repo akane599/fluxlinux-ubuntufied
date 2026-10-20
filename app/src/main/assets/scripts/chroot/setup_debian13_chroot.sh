@@ -291,7 +291,7 @@ configure_debian_chroot() {
 
     touch "$DEBIANPATH/.flux_configured"
     # A failed earlier uninstall may have left this; the tree is valid again.
-    rm -f "$DEBIANPATH/.flux_uninstalling" 2>/dev/null || true
+    rm -rf "$DEBIANPATH/.flux_uninstalling" 2>/dev/null || true
     success "Debian Environment Configured!"
 
     # --- GENERATE GUI LAUNCH SCRIPT (thin → SSOT GUI / helper) ---
@@ -484,7 +484,7 @@ fi
         progress "Skipping installation (rootfs at $DEBIANPATH)..."
         # Ensure marker exists for future probes
         touch "$DEBIANPATH/.flux_configured" 2>/dev/null || true
-        rm -f "$DEBIANPATH/.flux_uninstalling" 2>/dev/null || true
+        rm -rf "$DEBIANPATH/.flux_uninstalling" 2>/dev/null || true
         # Print probe lines the app can match in logs
         progress "VERIFY: chroot present (bin/sh or bash + marker)"
         am start -a android.intent.action.VIEW -d "fluxlinux://callback?result=success&name=distro_install_debian13_chroot" >/dev/null 2>&1 || true

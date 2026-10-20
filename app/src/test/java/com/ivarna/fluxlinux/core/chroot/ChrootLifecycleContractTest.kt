@@ -209,8 +209,15 @@ class ChrootLifecycleContractTest {
 
     @Test
     fun setupClearsStaleUninstallingMarkerWhenConfigured() {
-        val src = chrootScript("setup_guest_chroot.sh")
-        assertTrue(src.contains("rm -f \"\$GUESTPATH/.flux_uninstalling\""))
-        assertTrue(src.contains(".flux_extract_ok"))
+        // The uninstall marker is a directory (mkdir never follows a planted symlink).
+        for ((name, v) in listOf(
+            "setup_guest_chroot.sh" to "GUESTPATH",
+            "setup_debian13_chroot.sh" to "DEBIANPATH",
+            "setup_alpine_chroot.sh" to "ALPINEPATH",
+        )) {
+            val src = chrootScript(name)
+            assertTrue(name, src.contains("rm -rf \"\$$v/.flux_uninstalling\""))
+        }
+        assertTrue(chrootScript("setup_guest_chroot.sh").contains(".flux_extract_ok"))
     }
 }
