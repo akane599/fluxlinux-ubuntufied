@@ -39,6 +39,55 @@ class ChrootDetectionRootProbeTest {
     }
 
     @Test
+    fun parseRootProbe_readsCompletionFlags() {
+        val flags = ChrootDetection.parseRootProbe(0, "MARKER=0 DIR=1 SHELL=1 EXTRACT=1 XFCE=0")
+        assertEquals(
+            ChrootDetection.RootProbeFlags(
+                marker = false, dir = true, shell = true, extractOk = true, xfce = false,
+            ),
+            flags,
+        )
+    }
+
+    @Test
+    fun isComplete_needsMarkerExtractOrDesktop_notShell() {
+        val shellOnly = ChrootDetection.RootProbeFlags(marker = false, dir = true, shell = true)
+        assertFalse(ChrootDetection.isComplete(shellOnly))
+        assertTrue(ChrootDetection.isComplete(shellOnly.copy(marker = true)))
+        assertTrue(ChrootDetection.isComplete(shellOnly.copy(extractOk = true)))
+        assertTrue(ChrootDetection.isComplete(shellOnly.copy(xfce = true)))
+    }
+
+    @Test
+    fun probe_viaRoot_interruptedExtraction_isNotInstalled() {
+        assumeTrue(File("/bin/sh").canExecute())
+        RootShell.seedSuInvocationForTest(listOf("/bin/sh", "-c"))
+        val dir = tmp.newFolder("partial")
+        File(dir, "bin").mkdirs()
+        File(dir, "bin/sh").writeText("#!")
+        File(dir, "usr/bin").mkdirs()
+        File(dir, "usr/bin/bash").writeText("#!")
+        val snap = ChrootDetection.probe(forceRoot = true, path = dir.absolutePath)
+        assertTrue(snap.conclusive)
+        assertTrue(snap.viaRoot)
+        assertFalse("shell without a completion marker is a partial extract", snap.installed)
+        assertTrue(snap.dirExists)
+
+        File(dir, ChrootDetection.EXTRACT_MARKER).writeText("sha")
+        assertTrue(ChrootDetection.probe(forceRoot = true, path = dir.absolutePath).installed)
+    }
+
+    @Test
+    fun probe_viaRoot_legacyInstallWithDesktop_isInstalled() {
+        assumeTrue(File("/bin/sh").canExecute())
+        RootShell.seedSuInvocationForTest(listOf("/bin/sh", "-c"))
+        val dir = tmp.newFolder("legacy")
+        File(dir, "usr/bin").mkdirs()
+        File(dir, "usr/bin/startxfce4").writeText("#!")
+        assertTrue(ChrootDetection.probe(forceRoot = true, path = dir.absolutePath).installed)
+    }
+
+    @Test
     fun probe_rootCommandFails_isInconclusive() {
         assumeTrue(File("/bin/false").canExecute())
         // "su" that runs but fails every command.
