@@ -35,6 +35,23 @@
       "include": []
     },
     {
+      "path": "rules/guest-apt-evidence.md",
+      "hash": "d4fa3ae6caed2928fab9a8d841a472c5bb41932c09fa3d44cfaf19049a96eb2c",
+      "description": "Guest apt changes need proof apt accepts them",
+      "globs": [
+        "app/src/main/assets/scripts/**/*.sh"
+      ],
+      "dirs": [],
+      "prompt": [
+        "apt",
+        "dpkg",
+        "coreutils"
+      ],
+      "priority": 0,
+      "enabled": true,
+      "include": []
+    },
+    {
       "path": "rules/push-approval.md",
       "hash": "dbf2aaa054a800fa470f366570c896b2ca9a18d17d6600fc1d98422d2caeaf53",
       "description": "Outward git actions need explicit approval",
@@ -47,7 +64,7 @@
     },
     {
       "path": "rules/release-commit-identity.md",
-      "hash": "bba9eb49a84102a87389e5c3b4b5d05d02901696b341c42c09adc09f355108ad",
+      "hash": "68540daf04b32b8c610ecc0c9b9707db80dfc6776f87b1c6110caa8fb18b4c22",
       "description": "FluxLinux release commit identity",
       "globs": [
         "fastlane/metadata/**",
