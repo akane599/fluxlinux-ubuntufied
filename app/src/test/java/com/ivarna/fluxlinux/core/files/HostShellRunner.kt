@@ -31,10 +31,21 @@ internal class HostShellRunner(private val cwd: File) : RootRunner {
         }
     }
 
-    /** Runs [script] feeding [input] on stdin; returns the exit code. */
+    /**
+     * Runs [script] feeding [input] on stdin; returns the exit code. A script that refuses early
+     * (e.g. a noclobber temp open) may exit before reading stdin: the resulting EPIPE on our
+     * write/close is expected and ignored, so callers assert on the exit code only.
+     */
     fun runWithStdin(script: String, input: ByteArray): Int {
         val job = start(script)
-        job.stdin.use { it.write(input) }
+        try {
+            job.stdin.write(input)
+        } catch (_: java.io.IOException) {
+        }
+        try {
+            job.stdin.close()
+        } catch (_: java.io.IOException) {
+        }
         job.stdout.readBytes()
         return job.waitFor(10_000) ?: -2
     }
