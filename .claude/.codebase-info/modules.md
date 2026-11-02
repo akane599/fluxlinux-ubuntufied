@@ -1,5 +1,5 @@
 # Modules
-*Last Updated: 2026-10-20*
+*Last Updated: 2026-11-02*
 
 ## Gradle modules
 | Module | Lang | Purpose | Used by |
@@ -14,15 +14,15 @@
 ## `:app` packages (`app/src/main/kotlin/com/ivarna/fluxlinux/`)
 | Package | Purpose | Key files |
 |---|---|---|
-| `core/terminal` | Core: host prefix, command builders, sessions, shell exec, audio | `BootstrapInstaller`, `HostScriptDeployer`, `TerminalLauncher`, `FluxTerminalSessionManager`, `SessionRegistry`, `GuestSessionFactory`, `ZshPluginSet`, `Install/UninstallSessionFactory`, `Linux/Proot/Chroot/HostCommandBuilder`, `ShellCommandRunner` (+ `ProcessGroupLauncher`), `PulseHost` (unix-socket PulseAudio), `TermuxHostPaths`, guest repair (`GuestApkDbRepair`, `GuestZshrcRepair`, `GuestRepairCache`), `GpuAccelDetector` |
-| `core/install` | Install pipeline and pins | `HostBootstrap`, `PinnedReleaseArchive`, `RootfsDownloader`, `DistroInstallProfile` (rootfs SHA SSOT), `BaseDesktopInstallPlan`, `OnboardingInstallRunner`, `InstallController` (process-scoped install owner, uninstall busy guard), `GuestComponentPayload` (component script + helper-lib assembly), `ProotXfceAssetInstaller`, `ProotZshBootstrap` |
+| `core/terminal` | Core: host prefix, command builders, sessions, shell exec, audio | `BootstrapInstaller`, `HostScriptDeployer`, `TerminalLauncher`, `FluxTerminalSessionManager`, `SessionRegistry`, `GuestSessionFactory`, `GuestUserMigration` (PRoot flux→akane), `ChrootZshrcUpgrade`, `ZshPluginSet`, `Install/UninstallSessionFactory`, `Linux/Proot/Chroot/HostCommandBuilder`, `ShellCommandRunner` (+ `ProcessGroupLauncher`), `PulseHost` (unix-socket PulseAudio), `TermuxHostPaths`, guest repair (`GuestApkDbRepair`, `GuestZshrcRepair`, `GuestRepairCache`), `GpuAccelDetector` |
+| `core/install` | Install pipeline and pins | `HostBootstrap`, `PinnedReleaseArchive`, `RootfsDownloader`, `DistroInstallProfile` (rootfs SHA SSOT), `BaseDesktopInstallPlan`, `OnboardingInstallRunner`, `InstallController` (process-scoped install owner, uninstall busy guard), `GuestComponentPayload` (component script + helper-lib assembly), `ProotXfceAssetInstaller`, `ProotZshBootstrap`, `ChrootSetupCommand` (root-only staged chroot setup) |
 | `core/desktop` | GUI session lifecycle | `DesktopLauncher`, `DesktopRunState` (start/stop generations, pure), `DesktopSession` (`DesktopSessionQuery`), `GuiDesktopLog` |
 | `core/service` | Foreground services, launch-intent validation | `AppTerminalService`, `DesktopSessionService`, `BaseInstallService`, `LaunchTargets` (pure; see [entry-points.md](entry-points.md)) |
-| `core/root`, `core/chroot`, `core/proot` | su/BusyBox, and chroot/proot container state, size, settings, kill/process mgmt | `RootShell` (su resolve, exec timeouts, root tree-kill, verified staging to `/data/adb/fluxlinux/<appId>`), `ChrootPaths`, `BusyBoxPaths`, `ChrootDetection`, `ChrootSettingsModel`, `ProotSettingsModel`, `*SizeManager`, `*InfoStore` |
+| `core/root`, `core/chroot`, `core/proot` | su/BusyBox, and chroot/proot container state, size, settings, kill/process mgmt | `RootShell` (su resolve, exec timeouts, root tree-kill, verified staging to `/data/adb/fluxlinux/<appId>`), `ChrootPaths`, `BusyBoxPaths`, `GuestUsers` (guest user rule, login fallback, `FLUX_GUEST_USER` env), `ChrootDetection` (`warmUp` off-main), `ChrootSettingsModel`, `ProotSettingsModel`, `*SizeManager`, `*InfoStore` |
 | `core/gpu` | GPU drivers (VirGL, Panvk) | `GpuDriverInstaller`, `PanvkInstaller`, `DriverRelease` |
 | `core/legacy` | Bridge to v1.x Termux-hosted distros | `LegacyTermuxBridge`, `LegacyTermuxStore` |
-| `core/system` | Android workarounds, file safety | `PhantomProcessFixer`, `SharedStorageAccess`, `SafeFiles` (no-follow tree ops), `GuestStorageLinks` (`~/storage`) |
-| `core/files` | SAF access to the Ubuntu rootfs | `UbuntuDocumentsProvider`, `GuestDocumentPaths` (pure, unit-tested path/link resolution), `UbuntuFiles` (authority, open, notifyRootsChanged) |
+| `core/system` | Android workarounds, file safety | `PhantomProcessFixer`, `SharedStorageAccess`, `SafeFiles` (no-follow tree ops), `GuestStorageLinks` (`~/storage`, PRoot direct or chroot via the helper) |
+| `core/files` | SAF access to the active Ubuntu rootfs (PRoot or chroot) | `UbuntuDocumentsProvider`, `GuestTree` (+`GuestLayout`; pure, unit-tested path/link resolution), `GuestFs` seam (`LocalGuestFs`, `RootGuestFs`, `SharedStorageRoutingFs`), `RootScripts`/`RootRunner` (su scripts, BusyBox first, 10 s / 30 min budgets), `GuestDocumentPaths` (doc ids, per-mode root ids), `UbuntuFiles` (authority, open, notifyRootsChanged) |
 | `core/data`, `core/model` | Distro catalog and script layer | `DistroRepository`, `Distro`, `DistroSpec`, `ScriptManager`, `TerminalComponent` |
-| `core/utils` | Prefs, misc | `StateManager`, `UbuntuLaunchPreferences`, `TerminalPreferences`, `ThemePreferences`, `TermuxX11Preferences`, `RootUtils`, `SystemInfoUtils`, `EmbeddedX11` (opens the X11 preferences activity only), `InstallationQueueManager` |
-| `ui/*` | Compose UI | `screens/` (Prerequisites, RootAccess and ChrootSettings screens were deleted), `onboarding/`, `components/` (`Glass*` + `UbuntuDashboard`), `terminal/` (extra keys + `KeyRepeat`, `TerminalSessionDefaults`, IME), `install/`, `theme/` (Color/Theme/Type) |
+| `core/utils` | Prefs, misc | `StateManager`, `UbuntuRuntime` (+`UbuntuInstallProbe`, `UbuntuRuntimeSwitch`), `UbuntuLaunchPreferences`, `TerminalPreferences`, `ThemePreferences`, `TermuxX11Preferences`, `RootUtils`, `SystemInfoUtils`, `EmbeddedX11` (opens the X11 preferences activity only), `InstallationQueueManager` |
+| `ui/*` | Compose UI | `screens/` (Prerequisites, RootAccess and ChrootSettings screens were deleted), `onboarding/`, `components/` (`Glass*`, `UbuntuDashboard`, `UbuntuRuntimeCard`), `terminal/` (extra keys + `KeyRepeat`, `TerminalSessionDefaults`, IME), `install/`, `theme/` (Color/Theme/Type) |
