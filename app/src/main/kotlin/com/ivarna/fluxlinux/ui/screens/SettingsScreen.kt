@@ -82,6 +82,24 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import com.ivarna.fluxlinux.core.desktop.DesktopLauncher
+import com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
+import com.ivarna.fluxlinux.core.root.RootShell
+import com.ivarna.fluxlinux.core.utils.RuntimeSwitchDecision
+import com.ivarna.fluxlinux.core.utils.UbuntuInstallCheck
+import com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
+import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeCard
+import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeUi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Settings hub (nativecode-style): nav cards open detail pages.
@@ -160,6 +178,8 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
             )
+
+            UbuntuRuntimeRow()
 
             var autoStart by remember {
                 mutableStateOf(UbuntuLaunchPreferences.isAutoStartDesktop(context))
@@ -495,6 +515,107 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(80.dp))
         }
+    }
+}
+
+/**
+ * "Ubuntu runtime": PRoot or chroot (root). Chroot is only kept after an off-main root probe
+ * succeeds; a running desktop has to be stopped first. Neither install is touched.
+ */
+@Composable
+private fun UbuntuRuntimeRow() {
+    val context = LocalContext.current
+    val app = context.applicationContext
+    val scope = rememberCoroutineScope()
+    val runtime by remember { UbuntuRuntime.modeFlow(context) }.collectAsState()
+    var checking by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var messageIsError by remember { mutableStateOf(false) }
+    var stopFirstFor by remember { mutableStateOf<UbuntuRuntimeMode?>(null) }
+
+    fun desktopActive(): Boolean =
+        DesktopSessionQuery.current(context, DesktopLauncher.uiState.value) != null ||
+            DesktopLauncher.isSessionActive()
+
+    fun applySwitch(target: UbuntuRuntimeMode) {
+        UbuntuRuntimeSwitch.apply(app, target)
+        message = null
+        messageIsError = false
+        // Point at Home when the chosen install doesn't exist yet (chroot: su, off main).
+        scope.launch {
+            val check = withContext(Dispatchers.IO) { UbuntuInstallProbe.probe(app, target) }
+            if (UbuntuRuntime.mode(app) != target) return@launch
+            if (check == UbuntuInstallCheck.NOT_INSTALLED) {
+                message = app.getString(
+                    if (target == UbuntuRuntimeMode.CHROOT) R.string.settings_runtime_chroot_missing
+                    else R.string.settings_runtime_proot_missing
+                )
+            }
+        }
+    }
+
+    /** Root probe (chroot only) and switch; the desktop is already known to be stopped. */
+    fun proceed(target: UbuntuRuntimeMode) {
+        if (target == UbuntuRuntimeMode.PROOT) {
+            applySwitch(target)
+            return
+        }
+        checking = true
+        message = null
+        RootShell.probeRootAvailable { ok ->
+            checking = false
+            when (UbuntuRuntimeSwitch.decide(UbuntuRuntime.mode(app), target, desktopActive = false, rootAvailable = ok)) {
+                RuntimeSwitchDecision.SWITCH -> applySwitch(target)
+                RuntimeSwitchDecision.NO_ROOT -> {
+                    message = app.getString(R.string.settings_runtime_no_root)
+                    messageIsError = true
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    fun request(target: UbuntuRuntimeMode) {
+        if (target == runtime || checking) return
+        if (desktopActive()) stopFirstFor = target else proceed(target)
+    }
+
+    UbuntuRuntimeCard(
+        state = UbuntuRuntimeUi(
+            selected = runtime,
+            checking = checking,
+            message = message,
+            messageIsError = messageIsError,
+        ),
+        onSelect = ::request
+    )
+
+    stopFirstFor?.let { target ->
+        val targetName = stringResource(
+            if (target == UbuntuRuntimeMode.CHROOT) R.string.home_other_ubuntu_chroot
+            else R.string.home_other_ubuntu_proot
+        )
+        AlertDialog(
+            onDismissRequest = { stopFirstFor = null },
+            title = { Text(stringResource(R.string.settings_runtime_stop_title)) },
+            text = { Text(stringResource(R.string.settings_runtime_stop_body, targetName)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    stopFirstFor = null
+                    UbuntuLaunchPreferences.clearAutoStartAttempt(app)
+                    val running = DesktopSessionQuery.current(context, DesktopLauncher.uiState.value)
+                    val id = running?.distroId ?: DesktopLauncher.uiState.value.distroId ?: runtime.distroId
+                    // onDone may arrive on the stop script's reader thread.
+                    val main = android.os.Handler(android.os.Looper.getMainLooper())
+                    DesktopLauncher.stop(app, id) { main.post { proceed(target) } }
+                }) { Text(stringResource(R.string.settings_runtime_stop_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { stopFirstFor = null }) {
+                    Text(stringResource(R.string.settings_runtime_stop_cancel))
+                }
+            }
+        )
     }
 }
 

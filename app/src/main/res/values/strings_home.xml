@@ -2,24 +2,41 @@
 <resources>
     <!-- Ubuntu dashboard (Home) -->
     <string name="home_ubuntu_name">Ubuntu</string>
-    <string name="home_ubuntu_version">26.04 · PRoot</string>
+    <string name="home_ubuntu_version">26.04</string>
+    <!-- Ubuntu runtime (PRoot vs chroot) -->
+    <string name="home_runtime_proot">PRoot</string>
+    <string name="home_runtime_chroot">Chroot · root</string>
+    <string name="home_runtime_switch_to">Switch to %1$s</string>
+    <string name="home_runtime_switched_proot">Home now uses Ubuntu PRoot</string>
+    <string name="home_runtime_switched_chroot">Home now uses Ubuntu chroot</string>
+    <string name="home_runtime_switch_blocked">Stop the desktop before switching the Ubuntu runtime</string>
+    <string name="home_runtime_no_root">Root access isn\'t available, so Ubuntu chroot can\'t be used</string>
+    <string name="home_other_ubuntu_proot">Ubuntu PRoot</string>
+    <string name="home_other_ubuntu_chroot">Ubuntu chroot</string>
     <string name="home_ubuntu_logo">Ubuntu logo</string>
 
     <string name="home_status_running">Running</string>
     <string name="home_status_starting">Starting</string>
     <string name="home_status_stopped">Stopped</string>
     <string name="home_status_not_installed">Not installed</string>
+    <string name="home_status_checking">Checking</string>
+    <string name="home_status_needs_root">Root needed</string>
 
     <string name="home_hero_running">The XFCE desktop is running.</string>
     <string name="home_hero_starting">Starting the XFCE desktop…</string>
     <string name="home_hero_stopped">The XFCE desktop is ready to start.</string>
     <string name="home_hero_not_installed">Ubuntu isn\'t set up on this device yet. Other installed distros are kept.</string>
+    <string name="home_hero_not_installed_chroot">Ubuntu chroot isn\'t set up on this device yet. It runs with root, separate from PRoot.</string>
+    <string name="home_hero_checking">Checking the Ubuntu chroot install…</string>
+    <string name="home_hero_needs_root">Chroot mode needs root. Allow FluxLinux in your root manager, or switch to PRoot.</string>
     <string name="home_hero_other_running">%1$s desktop is running. Stop it to start Ubuntu.</string>
 
     <string name="home_action_start_desktop">Start desktop</string>
     <string name="home_action_open_desktop">Open desktop</string>
     <string name="home_action_stop">Stop</string>
     <string name="home_action_set_up">Set up Ubuntu</string>
+    <string name="home_action_retry_root">Check root again</string>
+    <string name="home_action_use_proot">Use PRoot</string>
 
     <!-- Auto-start countdown -->
     <string name="home_autostart_title">Starting Ubuntu…</string>
@@ -83,11 +100,24 @@
     <string name="settings_autostart_title">Open Ubuntu desktop when FluxLinux starts</string>
     <string name="settings_autostart_sub">Starts the desktop each time you open the app</string>
     <string name="settings_advanced_header">Advanced</string>
+    <string name="settings_runtime_title">Ubuntu runtime</string>
+    <string name="settings_runtime_proot">PRoot</string>
+    <string name="settings_runtime_chroot">Chroot (root)</string>
+    <string name="settings_runtime_proot_sub">PRoot: works on any phone, no root needed.</string>
+    <string name="settings_runtime_chroot_sub">Chroot: faster and a full system, needs root.</string>
+    <string name="settings_runtime_checking">Checking root access…</string>
+    <string name="settings_runtime_no_root">Root access was denied or isn\'t available. Ubuntu stays on PRoot. Allow FluxLinux in your root manager (Magisk, KernelSU) and try again.</string>
+    <string name="settings_runtime_chroot_missing">Ubuntu chroot isn\'t set up yet. Set it up from Home.</string>
+    <string name="settings_runtime_proot_missing">Ubuntu PRoot isn\'t set up yet. Set it up from Home.</string>
+    <string name="settings_runtime_stop_title">Stop the desktop first?</string>
+    <string name="settings_runtime_stop_body">The Ubuntu desktop is running. Stop it and switch Home to %1$s?</string>
+    <string name="settings_runtime_stop_confirm">Stop and switch</string>
+    <string name="settings_runtime_stop_cancel">Cancel</string>
 
     <!-- PRoot / Chroot storage lists (Settings > Advanced) -->
     <string name="storage_go_home">Go to Home</string>
     <string name="storage_proot_empty_hint">Set up Ubuntu from Home.</string>
-    <string name="storage_chroot_empty_hint">Root-level Linux lives outside app storage. This app sets up Ubuntu with PRoot from Home.</string>
+    <string name="storage_chroot_empty_hint">Root-level Linux lives outside app storage. To set up Ubuntu chroot, choose Chroot under Settings > Ubuntu runtime, then set it up from Home.</string>
 
     <!-- Troubleshooting -->
     <string name="trouble_desktop_title">The desktop doesn\'t open</string>

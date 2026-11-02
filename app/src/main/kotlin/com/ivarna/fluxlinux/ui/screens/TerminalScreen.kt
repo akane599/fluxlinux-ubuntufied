@@ -104,18 +104,25 @@ import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager
 import com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager.SessionOpenResult
 import com.ivarna.fluxlinux.core.terminal.TerminalShellCardUi
+import com.ivarna.fluxlinux.core.chroot.ChrootDetection
+import com.ivarna.fluxlinux.core.root.ChrootPaths
 import com.ivarna.fluxlinux.core.terminal.TerminalShellCatalog
 import com.ivarna.fluxlinux.core.utils.TerminalPreferences
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.terminal.TerminalExtraKeys
 import com.ivarna.fluxlinux.ui.terminal.TerminalModifierState
+import com.ivarna.fluxlinux.ui.terminal.TerminalSessionChoices
 import com.ivarna.fluxlinux.ui.terminal.TerminalSessionDefaults
 import com.ivarna.fluxlinux.ui.terminal.hideIme
 import com.ivarna.fluxlinux.ui.theme.FluxAccentMagenta
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import kotlin.math.abs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** One terminal session as the drawer's session list draws it. */
 data class TerminalTabUi(
@@ -174,6 +181,10 @@ fun TerminalScreen(
     var opening by remember { mutableStateOf(false) }
     var openError by rememberSaveable { mutableStateOf<String?>(null) }
     var rootAvailable by remember { mutableStateOf(false) }
+    // Bumped when the off-main root + chroot detection finishes, so remembered choices
+    // (the shell menu) recompute: ChrootDetection only answers from its cache on main.
+    var detectionRevision by remember { mutableIntStateOf(0) }
+    val runtime by remember { UbuntuRuntime.modeFlow(context) }.collectAsState()
     // Avoid SIGWINCH spam on every Compose recomposition — only when the emulator's
     // cols/rows or the attached pid actually change (R2: pinch zoom changes cols/rows
     // without a view-size change, so pixel width/height is NOT a valid guard key).
@@ -198,12 +209,16 @@ fun TerminalScreen(
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 
-    /** Fresh filesystem snapshot each call, so a just-installed Ubuntu is picked up on retry. */
+    /**
+     * Fresh filesystem snapshot each call, so a just-installed Ubuntu is picked up on retry.
+     * Chroot entries come from the ChrootDetection cache the off-main probe below warms.
+     */
     fun resolveChoices() = TerminalSessionDefaults.resolve(
         TerminalShellCatalog.sections(
             context,
             TerminalShellCatalog.availability(context, rootAvailable)
-        ).flatMap { it.cards }
+        ).flatMap { it.cards },
+        runtime,
     )
 
     /** Opens [card]; [onDone] gets null on success or the failure reason (already toasted). */
@@ -246,11 +261,17 @@ fun TerminalScreen(
         )
     }
 
-    /** Default Ubuntu PRoot user tab ("+", empty-state auto-open and retry). */
+    /** Default user tab of the active Ubuntu install ("New session", empty-state auto-open and retry). */
     fun openUbuntu(fromEmptyState: Boolean) {
         val card = resolveChoices().defaultUser
         if (card == null || !card.enabled) {
-            val reason = context.getString(R.string.terminal_error_ubuntu_missing)
+            val reason = context.getString(
+                when {
+                    runtime != UbuntuRuntimeMode.CHROOT -> R.string.terminal_error_ubuntu_missing
+                    !rootAvailable -> R.string.terminal_error_chroot_no_root
+                    else -> R.string.terminal_error_ubuntu_chroot_missing
+                }
+            )
             toast(reason)
             if (fromEmptyState) openError = reason
             return
@@ -267,12 +288,27 @@ fun TerminalScreen(
         }
     }
 
+    fun autoOpenOnce() {
+        if (autoOpenTried) return
+        autoOpenTried = true
+        if (FluxTerminalSessionManager.sessionCount == 0) openUbuntu(fromEmptyState = true)
+    }
+
     LaunchedEffect(Unit) {
-        RootShell.probeRootAvailable { ok -> rootAvailable = ok }
-        if (!autoOpenTried) {
-            autoOpenTried = true
-            if (FluxTerminalSessionManager.sessionCount == 0) openUbuntu(fromEmptyState = true)
+        // PRoot opens right away; chroot needs root and a warm chroot detection first (on
+        // main ChrootDetection is cache-only, so a cold start would report it missing).
+        val waitForRoot = runtime == UbuntuRuntimeMode.CHROOT
+        if (!waitForRoot) autoOpenOnce()
+        val app = context.applicationContext
+        val root = withContext(Dispatchers.IO) {
+            val ok = runCatching { RootShell.isRootAvailable() }.getOrDefault(false)
+            // Off main this probes through su and fills the cache resolveChoices() reads.
+            if (ok) runCatching { ChrootDetection.warmUp(ChrootPaths.UBUNTU_CHROOT_PATH) }
+            ok
         }
+        rootAvailable = root
+        detectionRevision++
+        if (waitForRoot) autoOpenOnce()
     }
     // A stale failure must not reappear after tabs were opened (e.g. via "+") and closed again.
     val hasSessions = sessions.isNotEmpty()
@@ -281,7 +317,7 @@ fun TerminalScreen(
     }
     // Root granted + Ubuntu chroot installed: warm helper + BusyBox off main so the first
     // chroot open skips su staging/probes. Never prompts non-root users.
-    LaunchedEffect(rootAvailable) {
+    LaunchedEffect(rootAvailable, detectionRevision) {
         if (rootAvailable && resolveChoices().ubuntuChroot != null) {
             val app = context.applicationContext
             Thread { RootShell.ensureChrootHelper(app); RootShell.resolveBusyBox() }.start()
@@ -369,14 +405,16 @@ fun TerminalScreen(
                         back()
                     }
                 },
+                newSessionLabel = stringResource(
+                    if (runtime == UbuntuRuntimeMode.CHROOT) R.string.terminal_new_session_chroot
+                    else R.string.terminal_new_session
+                ),
                 shellMenu = { onDismiss ->
-                    val choices = remember(rootAvailable) { resolveChoices() }
+                    val choices = remember(rootAvailable, detectionRevision, runtime) { resolveChoices() }
                     ShellMenu(
                         expanded = true,
                         onDismiss = onDismiss,
-                        ubuntuRoot = choices.ubuntuRoot,
-                        ubuntuChroot = choices.ubuntuChroot,
-                        host = choices.host,
+                        choices = choices,
                         onNewTab = {
                             onDismiss()
                             openUbuntu(fromEmptyState = false)
@@ -602,6 +640,7 @@ fun TerminalDrawerSheet(
     onToggleExtraKeys: () -> Unit,
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    newSessionLabel: String = stringResource(R.string.terminal_new_session),
     shellMenu: @Composable (onDismiss: () -> Unit) -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
@@ -645,7 +684,7 @@ fun TerminalDrawerSheet(
                 modifier = Modifier.padding(vertical = 8.dp),
                 color = colors.outlineVariant
             )
-            NewSessionRow(onNewSession = onNewSession, shellMenu = shellMenu)
+            NewSessionRow(label = newSessionLabel, onNewSession = onNewSession, shellMenu = shellMenu)
             val extraKeysLabel = stringResource(R.string.terminal_extra_keys)
             DrawerActionRow(
                 icon = Icons.Default.Keyboard,
@@ -712,11 +751,12 @@ private fun DrawerActionRow(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NewSessionRow(
+    label: String,
     onNewSession: () -> Unit,
     shellMenu: @Composable (onDismiss: () -> Unit) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val newLabel = stringResource(R.string.terminal_new_session)
+    val newLabel = label
     val moreLabel = stringResource(R.string.terminal_more_shells)
     Box {
         Row(
@@ -761,28 +801,48 @@ private fun NewSessionRow(
     }
 }
 
+/**
+ * Menu label for an Ubuntu card. Both runtimes are named explicitly once a chroot shell is
+ * in the menu, so "root shell" never leaves the user guessing which install it opens.
+ */
+private fun ubuntuShellLabelRes(card: TerminalShellCardUi, bothRuntimes: Boolean): Int {
+    val root = card.def.type == "shell-root"
+    return when {
+        card.def.method == "chroot" ->
+            if (root) R.string.terminal_shell_ubuntu_chroot_root else R.string.terminal_shell_ubuntu_chroot
+        !bothRuntimes -> if (root) R.string.terminal_shell_ubuntu_root else R.string.terminal_shell_ubuntu_proot
+        else -> if (root) R.string.terminal_shell_ubuntu_proot_root else R.string.terminal_shell_ubuntu_proot
+    }
+}
+
 @Composable
 private fun ShellMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
-    ubuntuRoot: TerminalShellCardUi?,
-    ubuntuChroot: TerminalShellCardUi?,
-    host: TerminalShellCardUi?,
+    choices: TerminalSessionChoices,
     onNewTab: () -> Unit,
     onOpen: (TerminalShellCardUi) -> Unit,
 ) {
+    val host = choices.host
+    val ubuntuCards = listOfNotNull(choices.ubuntuRoot, choices.otherUser, choices.otherRoot)
+    val bothRuntimes = choices.mode == UbuntuRuntimeMode.CHROOT || ubuntuCards.any { it.def.method == "chroot" }
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        ShellMenuItem(stringResource(R.string.terminal_new_session), Icons.Default.Add, onNewTab)
-        if (ubuntuRoot != null || ubuntuChroot != null || host != null) HorizontalDivider()
-        ubuntuRoot?.let {
-            ShellMenuItem(stringResource(R.string.terminal_shell_ubuntu_root), Icons.Default.AdminPanelSettings) {
-                onOpen(it)
+        ShellMenuItem(
+            stringResource(
+                if (choices.mode == UbuntuRuntimeMode.CHROOT) R.string.terminal_new_session_chroot
+                else R.string.terminal_new_session
+            ),
+            Icons.Default.Add,
+            onNewTab
+        )
+        if (ubuntuCards.isNotEmpty() || host != null) HorizontalDivider()
+        ubuntuCards.forEach { card ->
+            val icon = when {
+                card.def.type == "shell-root" -> Icons.Default.AdminPanelSettings
+                card.def.method == "chroot" -> Icons.Default.Security
+                else -> Icons.Default.Terminal
             }
-        }
-        ubuntuChroot?.let {
-            ShellMenuItem(stringResource(R.string.terminal_shell_ubuntu_chroot), Icons.Default.Security) {
-                onOpen(it)
-            }
+            ShellMenuItem(stringResource(ubuntuShellLabelRes(card, bothRuntimes)), icon) { onOpen(card) }
         }
         host?.let {
             ShellMenuItem(stringResource(R.string.terminal_shell_host), Icons.Default.Terminal) {

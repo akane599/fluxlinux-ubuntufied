@@ -21,12 +21,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.tools.screenshot.PreviewTest
 import com.ivarna.fluxlinux.core.utils.ThemeMode
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.components.GlassSettingCard
 import com.ivarna.fluxlinux.ui.components.SharedStorageUi
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboard
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardActions
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardState
+import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeCard
+import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeUi
 import com.ivarna.fluxlinux.ui.components.UbuntuStatus
 import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
 
@@ -117,6 +120,76 @@ fun HomeNotInstalledPreview() {
 @Composable
 fun HomeLargeFontPreview() {
     Dashboard(UbuntuDashboardState(status = UbuntuStatus.STOPPED, storage = storageNotGranted))
+}
+
+// Chroot mode, both installs present: the runtime chip offers the quick switch.
+@PreviewTest
+@Preview(name = "HomeChroot", showBackground = true, widthDp = 360, heightDp = 1120)
+@Composable
+fun HomeChrootPreview() {
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.STOPPED,
+            storage = storageReady,
+            runtime = UbuntuRuntimeMode.CHROOT,
+            canSwitchRuntime = true
+        )
+    )
+}
+
+@PreviewTest
+@Preview(name = "HomeChrootNeedsRoot", showBackground = true, widthDp = 360, heightDp = 760)
+@Composable
+fun HomeChrootNeedsRootPreview() {
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.NEEDS_ROOT,
+            storage = storageReady,
+            runtime = UbuntuRuntimeMode.CHROOT,
+            canSwitchRuntime = true
+        )
+    )
+}
+
+@PreviewTest
+@Preview(name = "HomeChrootLargeFont", showBackground = true, widthDp = 360, heightDp = 520, fontScale = 1.5f)
+@Composable
+fun HomeChrootLargeFontPreview() {
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.CHECKING,
+            storage = storageReady,
+            runtime = UbuntuRuntimeMode.CHROOT
+        )
+    )
+}
+
+// Settings > Ubuntu runtime: chroot selected; PRoot after a denied root probe; a probe running.
+@PreviewTest
+@Preview(name = "SettingsRuntime", showBackground = true, widthDp = 360, heightDp = 640)
+@Composable
+fun SettingsRuntimePreview() {
+    PreviewHost {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            UbuntuRuntimeCard(state = UbuntuRuntimeUi(selected = UbuntuRuntimeMode.CHROOT), onSelect = {})
+            UbuntuRuntimeCard(
+                state = UbuntuRuntimeUi(
+                    selected = UbuntuRuntimeMode.PROOT,
+                    message = "Root access was denied or isn't available. Ubuntu stays on PRoot. " +
+                        "Allow FluxLinux in your root manager (Magisk, KernelSU) and try again.",
+                    messageIsError = true
+                ),
+                onSelect = {}
+            )
+            UbuntuRuntimeCard(
+                state = UbuntuRuntimeUi(selected = UbuntuRuntimeMode.PROOT, checking = true),
+                onSelect = {}
+            )
+        }
+    }
 }
 
 @PreviewTest

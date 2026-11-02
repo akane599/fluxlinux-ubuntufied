@@ -50,29 +50,58 @@ import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.install.InstallController
 import com.ivarna.fluxlinux.core.terminal.BootstrapInstaller
 import com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager
+import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
+import com.ivarna.fluxlinux.core.utils.RuntimeSwitchDecision
 import com.ivarna.fluxlinux.core.utils.StateManager
+import com.ivarna.fluxlinux.core.utils.UbuntuInstallCheck
+import com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe
 import com.ivarna.fluxlinux.core.utils.UbuntuLaunchPreferences
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
 import com.ivarna.fluxlinux.ui.components.SharedStorageUi
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboard
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardActions
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardState
 import com.ivarna.fluxlinux.ui.components.UbuntuStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/** The one distro this build's Home is about. Other installed containers are left alone. */
-const val UBUNTU_DISTRO_ID = "ubuntu"
-
-/** Pure status mapping for the Ubuntu hero card. */
-internal fun ubuntuStatus(installed: Boolean, autoStartPending: Boolean, session: DesktopSession?): UbuntuStatus {
-    val ubuntu = session?.takeIf { it.distroId == UBUNTU_DISTRO_ID }
+/**
+ * Pure status mapping for the Ubuntu hero card. [activeId] is the active Ubuntu install
+ * ([UbuntuRuntime.activeDistroId]): a desktop of that install counts as Ubuntu's, and wins over
+ * a still-running install probe (a running chroot desktop shows as running right away).
+ */
+internal fun ubuntuStatus(
+    install: UbuntuInstallCheck,
+    autoStartPending: Boolean,
+    session: DesktopSession?,
+    activeId: String,
+): UbuntuStatus {
+    val ubuntu = session?.takeIf { it.distroId == activeId }
     return when {
-        !installed -> UbuntuStatus.NOT_INSTALLED
-        autoStartPending -> UbuntuStatus.STARTING
         ubuntu?.phase == DesktopSession.Phase.Running -> UbuntuStatus.RUNNING
         ubuntu?.phase == DesktopSession.Phase.Starting -> UbuntuStatus.STARTING
+        install == UbuntuInstallCheck.CHECKING -> UbuntuStatus.CHECKING
+        install == UbuntuInstallCheck.NO_ROOT -> UbuntuStatus.NEEDS_ROOT
+        install == UbuntuInstallCheck.NOT_INSTALLED -> UbuntuStatus.NOT_INSTALLED
+        autoStartPending -> UbuntuStatus.STARTING
         else -> UbuntuStatus.STOPPED
     }
 }
+
+/** Distro id of a running desktop that is not the active Ubuntu install, or null. */
+internal fun otherDesktopId(session: DesktopSession?, activeId: String): String? =
+    session?.distroId?.takeIf { it != activeId }
+
+/**
+ * Whether Home offers the quick runtime switch: the other mode's install is known to exist
+ * and no desktop is running, starting or about to auto-start.
+ */
+internal fun canSwitchRuntime(otherInstalled: Boolean, status: UbuntuStatus, desktopActive: Boolean, autoStartPending: Boolean): Boolean =
+    otherInstalled && !desktopActive && !autoStartPending &&
+        status != UbuntuStatus.RUNNING && status != UbuntuStatus.STARTING
 
 /**
  * Home: the Ubuntu dashboard. Status and start/open/stop, terminal and file shortcuts,
@@ -91,8 +120,11 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val ubuntuDistro = remember {
-        DistroRepository.supportedDistros.firstOrNull { it.id == UBUNTU_DISTRO_ID }
+    // State-backed: a runtime switch (Settings, the hero chip) recomposes Home on the other install.
+    val runtime by remember { UbuntuRuntime.modeFlow(context) }.collectAsState()
+    val activeId = runtime.distroId
+    val ubuntuDistro = remember(activeId) {
+        DistroRepository.supportedDistros.firstOrNull { it.id == activeId }
     }
 
     // Live desktop start/stop logs (termux-lib VIEW LOGS parity)
@@ -114,6 +146,9 @@ fun HomeScreen(
     }
 
     var refreshKey by remember { mutableIntStateOf(0) }
+    // Re-probes root / the chroot install: on resume and on "Check root again" only, not on
+    // every desktop phase change (a denied su would otherwise be asked again and again).
+    var probeKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(scriptRefreshTrigger) { refreshKey++ }
     LaunchedEffect(desktopUi.phase, desktopUi.displayReady) { refreshKey++ }
 
@@ -123,6 +158,7 @@ fun HomeScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 // Re-check storage permission / links after returning from Settings.
                 refreshKey++
+                probeKey++
                 runCatching { UbuntuFiles.notifyRootsChanged(context) }
                 // Drop a "desktop running" state whose X server died with the app.
                 Thread {
@@ -139,18 +175,55 @@ fun HomeScreen(
     val session = remember(desktopUi, stateRefresh, refreshKey) {
         DesktopSessionQuery.current(context, desktopUi)
     }
-    val installed = remember(stateRefresh, refreshKey) {
-        TerminalLauncher.isProotInstalled(context, UBUNTU_DISTRO_ID)
+    // PRoot: a plain file check. Chroot: root + rootfs markers through su, off the main thread
+    // (ChrootDetection only answers from its cache there); null = still probing.
+    val prootInstalled = remember(stateRefresh, refreshKey) { UbuntuInstallProbe.prootInstalled(context) }
+    var rootAvailable by remember { mutableStateOf<Boolean?>(null) }
+    var chrootInstalled by remember { mutableStateOf<Boolean?>(null) }
+    // In PRoot mode the chroot is only probed once it was installed through the app, so people
+    // who never chose chroot get no su prompt from Home.
+    val probeChroot = remember(runtime, stateRefresh) {
+        runtime == UbuntuRuntimeMode.CHROOT || UbuntuInstallProbe.chrootEverInstalled(context)
+    }
+    LaunchedEffect(probeChroot, stateRefresh, probeKey) {
+        if (!probeChroot) return@LaunchedEffect
+        val app = context.applicationContext
+        val (root, chroot) = withContext(Dispatchers.IO) {
+            val r = runCatching { RootShell.isRootAvailable() }.getOrDefault(false)
+            r to (r && runCatching {
+                TerminalLauncher.isDistroInstalledOnFs(app, UbuntuRuntime.CHROOT_ID)
+            }.getOrDefault(false))
+        }
+        rootAvailable = root
+        chrootInstalled = if (root) chroot else null
+    }
+    val install = UbuntuInstallProbe.check(runtime, prootInstalled, rootAvailable, chrootInstalled)
+    val installed = install == UbuntuInstallCheck.INSTALLED
+    val otherInstalled = when (runtime) {
+        UbuntuRuntimeMode.PROOT -> rootAvailable == true && chrootInstalled == true
+        UbuntuRuntimeMode.CHROOT -> prootInstalled
     }
     val lastStartFailed = remember(stateRefresh, refreshKey, autoStartPending) {
         UbuntuLaunchPreferences.lastAutoStartFailed(context)
     }
     var creatingLinks by remember { mutableStateOf(false) }
-    val storage = remember(refreshKey, creatingLinks, installed) {
+    // The chroot check goes through su, so links are always read off the main thread.
+    var linksPresent by remember { mutableStateOf(false) }
+    LaunchedEffect(installed, activeId, refreshKey, creatingLinks) {
+        if (!installed) {
+            linksPresent = false
+            return@LaunchedEffect
+        }
+        val app = context.applicationContext
+        linksPresent = withContext(Dispatchers.IO) {
+            runCatching { GuestStorageLinks.linksPresent(app, activeId) }.getOrDefault(false)
+        }
+    }
+    val storage = remember(refreshKey, creatingLinks, linksPresent) {
         SharedStorageUi(
             supported = SharedStorageAccess.isSupported(context),
             granted = SharedStorageAccess.granted(context),
-            linksPresent = installed && GuestStorageLinks.linksPresent(context, UBUNTU_DISTRO_ID),
+            linksPresent = linksPresent,
             linkNames = GuestStorageLinks.LINKS.map { it.name },
             creatingLinks = creatingLinks
         )
@@ -159,15 +232,16 @@ fun HomeScreen(
     // links, and only session starts create them. ensure() is idempotent, never follows
     // links and keeps existing entries, so Home repeats it quietly off the main thread.
     fun ensureLinksQuietly() {
-        if (!TerminalLauncher.isProotInstalled(context, UBUNTU_DISTRO_ID)) return
+        if (!installed) return
         val app = context.applicationContext
+        val id = activeId
         Thread {
-            runCatching { GuestStorageLinks.ensure(app, UBUNTU_DISTRO_ID) }
+            runCatching { GuestStorageLinks.ensure(app, id) }
             runCatching { UbuntuFiles.notifyRootsChanged(app) }
             mainHandler.post { refreshKey++ }
         }.start()
     }
-    LaunchedEffect(installed) { if (installed) ensureLinksQuietly() }
+    LaunchedEffect(installed, activeId) { if (installed) ensureLinksQuietly() }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -183,7 +257,7 @@ fun HomeScreen(
 
     fun startDesktop() {
         try {
-            DesktopLauncher.start(context, UBUNTU_DISTRO_ID) { ok ->
+            DesktopLauncher.start(context, activeId) { ok ->
                 if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(context)
                 refreshKey++
                 if (!ok) showDesktopLogs = true
@@ -195,7 +269,7 @@ fun HomeScreen(
 
     fun stopDesktop(onDone: (() -> Unit)? = null) {
         UbuntuLaunchPreferences.clearAutoStartAttempt(context)
-        val id = session?.distroId ?: desktopUi.distroId ?: UBUNTU_DISTRO_ID
+        val id = session?.distroId ?: desktopUi.distroId ?: activeId
         try {
             DesktopLauncher.stop(context, id) {
                 refreshKey++
@@ -216,8 +290,9 @@ fun HomeScreen(
         if (creatingLinks) return
         creatingLinks = true
         val app = context.applicationContext
+        val id = activeId
         Thread {
-            val result = runCatching { GuestStorageLinks.ensure(app, UBUNTU_DISTRO_ID) }
+            val result = runCatching { GuestStorageLinks.ensure(app, id) }
             runCatching { UbuntuFiles.notifyRootsChanged(app) }
             mainHandler.post {
                 creatingLinks = false
@@ -291,12 +366,51 @@ fun HomeScreen(
         if (session != null || DesktopLauncher.isSessionActive()) stopDesktop { extract() } else extract()
     }
 
+    val desktopActive = session != null || DesktopLauncher.isSessionActive()
+
+    /** Hero chip / "Use PRoot": flip to the other runtime. Never while a desktop runs. */
+    fun switchRuntime() {
+        val target = if (runtime == UbuntuRuntimeMode.CHROOT) UbuntuRuntimeMode.PROOT else UbuntuRuntimeMode.CHROOT
+        when (
+            UbuntuRuntimeSwitch.decide(
+                current = runtime,
+                target = target,
+                desktopActive = desktopActive || autoStartPending,
+                rootAvailable = rootAvailable == true,
+            )
+        ) {
+            RuntimeSwitchDecision.UNCHANGED -> Unit
+            RuntimeSwitchDecision.STOP_DESKTOP_FIRST ->
+                toast(context.getString(R.string.home_runtime_switch_blocked))
+            RuntimeSwitchDecision.NO_ROOT -> toast(context.getString(R.string.home_runtime_no_root))
+            RuntimeSwitchDecision.SWITCH -> {
+                UbuntuRuntimeSwitch.apply(context, target)
+                toast(
+                    context.getString(
+                        if (target == UbuntuRuntimeMode.CHROOT) R.string.home_runtime_switched_chroot
+                        else R.string.home_runtime_switched_proot
+                    )
+                )
+            }
+        }
+    }
+
+    val status = ubuntuStatus(install, autoStartPending, session, activeId)
+    val otherId = otherDesktopId(session, activeId)
+    val otherName = when (otherId) {
+        null -> null
+        UbuntuRuntime.PROOT_ID -> stringResource(R.string.home_other_ubuntu_proot)
+        UbuntuRuntime.CHROOT_ID -> stringResource(R.string.home_other_ubuntu_chroot)
+        else -> session?.distroName
+    }
     val state = UbuntuDashboardState(
-        status = ubuntuStatus(installed, autoStartPending, session),
+        status = status,
         autoStartPending = autoStartPending,
         lastStartFailed = lastStartFailed,
-        otherDesktopRunning = session?.takeIf { it.distroId != UBUNTU_DISTRO_ID }?.distroName,
-        storage = storage
+        otherDesktopRunning = otherName,
+        storage = storage,
+        runtime = runtime,
+        canSwitchRuntime = canSwitchRuntime(otherInstalled, status, desktopActive, autoStartPending),
     )
     val actions = UbuntuDashboardActions(
         onStartDesktop = { startDesktop() },
@@ -304,8 +418,8 @@ fun HomeScreen(
         onStopDesktop = { stopDesktop() },
         onCancelAutoStart = onCancelAutoStart,
         onSetUpUbuntu = { ubuntuDistro?.let(onNavigateToInstall) },
-        onTerminal = { onOpenTerminal(UBUNTU_DISTRO_ID, false) },
-        onRootTerminal = { onOpenTerminal(UBUNTU_DISTRO_ID, true) },
+        onTerminal = { onOpenTerminal(activeId, false) },
+        onRootTerminal = { onOpenTerminal(activeId, true) },
         onFiles = { openFiles(UbuntuFiles.ROOT_HOME) },
         onFilesystem = { openFiles(UbuntuFiles.ROOT_SYSTEM) },
         onAllowStorage = {
@@ -323,7 +437,13 @@ fun HomeScreen(
         onRepairHost = { showRepairConfirm = true },
         onRerunSetup = { ubuntuDistro?.let(onNavigateToInstall) },
         onUbuntuSettings = { ubuntuDistro?.let(onNavigateToSettings) },
-        onTroubleshooting = onNavigateToTroubleshooting
+        onTroubleshooting = onNavigateToTroubleshooting,
+        onSwitchRuntime = { switchRuntime() },
+        onRetryRoot = {
+            // A denied su is not cached, so this asks the root manager again.
+            rootAvailable = null
+            probeKey++
+        },
     )
 
     Column(

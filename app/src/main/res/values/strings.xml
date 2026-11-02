@@ -7,11 +7,15 @@
     <string name="terminal_drawer_empty">No open sessions</string>
     <string name="terminal_open_drawer">Sessions and options</string>
     <string name="terminal_new_session">New Ubuntu session</string>
+    <string name="terminal_new_session_chroot">New Ubuntu chroot session</string>
     <string name="terminal_extra_keys">Extra keys</string>
     <string name="terminal_back_home">Back to home</string>
     <string name="terminal_more_shells">More shells</string>
     <string name="terminal_shell_ubuntu_root">Ubuntu root shell</string>
-    <string name="terminal_shell_ubuntu_chroot">Ubuntu chroot</string>
+    <string name="terminal_shell_ubuntu_chroot">Ubuntu chroot shell</string>
+    <string name="terminal_shell_ubuntu_chroot_root">Ubuntu chroot root shell</string>
+    <string name="terminal_shell_ubuntu_proot">Ubuntu PRoot shell</string>
+    <string name="terminal_shell_ubuntu_proot_root">Ubuntu PRoot root shell</string>
     <string name="terminal_shell_host">Termux (host) shell</string>
     <string name="terminal_tab_switch">Switch to %1$s</string>
     <string name="terminal_tab_menu">Tab options</string>
@@ -30,6 +34,8 @@
     <string name="terminal_error_chroot_failed">Chroot session failed to open</string>
     <string name="terminal_error_session_failed">Session failed to open</string>
     <string name="terminal_error_ubuntu_missing">Ubuntu is not installed yet. Install it from Home, then try again.</string>
+    <string name="terminal_error_ubuntu_chroot_missing">Ubuntu chroot is not installed yet. Set it up from Home, then try again.</string>
+    <string name="terminal_error_chroot_no_root">Ubuntu chroot needs root. Allow FluxLinux in your root manager, or switch to PRoot in Settings.</string>
     <string name="install_starting">Starting…</string>
     <string name="install_base_desktop_done">Base desktop installed</string>
     <string name="home_repair_blocked_install">Host files are in use by an install or another repair. Try again when it finishes.</string>

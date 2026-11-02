@@ -85,7 +85,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -96,6 +98,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.install.InstallController
+import com.ivarna.fluxlinux.core.root.RootShell
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
@@ -114,8 +120,9 @@ import kotlin.concurrent.thread
 
 private enum class OnboardStep { Welcome, Consent, HostSetup, Options, Storage, Running, Done }
 
-/** First-run setup always installs this proot guest (Ubuntu 26.04, see DistroInstallProfile). */
-private const val UBUNTU_DISTRO_ID = "ubuntu"
+/** True while an install of either Ubuntu (PRoot or chroot) runs or just finished. */
+private fun InstallController.State.isUbuntuActive(): Boolean =
+    isActiveFor(UbuntuRuntime.PROOT_ID) || isActiveFor(UbuntuRuntime.CHROOT_ID)
 
 /** Numbered setup steps shown in [StepHeader]: Consent, Host setup, Options, Storage. */
 private const val ONBOARD_STEP_COUNT = 4
@@ -144,22 +151,42 @@ fun OnboardingFlowScreen(
     var step by rememberSaveable {
         // Re-opened while an Ubuntu install runs (or just finished): show its progress.
         mutableStateOf(
-            if (installer.state.value.isActiveFor(UBUNTU_DISTRO_ID)) OnboardStep.Running else OnboardStep.Welcome
+            if (installer.state.value.isUbuntuActive()) OnboardStep.Running else OnboardStep.Welcome
         )
     }
     var theme by rememberSaveable { mutableStateOf("dark") }
     var showLog by rememberSaveable { mutableStateOf(true) }
+    // PRoot unless the user picks chroot on a rooted phone. A running install keeps its id.
+    var runtime by rememberSaveable {
+        mutableStateOf(
+            when {
+                installer.state.value.isActiveFor(UbuntuRuntime.CHROOT_ID) -> UbuntuRuntimeMode.CHROOT
+                installer.state.value.isActiveFor(UbuntuRuntime.PROOT_ID) -> UbuntuRuntimeMode.PROOT
+                else -> UbuntuRuntime.mode(context)
+            }
+        )
+    }
+    // The runtime choice is offered only once an off-main su probe succeeded.
+    var rootAvailable by remember { mutableStateOf(false) }
+    LaunchedEffect(step == OnboardStep.Options) {
+        if (step != OnboardStep.Options) return@LaunchedEffect
+        RootShell.probeRootAvailable { ok ->
+            rootAvailable = ok
+            if (!ok && runtime == UbuntuRuntimeMode.CHROOT) runtime = UbuntuRuntimeMode.PROOT
+        }
+    }
 
     LaunchedEffect(step, install.runId, install.status) {
         if (step != OnboardStep.Running) return@LaunchedEffect
         when {
             // Restored after process death: the install died with the process.
-            !install.isActiveFor(UBUNTU_DISTRO_ID) -> step = OnboardStep.Options
+            !install.isUbuntuActive() -> step = OnboardStep.Options
             install.status == InstallController.Status.Succeeded -> {
                 // Idempotent: only creates missing ~/storage links, never replaces anything.
                 val appContext = context.applicationContext
+                val installedId = install.distroId ?: runtime.distroId
                 thread(name = "onboarding-storage-links") {
-                    runCatching { GuestStorageLinks.ensure(appContext, UBUNTU_DISTRO_ID) }
+                    runCatching { GuestStorageLinks.ensure(appContext, installedId) }
                 }
                 step = OnboardStep.Done
             }
@@ -167,8 +194,12 @@ fun OnboardingFlowScreen(
     }
 
     fun startInstall() {
+        // Chroot was only selectable with root; never install it without.
+        if (runtime == UbuntuRuntimeMode.CHROOT && !rootAvailable) runtime = UbuntuRuntimeMode.PROOT
+        // The chosen install becomes the one Home, the terminal and Files drive.
+        UbuntuRuntimeSwitch.apply(context.applicationContext, runtime)
         step = OnboardStep.Running
-        installer.start(UBUNTU_DISTRO_ID, theme)
+        installer.start(runtime.distroId, theme)
     }
 
     /** Leaving the Done page: the finished run no longer needs to be shown. */
@@ -196,6 +227,9 @@ fun OnboardingFlowScreen(
             OnboardStep.Options -> OptionsPage(
                 theme = theme,
                 onTheme = { theme = it },
+                runtime = runtime,
+                rootAvailable = rootAvailable,
+                onRuntime = { runtime = it },
                 onBack = { step = OnboardStep.HostSetup },
                 onInstall = {
                     if (SharedStorageAccess.isSupported(context) && !SharedStorageAccess.granted(context)) {
@@ -228,7 +262,8 @@ fun OnboardingFlowScreen(
             OnboardStep.Done -> DonePage(
                 onHome = { leaveDone(onFinished) },
                 onTerminal = { leaveDone(onOpenTerminal) },
-                onDesktop = { leaveDone { onStartDesktop(UBUNTU_DISTRO_ID) } }
+                onDesktop = { leaveDone { onStartDesktop(runtime.distroId) } },
+                runtime = runtime
             )
         }
     }
@@ -799,12 +834,16 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
 // 5. OPTIONS PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Stateless apart from the consent tick (also rendered by the onboarding screenshot previews). */
 @Composable
-private fun OptionsPage(
+internal fun OptionsPage(
     theme: String,
     onTheme: (String) -> Unit,
     onBack: () -> Unit,
-    onInstall: () -> Unit
+    onInstall: () -> Unit,
+    runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT,
+    rootAvailable: Boolean = false,
+    onRuntime: (UbuntuRuntimeMode) -> Unit = {},
 ) {
     var downloadConsent by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
@@ -853,12 +892,20 @@ private fun OptionsPage(
                             color = colors.onSurface
                         )
                         Text(
-                            text = stringResource(R.string.onboarding_options_distro_desc),
+                            text = stringResource(
+                                if (runtime == UbuntuRuntimeMode.CHROOT) R.string.onboarding_options_distro_desc_chroot
+                                else R.string.onboarding_options_distro_desc
+                            ),
                             fontSize = 12.sp,
                             color = colors.onSurface.copy(alpha = 0.65f)
                         )
                     }
                 }
+            }
+
+            // Runtime: only on rooted phones (off-main su probe), PRoot stays the default.
+            if (rootAvailable) {
+                RuntimeChoiceSection(runtime = runtime, onRuntime = onRuntime)
             }
 
             // Appearance Theme Selection
@@ -980,6 +1027,111 @@ private fun OptionsPage(
     }
 }
 
+/** PRoot vs chroot, shown on the Options page when root is available. */
+@Composable
+internal fun RuntimeChoiceSection(
+    runtime: UbuntuRuntimeMode,
+    onRuntime: (UbuntuRuntimeMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = stringResource(R.string.onboarding_runtime_title),
+            fontWeight = FontWeight.Bold,
+            color = colors.onBackground,
+            fontSize = 14.sp
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            RuntimeOptionCard(
+                icon = Icons.Filled.Layers,
+                title = stringResource(R.string.onboarding_runtime_proot),
+                desc = stringResource(R.string.onboarding_runtime_proot_desc),
+                selected = runtime == UbuntuRuntimeMode.PROOT,
+                onSelect = { onRuntime(UbuntuRuntimeMode.PROOT) },
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+            RuntimeOptionCard(
+                icon = Icons.Filled.Speed,
+                title = stringResource(R.string.onboarding_runtime_chroot),
+                desc = stringResource(R.string.onboarding_runtime_chroot_desc),
+                selected = runtime == UbuntuRuntimeMode.CHROOT,
+                onSelect = { onRuntime(UbuntuRuntimeMode.CHROOT) },
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+        }
+        Text(
+            text = stringResource(R.string.onboarding_runtime_hint),
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            color = colors.onSurface.copy(alpha = 0.65f)
+        )
+    }
+}
+
+@Composable
+private fun RuntimeOptionCard(
+    icon: ImageVector,
+    title: String,
+    desc: String,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    val borderColor = if (selected) FluxAccentMagenta else FluxHairline
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (selected) FluxAccentMagenta.copy(alpha = 0.12f) else colors.surface.copy(alpha = 0.72f))
+            .border(if (selected) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(14.dp))
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+            .padding(12.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (selected) FluxAccentMagenta else colors.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.size(22.dp)
+                )
+                RadioButton(
+                    selected = selected,
+                    onClick = null,
+                    colors = RadioButtonDefaults.colors(
+                        selectedColor = FluxAccentMagenta,
+                        unselectedColor = colors.onSurface.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = title,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = colors.onSurface
+            )
+            Text(
+                text = desc,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                color = colors.onSurface.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
 @Composable
 private fun ThemeOptionCard(
     title: String,
@@ -1062,7 +1214,8 @@ private fun ThemeOptionCard(
 internal fun DonePage(
     onHome: () -> Unit,
     onTerminal: () -> Unit,
-    onDesktop: () -> Unit
+    onDesktop: () -> Unit,
+    runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT
 ) {
     val colors = MaterialTheme.colorScheme
 
@@ -1141,7 +1294,10 @@ internal fun DonePage(
             Spacer(Modifier.height(14.dp))
 
             MethodChip(
-                label = stringResource(R.string.onboarding_done_chip),
+                label = stringResource(
+                    if (runtime == UbuntuRuntimeMode.CHROOT) R.string.onboarding_done_chip_chroot
+                    else R.string.onboarding_done_chip
+                ),
                 color = FluxAccentCyan
             )
 

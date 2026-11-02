@@ -8,7 +8,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.android.tools.screenshot.PreviewTest
 import com.ivarna.fluxlinux.core.utils.ThemeMode
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.onboarding.DonePage
+import com.ivarna.fluxlinux.ui.onboarding.OptionsPage
 import com.ivarna.fluxlinux.ui.onboarding.StorageAccessContent
 import com.ivarna.fluxlinux.ui.theme.FluxDarkSurface
 import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
@@ -66,5 +68,32 @@ fun OnboardingStorageLargeFontPreview() {
 fun OnboardingDonePreview() {
     OnboardingPreviewHost {
         DonePage(onHome = {}, onTerminal = {}, onDesktop = {})
+    }
+}
+
+// Options page on a rooted phone with chroot picked (the runtime cards appear only with root).
+@PreviewTest
+@Preview(name = "OnboardingOptionsChroot", showBackground = true, widthDp = 360, heightDp = 1000)
+@Composable
+fun OnboardingOptionsChrootPreview() {
+    OnboardingPreviewHost {
+        OptionsPage(
+            theme = "dark",
+            onTheme = {},
+            onBack = {},
+            onInstall = {},
+            runtime = UbuntuRuntimeMode.CHROOT,
+            rootAvailable = true,
+            onRuntime = {}
+        )
+    }
+}
+
+@PreviewTest
+@Preview(name = "OnboardingDoneChroot", showBackground = true, widthDp = 360, heightDp = 800)
+@Composable
+fun OnboardingDoneChrootPreview() {
+    OnboardingPreviewHost {
+        DonePage(onHome = {}, onTerminal = {}, onDesktop = {}, runtime = UbuntuRuntimeMode.CHROOT)
     }
 }

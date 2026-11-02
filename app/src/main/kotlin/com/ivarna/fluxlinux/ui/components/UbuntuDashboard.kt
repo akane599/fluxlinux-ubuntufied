@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Button
@@ -51,6 +52,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -70,6 +72,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ivarna.fluxlinux.R
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.theme.FluxHairline
 import kotlinx.coroutines.launch
 
@@ -94,8 +97,18 @@ private val ChipShape = RoundedCornerShape(50)
 private val LogoShape = RoundedCornerShape(16.dp)
 private val ButtonShape = RoundedCornerShape(14.dp)
 
-/** Lifecycle state of the Ubuntu desktop as shown on Home. */
-enum class UbuntuStatus { NOT_INSTALLED, STOPPED, STARTING, RUNNING }
+/** Lifecycle state of the active Ubuntu install's desktop as shown on Home. */
+enum class UbuntuStatus {
+    /** Chroot mode: root / install detection still running off the main thread. */
+    CHECKING,
+
+    /** Chroot mode without root access: the install can't be checked or started. */
+    NEEDS_ROOT,
+    NOT_INSTALLED,
+    STOPPED,
+    STARTING,
+    RUNNING,
+}
 
 @Immutable
 data class SharedStorageUi(
@@ -116,7 +129,11 @@ data class UbuntuDashboardState(
     val lastStartFailed: Boolean = false,
     /** Name of another distro whose desktop is running, if any. */
     val otherDesktopRunning: String? = null,
-    val storage: SharedStorageUi
+    val storage: SharedStorageUi,
+    /** Which Ubuntu install Home drives (PRoot `ubuntu` or chroot `ubuntu_chroot`). */
+    val runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT,
+    /** The other runtime's install exists and nothing is running: offer the quick switch. */
+    val canSwitchRuntime: Boolean = false,
 )
 
 /** Every user action on the dashboard. Stateless leaves call these; HomeScreen wires them. */
@@ -138,7 +155,11 @@ class UbuntuDashboardActions(
     val onRepairHost: () -> Unit = {},
     val onRerunSetup: () -> Unit = {},
     val onUbuntuSettings: () -> Unit = {},
-    val onTroubleshooting: () -> Unit = {}
+    val onTroubleshooting: () -> Unit = {},
+    /** Switch Home to the other Ubuntu runtime (PRoot <-> chroot). */
+    val onSwitchRuntime: () -> Unit = {},
+    /** Chroot mode without root: probe root again. */
+    val onRetryRoot: () -> Unit = {},
 )
 
 /** The whole Ubuntu dashboard. Stateless: callers own state and scrolling. */
@@ -151,7 +172,10 @@ fun UbuntuDashboard(
 ) {
     val recoveryRequester = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
-    val installed = state.status != UbuntuStatus.NOT_INSTALLED
+    // Quick actions and storage need a usable install; recovery stays reachable regardless.
+    val installed = state.status != UbuntuStatus.NOT_INSTALLED &&
+        state.status != UbuntuStatus.CHECKING &&
+        state.status != UbuntuStatus.NEEDS_ROOT
 
     Column(
         modifier = modifier
@@ -173,7 +197,9 @@ fun UbuntuDashboard(
             status = state.status,
             autoStartPending = state.autoStartPending,
             otherDesktopRunning = state.otherDesktopRunning,
-            actions = actions
+            actions = actions,
+            runtime = state.runtime,
+            canSwitchRuntime = state.canSwitchRuntime,
         )
 
         if (installed) {
@@ -203,12 +229,19 @@ fun UbuntuHeroCard(
     autoStartPending: Boolean,
     otherDesktopRunning: String?,
     actions: UbuntuDashboardActions,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT,
+    canSwitchRuntime: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
     val shownStatus = if (autoStartPending) UbuntuStatus.STARTING else status
+    val chroot = runtime == UbuntuRuntimeMode.CHROOT
     val body = when {
         autoStartPending -> stringResource(R.string.home_autostart_body)
+        status == UbuntuStatus.CHECKING -> stringResource(R.string.home_hero_checking)
+        status == UbuntuStatus.NEEDS_ROOT -> stringResource(R.string.home_hero_needs_root)
+        status == UbuntuStatus.NOT_INSTALLED && chroot ->
+            stringResource(R.string.home_hero_not_installed_chroot)
         status == UbuntuStatus.NOT_INSTALLED -> stringResource(R.string.home_hero_not_installed)
         otherDesktopRunning != null && status == UbuntuStatus.STOPPED ->
             stringResource(R.string.home_hero_other_running, otherDesktopRunning)
@@ -245,11 +278,19 @@ fun UbuntuHeroCard(
                         fontWeight = FontWeight.Bold,
                         color = colors.onSurface
                     )
-                    Text(
-                        text = stringResource(R.string.home_ubuntu_version),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.home_ubuntu_version),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(SmallGap))
+                        RuntimeChip(
+                            runtime = runtime,
+                            canSwitch = canSwitchRuntime,
+                            onSwitch = actions.onSwitchRuntime
+                        )
+                    }
                 }
             }
 
@@ -262,7 +303,7 @@ fun UbuntuHeroCard(
                 color = colors.onSurfaceVariant
             )
 
-            if (shownStatus == UbuntuStatus.STARTING) {
+            if (shownStatus == UbuntuStatus.STARTING || shownStatus == UbuntuStatus.CHECKING) {
                 Spacer(Modifier.height(Gap))
                 LinearProgressIndicator(
                     modifier = Modifier
@@ -273,7 +314,8 @@ fun UbuntuHeroCard(
                 )
             }
 
-            Spacer(Modifier.height(Gap + TinyGap))
+            // CHECKING has no buttons: don't leave an empty gap under the progress bar.
+            if (status != UbuntuStatus.CHECKING || autoStartPending) Spacer(Modifier.height(Gap + TinyGap))
             HeroButtons(
                 status = status,
                 autoStartPending = autoStartPending,
@@ -296,6 +338,23 @@ private fun HeroButtons(
             onClick = actions.onCancelAutoStart,
             modifier = Modifier.fillMaxWidth()
         )
+        // Nothing to act on until the off-main probe answers.
+        status == UbuntuStatus.CHECKING -> Unit
+        // Stacked: side by side, "Check root again" wraps at 360dp.
+        status == UbuntuStatus.NEEDS_ROOT -> Column(verticalArrangement = Arrangement.spacedBy(SmallGap)) {
+            PrimaryButton(
+                label = stringResource(R.string.home_action_retry_root),
+                icon = Icons.Filled.Refresh,
+                onClick = actions.onRetryRoot,
+                modifier = Modifier.fillMaxWidth()
+            )
+            SecondaryButton(
+                label = stringResource(R.string.home_action_use_proot),
+                icon = null,
+                onClick = actions.onSwitchRuntime,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         status == UbuntuStatus.NOT_INSTALLED -> PrimaryButton(
             label = stringResource(R.string.home_action_set_up),
             icon = Icons.Filled.PlayArrow,
@@ -329,6 +388,8 @@ private fun HeroButtons(
 private fun StatusChip(status: UbuntuStatus) {
     val colors = MaterialTheme.colorScheme
     val (label, tint) = when (status) {
+        UbuntuStatus.CHECKING -> stringResource(R.string.home_status_checking) to colors.onSurfaceVariant
+        UbuntuStatus.NEEDS_ROOT -> stringResource(R.string.home_status_needs_root) to colors.error
         UbuntuStatus.RUNNING -> stringResource(R.string.home_status_running) to colors.secondary
         UbuntuStatus.STARTING -> stringResource(R.string.home_status_starting) to colors.secondary
         UbuntuStatus.STOPPED -> stringResource(R.string.home_status_stopped) to colors.onSurfaceVariant
@@ -356,6 +417,60 @@ private fun StatusChip(status: UbuntuStatus) {
             fontWeight = FontWeight.SemiBold,
             color = if (filled) colors.onSecondary else tint
         )
+    }
+}
+
+/**
+ * Which Ubuntu install Home drives. Tappable (with a swap icon) only when the other
+ * runtime's install exists and nothing is running.
+ */
+@Composable
+private fun RuntimeChip(
+    runtime: UbuntuRuntimeMode,
+    canSwitch: Boolean,
+    onSwitch: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val chroot = runtime == UbuntuRuntimeMode.CHROOT
+    val label = stringResource(if (chroot) R.string.home_runtime_chroot else R.string.home_runtime_proot)
+    val other = stringResource(if (chroot) R.string.home_runtime_proot else R.string.home_runtime_chroot)
+    val switchLabel = stringResource(R.string.home_runtime_switch_to, other)
+    val tint = colors.secondary
+    val chip = Modifier
+        .clip(ChipShape)
+        .background(tint.copy(alpha = 0.10f))
+        .border(1.dp, tint.copy(alpha = 0.40f), ChipShape)
+    Box(
+        modifier = if (canSwitch) {
+            Modifier
+                .minimumInteractiveComponentSize()
+                .clip(ChipShape)
+                .clickable(role = Role.Button, onClickLabel = switchLabel, onClick = onSwitch)
+        } else {
+            Modifier
+        },
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = chip.padding(horizontal = SmallGap + 2.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = tint
+            )
+            if (canSwitch) {
+                Spacer(Modifier.width(TinyGap))
+                Icon(
+                    Icons.Filled.SwapHoriz,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(SmallIcon - 4.dp)
+                )
+            }
+        }
     }
 }
 

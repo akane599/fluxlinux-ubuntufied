@@ -39,7 +39,6 @@ import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
 import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.core.utils.ThemePreferences
 import com.ivarna.fluxlinux.core.utils.UbuntuLaunchPreferences
-import com.ivarna.fluxlinux.ui.screens.UBUNTU_DISTRO_ID
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -309,6 +308,9 @@ class MainActivity : ComponentActivity() {
             ?: distroId.removeSuffix("_chroot").ifBlank { "debian" }
         // Lets the guest skip steps too slow under proot (full papirus-icon-theme unpack).
         merged["FLUX_PROOT"] = "1"
+        // Older Ubuntu PRoot installs still log in as flux: move them to akane before the
+        // customization scripts (which target akane) run.
+        com.ivarna.fluxlinux.core.terminal.GuestUserMigration.migrateIfNeeded(activity, distroId)
         try {
             val themeOk = com.ivarna.fluxlinux.core.install.ProotXfceAssetInstaller.install(
                 activity, theme, prootName
@@ -492,21 +494,32 @@ class MainActivity : ComponentActivity() {
     private var coldLaunchAutoStart = false
 
     /**
-     * Ubuntu auto-start preconditions other than the cold-launch flag. The crash-loop guard
+     * Ubuntu auto-start preconditions other than the cold-launch flag, for the active Ubuntu
+     * install ([UbuntuRuntime.activeDistroId]). The crash-loop guard
      * ([UbuntuLaunchPreferences.lastAutoStartFailed]) keeps a failing start from looping.
+     * The install check runs off the main thread: chroot needs su. Chroot without root (or not
+     * installed) skips auto-start without marking an attempt, so the guard never trips on it.
      */
-    private fun autoStartAllowed(): Boolean =
-        StateManager.isOnboardingComplete(this) &&
-            UbuntuLaunchPreferences.isAutoStartDesktop(this) &&
-            !UbuntuLaunchPreferences.lastAutoStartFailed(this) &&
-            com.ivarna.fluxlinux.core.terminal.TerminalLauncher.isProotInstalled(this, UBUNTU_DISTRO_ID)
+    private suspend fun autoStartAllowed(): Boolean {
+        if (!StateManager.isOnboardingComplete(this) ||
+            !UbuntuLaunchPreferences.isAutoStartDesktop(this) ||
+            UbuntuLaunchPreferences.lastAutoStartFailed(this)
+        ) return false
+        val app = applicationContext
+        val mode = com.ivarna.fluxlinux.core.utils.UbuntuRuntime.mode(app)
+        val check = withContext(Dispatchers.IO) {
+            com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe.probe(app, mode)
+        }
+        return check == com.ivarna.fluxlinux.core.utils.UbuntuInstallCheck.INSTALLED
+    }
 
     /** Starts Ubuntu after the countdown; the attempt flag clears only on a ready desktop. */
     private fun launchUbuntuAutoStart() {
         val app = applicationContext
+        val distroId = com.ivarna.fluxlinux.core.utils.UbuntuRuntime.activeDistroId(app)
         UbuntuLaunchPreferences.markAutoStartAttempt(app)
         try {
-            com.ivarna.fluxlinux.core.desktop.DesktopLauncher.start(this, UBUNTU_DISTRO_ID) { ok ->
+            com.ivarna.fluxlinux.core.desktop.DesktopLauncher.start(this, distroId) { ok ->
                 if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(app)
             }
         } catch (e: Exception) {

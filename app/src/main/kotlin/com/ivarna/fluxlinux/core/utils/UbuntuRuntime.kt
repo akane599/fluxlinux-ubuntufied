@@ -1,6 +1,8 @@
 package com.ivarna.fluxlinux.core.utils
 
 import android.content.Context
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /** How the Ubuntu guest runs: PRoot (no root) or chroot (rooted device). */
 enum class UbuntuRuntimeMode(val prefValue: String, val distroId: String) {
@@ -58,6 +60,25 @@ object UbuntuRuntime {
 
     fun setMode(context: Context, mode: UbuntuRuntimeMode) {
         prefs(context).edit().putString(KEY_MODE, mode.prefValue).apply()
+        modeState.value = mode
+        modeLoaded = true
+    }
+
+    private val modeState = MutableStateFlow(UbuntuRuntimeMode.PROOT)
+
+    @Volatile
+    private var modeLoaded = false
+
+    /**
+     * The mode as observable state, so Compose surfaces (Home, Terminal, Settings) recompose
+     * when [setMode] switches it. Loaded from prefs on first use.
+     */
+    fun modeFlow(context: Context): StateFlow<UbuntuRuntimeMode> {
+        if (!modeLoaded) {
+            modeState.value = mode(context)
+            modeLoaded = true
+        }
+        return modeState
     }
 
     /** Distro id of the active Ubuntu install (`ubuntu` or `ubuntu_chroot`). */

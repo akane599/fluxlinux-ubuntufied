@@ -4,6 +4,7 @@ import com.ivarna.fluxlinux.core.terminal.FakeContext
 import com.ivarna.fluxlinux.core.terminal.TerminalShellAvailability
 import com.ivarna.fluxlinux.core.terminal.TerminalShellCardUi
 import com.ivarna.fluxlinux.core.terminal.TerminalShellCatalog
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -75,14 +76,56 @@ class TerminalSessionDefaultsTest {
     }
 
     @Test
-    fun extras_fullSetIsOrderedRootChrootHost() {
+    fun extras_fullSetIsOrderedRootThenOtherRuntimeThenHost() {
         val choices = TerminalSessionDefaults.resolve(
             cards(ubuntuProot = true, ubuntuChroot = true, rootAvailable = true)
         )
         assertEquals(
-            listOf("proot" to "shell-root", "chroot" to "shell", "host" to "host"),
+            listOf("proot" to "shell-root", "chroot" to "shell", "chroot" to "shell-root", "host" to "host"),
             choices.extras.map { it.def.method to it.def.type },
         )
+    }
+
+    @Test
+    fun chrootMode_defaultsToTheChrootUserShell() {
+        val choices = TerminalSessionDefaults.resolve(
+            cards(ubuntuProot = true, ubuntuChroot = true, rootAvailable = true),
+            UbuntuRuntimeMode.CHROOT,
+        )
+        val user = choices.defaultUser!!
+        assertEquals("chroot" to "shell", user.def.method to user.def.type)
+        assertEquals("ubuntu_chroot", user.def.distroId)
+        assertTrue(user.enabled)
+        assertEquals("chroot" to "shell-root", choices.ubuntuRoot!!.def.method to choices.ubuntuRoot!!.def.type)
+        // Both installs present: the PRoot shells are offered as the other runtime.
+        assertEquals("proot" to "shell", choices.otherUser!!.def.method to choices.otherUser!!.def.type)
+        assertEquals("proot" to "shell-root", choices.otherRoot!!.def.method to choices.otherRoot!!.def.type)
+        assertEquals(user, choices.ubuntuChroot)
+    }
+
+    @Test
+    fun chrootMode_withoutRoot_keepsADisabledDefaultAndNoChrootExtras() {
+        val choices = TerminalSessionDefaults.resolve(
+            cards(ubuntuProot = true, ubuntuChroot = true, rootAvailable = false),
+            UbuntuRuntimeMode.CHROOT,
+        )
+        assertEquals("ubuntu_chroot", choices.defaultUser!!.def.distroId)
+        assertFalse(choices.defaultUser!!.enabled)
+        assertNull(choices.ubuntuRoot)
+        assertNull(choices.ubuntuChroot)
+        // The PRoot install stays reachable from the menu.
+        assertEquals("proot", choices.otherUser!!.def.method)
+    }
+
+    @Test
+    fun chrootMode_withoutThePRootInstall_offersNoOtherRuntime() {
+        val choices = TerminalSessionDefaults.resolve(
+            cards(ubuntuChroot = true, rootAvailable = true),
+            UbuntuRuntimeMode.CHROOT,
+        )
+        assertNull(choices.otherUser)
+        assertNull(choices.otherRoot)
+        assertEquals(listOf("shell-root", "host"), choices.extras.map { it.def.type })
     }
 
     @Test
