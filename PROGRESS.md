@@ -2,6 +2,16 @@
 
 _Work items, stories and blockers live on the Sidequest board. This file keeps what outlives tickets._
 
+## Current effort: Ubuntu chroot runtime + akane user
+_Updated: 2026-11-02 · rewrite this section, don't append_
+- **Goal:** Ubuntu runs as PRoot or chroot (rooted phone) with the same features, guest user `akane` in both; merged and released.
+- **Done:** branch `feat/ubuntu-chroot`, [PR #1](https://github.com/akane599/fluxlinux-ubuntufied/pull/1). Build, 903 unit tests, lint, screenshots and shell tests are green. Two independent reviews' P1–P3 findings are fixed. The debug APK is installed fresh on the SM-S938B (KernelSU); nothing has run on it yet.
+- **Next:**
+  - [ ] On the phone: grant root to `com.ivarna.fluxlinux` in KernelSU, run onboarding → Chroot, start the desktop. Check `whoami` = akane, network (aid_inet), `~/storage`, audio, and Files → "Ubuntu" (root SAF, toybox/BusyBox). Monitor via adb and `run-as`; the user taps.
+  - [ ] Check a PRoot install migrating flux → akane on a real install: install v2.1.8 release, set up, then upgrade to the branch build.
+  - [ ] Fix whatever the device shows, merge PR #1, update the CLAUDE.md baseline (903 tests), release v2.2.0 (live-rules: release identity + debug APK).
+- **Open questions:** none.
+
 ## Baseline
 - 2026-10-19 @ 7f6e61d: `:app:assembleIvarnaDebug` ok, 402 unit tests (`:app:testIvarnaDebugUnitTest`), 2 failing (pre-existing, not ours):
   - `ui.OnboardingConsentContractTest.optionsPage_requiresDownloadConsentBeforeInstall`: AssertionError (cause not yet investigated)
@@ -46,6 +56,9 @@ _Work items, stories and blockers live on the Sidequest board. This file keeps w
 - `ProotXfceAssetInstaller.writeAtomically` uses a fixed `.tmp` name, so two installs running at once can collide.
 - `MountLockTest` adds about 45 s to the unit suite because it waits on real timeouts. Make those timeouts injectable.
 - `.agent/workflows/fdroid-update.md` is stale for this fork: wrong repo (`abhay-byte/fluxlinux`), `assembleRelease`, and no debug APK.
+
+- Chroot setup's flux→akane rename (setup_guest_chroot.sh) doesn't take the helper's mount lock, so a desktop start during setup could race it.
+- Chroot Files can't open `rw`/`rwt` (random access) through root; editors that open files that way fail on chroot files.
 
 ## Environment notes
 - A fresh checkout needs the termux-x11 submodules and an assembled host bootstrap before any build (see CLAUDE.md Commands). Both were done on this machine on 2026-10-19.
