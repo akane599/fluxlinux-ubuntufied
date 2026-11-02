@@ -62,7 +62,7 @@ def main():
     lines += ['> '+p.replace('\n','\n> ') for p in prompts]
     lines += ['', '## Repository', '- Branch: '+git('symbolic-ref','--short','HEAD'), '```', git('status','--short')[:4000], '```', '## Recently edited files']
     lines += ['- '+f for f in edited]
-    lines += ['', 'Check the Sidequest board for work already in flight before continuing.']
+    lines += ['', 'Read PROGRESS.md for work already in flight before continuing.']
     out.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     fd, temp = tempfile.mkstemp(prefix=out.name + '.', dir=out.parent)
     try:

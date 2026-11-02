@@ -1,6 +1,6 @@
 # PROGRESS.md — FluxLinux (ubuntufied fork)
 
-_Work items, stories and blockers live on the Sidequest board. This file keeps what outlives tickets._
+_State of ongoing work (Current effort), baselines, the append-only decision log, audit status and known issues._
 
 ## Current effort: Ubuntu chroot runtime + akane user
 _Updated: 2026-11-02 · rewrite this section, don't append_
@@ -9,7 +9,7 @@ _Updated: 2026-11-02 · rewrite this section, don't append_
 - **Next:**
   - [ ] On the phone: grant root to `com.ivarna.fluxlinux` in KernelSU, run onboarding → Chroot, start the desktop. Check `whoami` = akane, network (aid_inet), `~/storage`, audio, and Files → "Ubuntu" (root SAF, toybox/BusyBox). Monitor via adb and `run-as`; the user taps.
   - [ ] Check a PRoot install migrating flux → akane on a real install: install v2.1.8 release, set up, then upgrade to the branch build.
-  - [ ] Fix whatever the device shows, merge PR #1, update the CLAUDE.md baseline (903 tests), release v2.2.0 (live-rules: release identity + debug APK).
+  - [ ] Fix whatever the device shows, merge PR #1, update the CLAUDE.md baseline (903 tests), release v2.2.0 (`.claude/rules/release.md`).
 - **Open questions:** none.
 
 ## Baseline
@@ -40,19 +40,19 @@ _Updated: 2026-11-02 · rewrite this section, don't append_
 - 2026-11-02: Ubuntu chroot is back as a first-class runtime next to PRoot (branch feat/ubuntu-chroot), because the user's phone is rooted now. `UbuntuRuntime` (core/utils) is the SSOT: the mode picks `ubuntu` or `ubuntu_chroot` for Home, auto-start (crash guard keyed per id), onboarding (runtime choice only when root is found), the terminal default tab and Files; both installs coexist and switching never touches either. Root probes never run on the main thread, and Home re-probes on resume only after a grant (a denied Magisk prompt otherwise loops).
 - 2026-11-02: the Ubuntu guest user is `akane` (/home/akane) in both PRoot and chroot, at the user's request; legacy distros keep `flux`. Existing installs are renamed in place (PRoot: host-side `GuestUserMigration`; chroot: the helper's root-side block, an identical copy in setup_guest_chroot.sh) with a `home/flux -> akane` compat link, chosen over a fresh user so data, OMZ and absolute /home/flux paths survive. If a rename can't run, login and every setup script stay on `flux` rather than creating a second account. New users get their name as password.
 - 2026-11-02: chroot Files go through root (`RootGuestFs`, BusyBox applets first, single-quoted paths, rootfs confinement checked before and inside each root script) because SELinux hides /data/local/tmp/chrootUbuntu from the app uid. Host mounts inside the chroot (/proc, /sys, /dev, /sdcard bind) are list-only, so a SAF delete can never reach shared storage or host /dev; ~/storage links resolve to shared storage directly, browse/create only.
+- 2026-11-02: android-kit and Sidequest were removed by the user. Conventions moved from `.claude/live-rules/` to Claude Code's native `.claude/rules/` (path-scoped where it fits; the Sidequest orchestration rule and publish lock were dropped). `gradle-check.sh` and the compaction checkpoint hook were kept under `.claude/scripts/`, and the bug checklist under `.claude/references/`. Gradle concurrency is a fixed 2 commands × `--max-workers=4` instead of the resource-policy probe.
 - 2026-10-19: redroid (no-KVM host) can't execute the arm64 host binaries (no native bridge libs), so on-device QA there covers UI, provider and links with a staged fake rootfs only.
 
 ## Audit status
 | Area | Last run | Result | How |
 |---|---|---|---|
-| Sidequest bug hunt | — | — | `/bug-hunt` |
 | Repository audit | 2026-10-20 | 4 high, 23 medium, 33 low (AUDIT_REPORT.md) | `/full-repo-audit` |
 | Audit fixes | 2026-10-20 | 57 fixed, M14/L8 partial, L29 blocked; device-unverified | `/audit-remediate` |
-| UI / design | — | — | `/ui-overhaul` phase review |
+| UI / design | — | — | `compose-design` skill + screenshot review |
 | Lint | 2026-10-20 | 0 errors | `./gradlew :app:lintIvarnaDebug -q` |
 | Device QA | 2026-10-20 | SM-S938B (Android 17): v2.1.4 fresh install OK, customization in about 2.5 min, bundled Papirus-Dark passes the icon check; desktop start not checked | adb + debug run-as |
 
-## To file (Sidequest was off on 2026-10-20)
+## Known issues / to do
 - `ProotXfceAssetInstaller.writeAtomically` uses a fixed `.tmp` name, so two installs running at once can collide.
 - `MountLockTest` adds about 45 s to the unit suite because it waits on real timeouts. Make those timeouts injectable.
 - `.agent/workflows/fdroid-update.md` is stale for this fork: wrong repo (`abhay-byte/fluxlinux`), `assembleRelease`, and no debug APK.

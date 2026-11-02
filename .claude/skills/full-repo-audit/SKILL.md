@@ -5,7 +5,6 @@ description: Perform an exhaustive, staff-level architectural, security, concurr
 
 ## Standalone review mode
 
-Use this workflow with Sidequest disabled. If Sidequest is active, stop before audit dispatch and ask the user to enter review mode from an ordinary terminal, then fully restart Claude. Do not disable hooks inside an active run or dispatch Sidequest tickets for this workflow. `/bug-hunt` remains the Sidequest-native investigation command.
 
 Read `references/blind-audit.md` before project summaries, then `references/orchestration.md`. Use the current native session configuration; these skills do not pin models or require provider diversity. Keep any gateway needed by the chosen kit enabled. Treat domain checklists as investigation prompts, confirm each claim against actual code/API versions, and redact credentials.
 

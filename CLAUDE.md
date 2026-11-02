@@ -1,33 +1,26 @@
-<!-- android-kit -->
 # CLAUDE.md — FluxLinux (ubuntufied fork)
 
 Runs an Ubuntu 26.04 XFCE desktop (PRoot, no root; chroot with root) over Termux-X11 with PulseAudio on Android. This fork is Ubuntu-first: setup installs Ubuntu and opening the app starts its desktop; other distros' code and existing installs remain but aren't in the main UI.
 Android, developed on Ubuntu from the CLI.
 
-<!-- STACK:BEGIN (filled by /bootstrap) -->
 - Origin: fork of abhay-byte/fluxlinux (origin = akane599/fluxlinux-ubuntufied) @ 7f6e61d · Integration branch: main
 - Language: mixed — Kotlin (:app is all Kotlin; Java only in :termux-x11, :terminal-emulator, :stub) + C/CMake (:termux-x11 X server) · UI: Compose (+7 XML layouts) · screenshot tests: compose-preview (ivarna flavor)
 - JDK target 17 · Gradle 8.14 · AGP 8.7.3 · Kotlin 2.0.20 · compileSdk 36 · targetSdk 36 · minSdk 26
 - Modules: :app :termux-x11 :terminal-emulator :stub · Architecture: single-activity Compose, no DI framework · DI/DB/Net: none / none / okhttp
 - Flavors (dimension `store`): `ivarna` = com.ivarna.fluxlinux (F-Droid/GitHub, arm64-v8a only) · `zenithblue` = com.zenithblue.fluxlinux (Play) · Launcher: .MainActivity
 - Baseline: build ok (ivarnaDebug) · 727 unit tests, 0 failures (v2.1.4, 2026-10-20)
-<!-- STACK:END -->
 
 ## How work flows here
-- For ongoing multi-session work, read PROGRESS.md at the repo root before planning, and update it at milestones.
-- **The main session orchestrates; it doesn't implement.** Work becomes Sidequest tickets, executors work in isolated worktrees on their returned native Claude route, and the main session integrates verified results. Bounded inline-safe maintenance follows Sidequest's current rules.
-- **Routing** (Sidequest profile `android-kit-claude-max`): Opus/high orchestrates, diagnoses bugs, investigates spikes, handles hard coding and reviews plans. Opus/high implements code/UI, designs tests and reviews code; validate high-impact or disputed findings with an explicit Opus/high review override. Sonnet/medium handles bounded research, mapping and mechanical edits. Haiku/low runs exact checks. Visual judgement uses Opus/medium, high for complex flows. Escalation uses Opus/xhigh with a fresh hypothesis, then Fable/high only as a last resort. Use native Claude routes and inspect effective board/ticket overrides.
-- **Big or multi-step changes:** plan mode → pin the reviewed plan as a Sidequest story → dispatch independent work within routing and ownership limits.
-- **UI overhaul:** `/ui-overhaul <scope>`.
-- **Bugs:** use `/bug-hunt` for existing-code investigations while Sidequest is active or within a story. Required ticket checks and Sidequest review gates remain. For a separate full repository audit, enter review mode with Sidequest off, then use `/full-repo-audit` followed by `/audit-remediate` for requested fixes; they coordinate native workers independently.
-- **End of a session or story:** `/wrap-up` turns corrections and decisions into rules, CLAUDE.md lines and the decision log (you approve each). Personal preferences go to auto memory ("remember that …").
-- **Conventions** live in `.claude/live-rules/rules/` and are injected into every session and executor, so they're not repeated here. **Project map:** `.claude/.codebase-info/` (codebase-mapper).
-- **Board:** "show the Sidequest board"; side issues mentioned mid-task get filed, not worked.
-- **Plugin health / updates:** `/kit-doctor`, `/kit-refresh --update-toolshed` for project-scoped Toolshed updates. Never run the broad updater or enable Model Gateway for this project.
-- **Compaction:** your last instructions are saved before compaction and re-injected after; re-read them before acting.
+- For ongoing multi-session work, read PROGRESS.md at the repo root before planning, and update it at milestones. Its decision log is append-only (one line each).
+- Big or multi-step changes: plan first (plan mode for anything architectural), split the work by file ownership, run independent parts as parallel subagents, then integrate, review and verify in the main session.
+- Reviews: an independent review (a fresh subagent given the diff, not your conclusions) for meaningful behaviour changes before merging; validate each finding by reading the code path before fixing. Checklist: `.claude/references/android-bug-checklist.md`.
+- Bug fixes start from a test that reproduces the bug where feasible.
+- Conventions live in `.claude/rules/` (some load only for matching paths). Project map: `.claude/.codebase-info/`; refresh it when flows or file locations change.
+- Skills here: `compose-design` (UI work), `full-repo-audit` then `audit-remediate` (whole-repo audit and fixes).
+- Personal preferences go to auto memory ("remember that …"); lasting repo facts go here or in `.claude/rules/`.
 
 ## Commands
-- There is no plain `Debug` variant: always name a flavor. Build: `bash .claude/kit/gradle-check.sh :app:assembleIvarnaDebug` · Unit: `:app:testIvarnaDebugUnitTest` · Lint: `:app:lintIvarnaDebug`
+- There is no plain `Debug` variant: always name a flavor. Build: `bash .claude/scripts/gradle-check.sh :app:assembleIvarnaDebug` · Unit: `:app:testIvarnaDebugUnitTest` · Lint: `:app:lintIvarnaDebug`
 - Screenshots: `:app:updateIvarnaDebugScreenshotTest` (write refs to `app/src/screenshotTestIvarnaDebug/reference`) · `:app:validateIvarnaDebugScreenshotTest` (diff). Previews live in `app/src/screenshotTest/` (`@PreviewTest`, fake state only); plugin `com.android.compose.screenshot` 0.0.1-alpha10 (alpha11+ need Kotlin ≥2.2)
 - Shell tests: `for f in app/src/test/shell/*.sh; do sh "$f" app/src/main/assets; done` (each needs the assets dir argument).
 - Device: `./gradlew :app:installIvarnaDebug -q && adb shell am start -n com.ivarna.fluxlinux/.MainActivity` · logs: `adb logcat -d --pid=$(adb shell pidof -s com.ivarna.fluxlinux) | tail -80`
@@ -40,13 +33,12 @@ Android, developed on Ubuntu from the CLI.
 - Fresh checkout prerequisites (the build fails without them):
   - termux-x11 C sources: `git submodule update --init --depth 1 -- $(git config -f .gitmodules --get-regexp 'submodule\.termux-x11.*\.path' | awk '{print $2}')`. Skip `native/termux-packages`, which is huge and only needed to rebuild debs.
   - Host bootstrap (gitignored, ~124 MB, built from the tracked `native/output/<appId>/*.deb`): `python3 scripts/assemble_bootstrap.py --package-name <appId> --mode full && bash scripts/verify_bootstrap.sh <appId>`. `:app:packageHostAssets<Flavor>` fails closed without it.
-  - Repo-local git identity, or executor worktrees can't commit: `git config user.name akane && git config user.email hackistek@gmail.com`
-- Executor worktrees get the gitignored `bootstrap.tar` and the termux-x11 sources from the board's `worktreeSetup` (copied from the main checkout); if a worktree build fails on missing assets, check that the main checkout has them.
+  - Repo-local git identity, or commits from worktrees fail: `git config user.name akane && git config user.email hackistek@gmail.com`
+- Worktrees don't get the gitignored `bootstrap.tar` (`app/src/ivarna/assets/`) or the termux-x11 sources: copy the first from the main checkout and init the second as below, or builds fail. Each worktree build costs ~1–2 GB of disk.
 - Manual worktrees: initialise termux-x11 submodules with per-command `git -c submodule.<name>.url=<main>/.git/modules/<name>`, never `git config submodule.*.url`, which rewrites the shared `.git/config`. Remove worktrees with `git worktree remove --force --force` once their branch is merged (git refuses worktrees with submodules). Their dirty submodule sources are the build's own patches, same as in the main checkout.
-- Release: follow `.agent/workflows/fdroid-update.md` (commit-identity rule in live-rules). F-Droid metadata: `com.ivarna.fluxlinux.yml` (UpdateCheckMode: Tags).
+- Release: follow `.claude/rules/release.md` (read it before starting). F-Droid metadata: `com.ivarna.fluxlinux.yml` (UpdateCheckMode: Tags).
 
 ## Parallel execution
-
-Dispatch all ready, independent work concurrently as soon as its inputs are available. This applies to implementation, audits, reviews, research, tests, tool calls and remediation. Do not impose a kit-specific agent count, RAM-based subagent cap, fixed wave size or wait-for-all barrier. Refill available native execution capacity immediately when a worker finishes. Preserve actual runtime permissions/capacity; disclose unavailable parallelism rather than bypassing it. Serialize only real dependencies or shared-resource collisions (same files, Git index, board mutation, report writer, device, build outputs). Use distinct owned files/worktrees to remove avoidable collisions. Gradle verification alone queues for the RAM-derived machine-wide command slots; waiting verification never blocks independent work or reserves a slot for a ticket's lifetime. CPU determines workers per Gradle command, not agent dispatch capacity. Do not spawn redundant work just to fill slots. Cloud model inference does not justify a local RAM-based agent cap; local commands still consume resources.
-
-Agents sharing one checkout (no worktree) must not run the full unit suite at the same time, because they collide on `app/build/test-results`. The orchestrator runs the final verification alone and commits explicit paths, never `git commit -a`.
+- Run independent work (implementation, research, reviews, checks) concurrently; serialize only real dependencies and shared resources (same files, the git index, the device, build outputs).
+- Give each parallel agent explicit file ownership. Agents sharing one checkout (no worktree) must not run the full unit suite at the same time, because they collide on `app/build/test-results`. The main session runs the final verification alone and commits explicit paths, never `git commit -a`.
+- Gradle limits are in `.claude/rules/android-build.md` (2 commands, `--max-workers=4`).

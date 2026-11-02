@@ -7,10 +7,10 @@
    `git submodule update --init --depth 1 -- $(git config -f .gitmodules --get-regexp 'submodule\.termux-x11.*\.path' | awk '{print $2}')`
 3. Assemble the host bootstrap from the tracked debs (no Docker needed):
    `python3 scripts/assemble_bootstrap.py --package-name com.ivarna.fluxlinux --mode full && bash scripts/verify_bootstrap.sh com.ivarna.fluxlinux`
-4. Build and test: `bash .claude/kit/gradle-check.sh :app:assembleIvarnaDebug :app:testIvarnaDebugUnitTest`.
+4. Build and test: `bash .claude/scripts/gradle-check.sh :app:assembleIvarnaDebug :app:testIvarnaDebugUnitTest`.
 5. Install: `./gradlew :app:installIvarnaDebug -q && adb shell am start -n com.ivarna.fluxlinux/.MainActivity`. The ivarna flavor ships arm64 only; x86_64 emulators run it via native bridge.
 
-Sidequest worktrees are set up automatically. `bootstrap.tar` is copied in through `worktreeDependencyPaths` (`link` mode only works for directories). The board's `worktreeSetup` clones the 16 termux-x11 submodules from the main checkout over `file://`, with no network, in about 1.5 s.
+Git worktrees need `app/src/ivarna/assets/bootstrap.tar` copied from the main checkout and the termux-x11 submodules initialised from the main checkout's `.git/modules` (see CLAUDE.md, Manual worktrees).
 
 ## Common tasks
 | Task | Where |

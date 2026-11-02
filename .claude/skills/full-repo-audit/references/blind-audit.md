@@ -3,7 +3,7 @@
 ## Define and disclose the boundary before reading project context
 A blind audit means no prior assessment conclusions are used to select or validate findings. It does not mean the current code/tests have no traces of earlier fixes. Do not claim absolute blindness, exhaustive coverage or proof that fixes are correct simply because tests pass.
 
-Follow required system/user/repository instructions. For this workflow, the kit's normal PROJECT/MAP/PROGRESS/board/bootstrap loading is deferred until after freeze. Never bypass mandatory instructions; if required instructions or automatically loaded memory already contain prior findings, disclose that exposure before investigation. A prompt cannot erase context already read.
+Follow required system/user/repository instructions. For this workflow, the normal PROJECT/MAP/PROGRESS loading is deferred until after freeze. Never bypass mandatory instructions; if required instructions or automatically loaded memory already contain prior findings, disclose that exposure before investigation. A prompt cannot erase context already read.
 
 Before proceeding, record a contamination ledger: prior report exposure; PROJECT/MAP/PROGRESS/board/issue summaries; conversation history; auto-loaded memory/instructions; commit messages/diffs; test names/comments that disclose prior findings. Record paths/categories and timing without copying finding details into worker prompts. Classify the run as `no known prior-assessment exposure`, `fresh workers; coordinator exposed`, or `contaminated/not blind`. Never downgrade exposure after a fresh prompt in the same context.
 

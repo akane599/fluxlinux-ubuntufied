@@ -1,6 +1,6 @@
 # Standalone audit coordination
 
-Use this protocol without Sidequest or Toolshed. It is an instruction workflow, not an automatic scheduler or an identity/locking enforcement service. For blind audits, follow the full-repo-audit skill’s isolation protocol first and defer generated PROJECT/MAP/PROGRESS/board context until freeze; disclose any required or already-loaded prior conclusions. Read required project instructions and use the session's actual native tools and permissions; do not create nested agent CLI sessions or invent agent types/model names.
+It is an instruction workflow, not an automatic scheduler or an identity/locking enforcement service. For blind audits, follow the full-repo-audit skill’s isolation protocol first and defer generated PROJECT/MAP/PROGRESS/board context until freeze; disclose any required or already-loaded prior conclusions. Read required project instructions and use the session's actual native tools and permissions; do not create nested agent CLI sessions or invent agent types/model names.
 
 ## Audit roles and dispatch
 1. Coordinator: pin the Git commit and dirty/untracked state, inventory subsystems, run one shared tooling baseline, and keep a compact coverage ledger in the final report. Delegate only after current-source inventory establishes concrete scopes. For blind work use fresh contexts without inherited prior-assessment transcripts; otherwise disclose contamination before proceeding.
@@ -12,11 +12,11 @@ Use this protocol without Sidequest or Toolshed. It is an instruction workflow, 
 ## Remediation roles and verification
 - One coordinator owns the finding queue and AUDIT_REPORT.md. Dispatch independent findings/root-cause groups concurrently, each owned by one implementation worker in an isolated worktree. A clean branch alone does not isolate concurrent writers sharing a checkout. Record the per-finding baseline before editing. Read-only research for future findings may overlap; multiple fix writers must not edit the same checkout/report.
 - Use an independent review of the actual diff when risk or a weak test oracle warrants it. The coordinator runs or delegates the exact regression command once, records its real exit result, and advances the finding only after required verification succeeds. Respect the user's commit authorization; never push automatically.
-- Before verification, run `python3 .claude/kit/resource-policy.py` read-only. Use its fresh RAM-derived `gradle_command_limit` machine-wide and `gradle_workers_per_command` as `--max-workers=N`. Queue only Gradle commands when slots are full or current memory pressure requires deferral. Waiting checks hold no slot; continue unrelated dispatch. This is advisory coordination, not an enforced semaphore.
+- Gradle verification: at most 2 Gradle commands machine-wide, each with `--max-workers=4` (see `.claude/rules/android-build.md`). Queue only Gradle commands when both slots are busy; waiting checks hold no slot, so continue unrelated dispatch.
 - A missing device/compiler or failing pre-existing baseline is a disclosed verification gap. Never treat it as a successful check. Preserve dirty user work and use only scoped recovery for the current finding.
-- Keep task state and command/log references in the audit report or a compact coordinator ledger. This workflow does not require a Sidequest database, the Codex board, provider conversion, or extra plugins.
+- Keep task state and command/log references in the audit report or a compact coordinator ledger.
 
-Audit mode must never modify/remove skills, kit metadata or project instructions. Freeze the independent report before delta; check protected-file integrity before publication. Remediation is separate and must not remove audit/remediation skills as dead code or run kit retirement without an explicit separate request.
+Audit mode must never modify/remove skills or project instructions. Freeze the independent report before delta; check protected-file integrity before publication. Remediation is separate and must not remove audit/remediation skills as dead code without an explicit separate request.
 
 ## Parallel execution
 

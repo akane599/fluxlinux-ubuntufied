@@ -33,7 +33,7 @@ Write these as `ui/theme/{Color,Type,Shape,Spacing,Theme}.kt`. Every screen uses
 
 ## 4. Process: brief → tokens → critique plan → build → screenshot → critique
 1. **Brief** (5 lines): subject, audience, situation, the one memorable element, what stays quiet.
-2. **Token plan:** palette hexes with roles, type pairing and scale, shape radii, spacing, motion durations. Put it in the Sidequest story contract (see `/ui-overhaul`) so it survives compaction and reaches every executor.
+2. **Token plan:** palette hexes with roles, type pairing and scale, shape radii, spacing, motion durations. Write it into PROGRESS.md (or the task's plan) so it survives compaction and reaches every subagent.
 3. **Review the plan against the tells** in §3 and the calibration list below. If any part is what you'd produce for *any* app of this kind, change it and say why.
 4. **Build theme files first**, then screens: one ticket per screen with a strict file scope, `depends-on` the theme ticket. Screens consume tokens only.
 5. **Screenshot** (see §5). Read the PNGs. Critique in the mirror: remove one accessory. Check dark, large-font, and a small-width device.

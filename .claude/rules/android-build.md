@@ -1,0 +1,11 @@
+---
+description: Android build, test and dependency rules
+---
+- Gradle: always preserve its exit code. From the checkout root use `bash .claude/scripts/gradle-check.sh <tasks>` (full log kept in `.claude/logs/`, last 80 lines on failure), or raw `./gradlew <tasks> --console=plain -q`. Never use a grep/head pipeline as the pass/fail oracle.
+- Verify with the narrowest task. `:app` has no plain `Debug` variant, so name the flavor: `bash .claude/scripts/gradle-check.sh :app:testIvarnaDebugUnitTest --tests '<Class>'`. UI changes add `:app:validateIvarnaDebugScreenshotTest`; update refs (`:app:updateIvarnaDebugScreenshotTest`) only for intended visual changes, and inspect the PNGs.
+- Batch the Gradle tasks a change-set needs instead of running per file; rerun after fixes or to chase a concrete failure.
+- This machine (8 cores, ~15 GB RAM) runs at most 2 Gradle commands at once, each with `--max-workers=4`, counted across all projects and worktrees. Check free disk (`df -h .`) before large builds.
+- Never bump compileSdk/targetSdk, AGP, Gradle, Kotlin or the JDK target, and never add a dependency, unless the task asks for it. Keep the existing catalog/versioning layout.
+- The SDK comes from `ANDROID_HOME`. Don't create or edit `local.properties`.
+- Never read, print or commit keystores (`*.jks`, `*.keystore`), `local.properties`, `google-services.json`, `.env*`, `.claude-plugin-config.json`.
+- Library APIs: check context7 instead of recalling from memory.
