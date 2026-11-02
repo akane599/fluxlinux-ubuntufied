@@ -124,6 +124,22 @@ private enum class OnboardStep { Welcome, Consent, HostSetup, Options, Storage, 
 private fun InstallController.State.isUbuntuActive(): Boolean =
     isActiveFor(UbuntuRuntime.PROOT_ID) || isActiveFor(UbuntuRuntime.CHROOT_ID)
 
+/**
+ * The runtime an onboarding install uses. A retry repeats the failed install's id. Chroot falls
+ * back to PRoot only on an actual "no root" answer: an unknown root result (still probing, or
+ * restored after recreation) keeps the user's choice, since chroot setup checks root itself.
+ */
+internal fun onboardingInstallRuntime(
+    selected: UbuntuRuntimeMode,
+    rootAvailable: Boolean?,
+    retryDistroId: String? = null,
+): UbuntuRuntimeMode = when {
+    retryDistroId == UbuntuRuntime.CHROOT_ID -> UbuntuRuntimeMode.CHROOT
+    retryDistroId == UbuntuRuntime.PROOT_ID -> UbuntuRuntimeMode.PROOT
+    selected == UbuntuRuntimeMode.CHROOT && rootAvailable == false -> UbuntuRuntimeMode.PROOT
+    else -> selected
+}
+
 /** Numbered setup steps shown in [StepHeader]: Consent, Host setup, Options, Storage. */
 private const val ONBOARD_STEP_COUNT = 4
 
@@ -166,10 +182,11 @@ fun OnboardingFlowScreen(
             }
         )
     }
-    // The runtime choice is offered only once an off-main su probe succeeded.
-    var rootAvailable by remember { mutableStateOf(false) }
+    // The runtime choice is offered only once an off-main su probe succeeded; null = not asked
+    // yet. Saved, so recreation neither forgets the answer nor raises a second su prompt.
+    var rootAvailable by rememberSaveable { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(step == OnboardStep.Options) {
-        if (step != OnboardStep.Options) return@LaunchedEffect
+        if (step != OnboardStep.Options || rootAvailable != null) return@LaunchedEffect
         RootShell.probeRootAvailable { ok ->
             rootAvailable = ok
             if (!ok && runtime == UbuntuRuntimeMode.CHROOT) runtime = UbuntuRuntimeMode.PROOT
@@ -193,9 +210,12 @@ fun OnboardingFlowScreen(
         }
     }
 
-    fun startInstall() {
-        // Chroot was only selectable with root; never install it without.
-        if (runtime == UbuntuRuntimeMode.CHROOT && !rootAvailable) runtime = UbuntuRuntimeMode.PROOT
+    fun startInstall(retry: Boolean = false) {
+        runtime = onboardingInstallRuntime(
+            selected = runtime,
+            rootAvailable = rootAvailable,
+            retryDistroId = if (retry) install.distroId else null,
+        )
         // The chosen install becomes the one Home, the terminal and Files drive.
         UbuntuRuntimeSwitch.apply(context.applicationContext, runtime)
         step = OnboardStep.Running
@@ -228,7 +248,7 @@ fun OnboardingFlowScreen(
                 theme = theme,
                 onTheme = { theme = it },
                 runtime = runtime,
-                rootAvailable = rootAvailable,
+                rootAvailable = rootAvailable == true,
                 onRuntime = { runtime = it },
                 onBack = { step = OnboardStep.HostSetup },
                 onInstall = {
@@ -252,7 +272,7 @@ fun OnboardingFlowScreen(
                 errorMessage = install.errorMessage,
                 showLog = showLog,
                 onToggleLog = { showLog = !showLog },
-                onRetry = { startInstall() },
+                onRetry = { startInstall(retry = true) },
                 onBack = {
                     // Explicit user cancel — the only path that stops the install.
                     installer.cancel()

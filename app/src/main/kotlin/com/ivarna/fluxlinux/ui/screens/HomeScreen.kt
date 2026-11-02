@@ -95,6 +95,21 @@ internal fun ubuntuStatus(
 internal fun otherDesktopId(session: DesktopSession?, activeId: String): String? =
     session?.distroId?.takeIf { it != activeId }
 
+/** Why Home would ask su again: first look, app resume, a state refresh, or "Check root again". */
+internal enum class RootProbeReason { INITIAL, RESUME, REFRESH, RETRY }
+
+/**
+ * Whether Home may run the root / chroot probe for [reason], given the last root answer
+ * ([lastRoot], null = never asked or cleared). Root managers prompt in their own activity, so a
+ * denial resumes Home: re-probing on resume or refresh after a denial (or timeout) would loop the
+ * prompt. After a grant the su invocation is cached, so re-probing only re-reads install state.
+ */
+internal fun homeRootProbeAllowed(reason: RootProbeReason, lastRoot: Boolean?): Boolean = when (reason) {
+    RootProbeReason.INITIAL -> lastRoot == null
+    RootProbeReason.RESUME, RootProbeReason.REFRESH -> lastRoot == true
+    RootProbeReason.RETRY -> true
+}
+
 /**
  * Whether Home offers the quick runtime switch: the other mode's install is known to exist
  * and no desktop is running, starting or about to auto-start.
@@ -146,9 +161,18 @@ fun HomeScreen(
     }
 
     var refreshKey by remember { mutableIntStateOf(0) }
-    // Re-probes root / the chroot install: on resume and on "Check root again" only, not on
-    // every desktop phase change (a denied su would otherwise be asked again and again).
+    // Root / chroot install answers from the off-main probe; null = still probing or not probed.
+    var rootAvailable by remember { mutableStateOf<Boolean?>(null) }
+    var chrootInstalled by remember { mutableStateOf<Boolean?>(null) }
+    // Re-probes root / the chroot install. Gated by homeRootProbeAllowed: never on every
+    // desktop phase change, and after a denial only on "Check root again".
     var probeKey by remember { mutableIntStateOf(0) }
+    var probeReason by remember { mutableStateOf(RootProbeReason.INITIAL) }
+    fun requestProbe(reason: RootProbeReason) {
+        if (!homeRootProbeAllowed(reason, rootAvailable)) return
+        probeReason = reason
+        probeKey++
+    }
     LaunchedEffect(scriptRefreshTrigger) { refreshKey++ }
     LaunchedEffect(desktopUi.phase, desktopUi.displayReady) { refreshKey++ }
 
@@ -158,7 +182,7 @@ fun HomeScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 // Re-check storage permission / links after returning from Settings.
                 refreshKey++
-                probeKey++
+                requestProbe(RootProbeReason.RESUME)
                 runCatching { UbuntuFiles.notifyRootsChanged(context) }
                 // Drop a "desktop running" state whose X server died with the app.
                 Thread {
@@ -178,17 +202,23 @@ fun HomeScreen(
     // PRoot: a plain file check. Chroot: root + rootfs markers through su, off the main thread
     // (ChrootDetection only answers from its cache there); null = still probing.
     val prootInstalled = remember(stateRefresh, refreshKey) { UbuntuInstallProbe.prootInstalled(context) }
-    var rootAvailable by remember { mutableStateOf<Boolean?>(null) }
-    var chrootInstalled by remember { mutableStateOf<Boolean?>(null) }
     // In PRoot mode the chroot is only probed once it was installed through the app, so people
     // who never chose chroot get no su prompt from Home.
     val probeChroot = remember(runtime, stateRefresh) {
         runtime == UbuntuRuntimeMode.CHROOT || UbuntuInstallProbe.chrootEverInstalled(context)
     }
-    LaunchedEffect(probeChroot, stateRefresh, probeKey) {
-        if (!probeChroot) return@LaunchedEffect
+    LaunchedEffect(stateRefresh) { requestProbe(RootProbeReason.REFRESH) }
+    LaunchedEffect(probeChroot, probeKey) {
+        if (!probeChroot) {
+            // A removed (or never chosen) chroot must not keep offering the quick switch.
+            rootAvailable = null
+            chrootInstalled = null
+            return@LaunchedEffect
+        }
         val app = context.applicationContext
+        val forceAsk = probeReason == RootProbeReason.RETRY
         val (root, chroot) = withContext(Dispatchers.IO) {
+            if (forceAsk) RootShell.clearSuCache()
             val r = runCatching { RootShell.isRootAvailable() }.getOrDefault(false)
             r to (r && runCatching {
                 TerminalLauncher.isDistroInstalledOnFs(app, UbuntuRuntime.CHROOT_ID)
@@ -203,8 +233,8 @@ fun HomeScreen(
         UbuntuRuntimeMode.PROOT -> rootAvailable == true && chrootInstalled == true
         UbuntuRuntimeMode.CHROOT -> prootInstalled
     }
-    val lastStartFailed = remember(stateRefresh, refreshKey, autoStartPending) {
-        UbuntuLaunchPreferences.lastAutoStartFailed(context)
+    val lastStartFailed = remember(stateRefresh, refreshKey, autoStartPending, activeId) {
+        UbuntuLaunchPreferences.lastAutoStartFailed(context, activeId)
     }
     var creatingLinks by remember { mutableStateOf(false) }
     // The chroot check goes through su, so links are always read off the main thread.
@@ -258,7 +288,7 @@ fun HomeScreen(
     fun startDesktop() {
         try {
             DesktopLauncher.start(context, activeId) { ok ->
-                if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(context)
+                if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(context, activeId)
                 refreshKey++
                 if (!ok) showDesktopLogs = true
             }
@@ -440,9 +470,10 @@ fun HomeScreen(
         onTroubleshooting = onNavigateToTroubleshooting,
         onSwitchRuntime = { switchRuntime() },
         onRetryRoot = {
-            // A denied su is not cached, so this asks the root manager again.
+            // Clears the su cache and asks the root manager again.
             rootAvailable = null
-            probeKey++
+            chrootInstalled = null
+            requestProbe(RootProbeReason.RETRY)
         },
     )
 

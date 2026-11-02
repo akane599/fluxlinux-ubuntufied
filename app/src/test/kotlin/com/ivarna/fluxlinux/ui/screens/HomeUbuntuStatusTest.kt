@@ -60,4 +60,28 @@ class HomeUbuntuStatusTest {
         assertFalse(canSwitchRuntime(true, UbuntuStatus.STOPPED, desktopActive = true, autoStartPending = false))
         assertFalse(canSwitchRuntime(true, UbuntuStatus.STOPPED, desktopActive = false, autoStartPending = true))
     }
+
+    @Test
+    fun rootProbe_afterDenial_onlyOnRetry() {
+        // Root managers prompt in their own activity: resume after a deny must not re-prompt.
+        assertFalse(homeRootProbeAllowed(RootProbeReason.RESUME, lastRoot = false))
+        assertFalse(homeRootProbeAllowed(RootProbeReason.REFRESH, lastRoot = false))
+        assertFalse(homeRootProbeAllowed(RootProbeReason.INITIAL, lastRoot = false))
+        assertTrue(homeRootProbeAllowed(RootProbeReason.RETRY, lastRoot = false))
+    }
+
+    @Test
+    fun rootProbe_whileProbing_doesNotStackOnResume() {
+        // null = in flight (or never asked): the prompt's own resume must not start another.
+        assertFalse(homeRootProbeAllowed(RootProbeReason.RESUME, lastRoot = null))
+        assertFalse(homeRootProbeAllowed(RootProbeReason.REFRESH, lastRoot = null))
+        assertTrue(homeRootProbeAllowed(RootProbeReason.INITIAL, lastRoot = null))
+    }
+
+    @Test
+    fun rootProbe_afterGrant_reReadsOnResumeAndRefresh() {
+        assertTrue(homeRootProbeAllowed(RootProbeReason.RESUME, lastRoot = true))
+        assertTrue(homeRootProbeAllowed(RootProbeReason.REFRESH, lastRoot = true))
+        assertFalse(homeRootProbeAllowed(RootProbeReason.INITIAL, lastRoot = true))
+    }
 }

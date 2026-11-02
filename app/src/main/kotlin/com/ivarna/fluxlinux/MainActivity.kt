@@ -499,28 +499,29 @@ class MainActivity : ComponentActivity() {
      * ([UbuntuLaunchPreferences.lastAutoStartFailed]) keeps a failing start from looping.
      * The install check runs off the main thread: chroot needs su. Chroot without root (or not
      * installed) skips auto-start without marking an attempt, so the guard never trips on it.
+     * Returns the distro id that passed the checks (null = no auto-start); only that id may be
+     * launched (see [UbuntuLaunchPreferences.autoStartTarget]).
      */
-    private suspend fun autoStartAllowed(): Boolean {
+    private suspend fun autoStartCheckedDistroId(): String? {
         if (!StateManager.isOnboardingComplete(this) ||
-            !UbuntuLaunchPreferences.isAutoStartDesktop(this) ||
-            UbuntuLaunchPreferences.lastAutoStartFailed(this)
-        ) return false
+            !UbuntuLaunchPreferences.isAutoStartDesktop(this)
+        ) return null
         val app = applicationContext
         val mode = com.ivarna.fluxlinux.core.utils.UbuntuRuntime.mode(app)
+        if (UbuntuLaunchPreferences.lastAutoStartFailed(app, mode.distroId)) return null
         val check = withContext(Dispatchers.IO) {
             com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe.probe(app, mode)
         }
-        return check == com.ivarna.fluxlinux.core.utils.UbuntuInstallCheck.INSTALLED
+        return mode.distroId.takeIf { check == com.ivarna.fluxlinux.core.utils.UbuntuInstallCheck.INSTALLED }
     }
 
-    /** Starts Ubuntu after the countdown; the attempt flag clears only on a ready desktop. */
-    private fun launchUbuntuAutoStart() {
+    /** Starts the checked Ubuntu after the countdown; its attempt mark clears only on a ready desktop. */
+    private fun launchUbuntuAutoStart(distroId: String) {
         val app = applicationContext
-        val distroId = com.ivarna.fluxlinux.core.utils.UbuntuRuntime.activeDistroId(app)
-        UbuntuLaunchPreferences.markAutoStartAttempt(app)
+        UbuntuLaunchPreferences.markAutoStartAttempt(app, distroId)
         try {
             com.ivarna.fluxlinux.core.desktop.DesktopLauncher.start(this, distroId) { ok ->
-                if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(app)
+                if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(app, distroId)
             }
         } catch (e: Exception) {
             android.util.Log.e("FluxLinux", "Ubuntu auto-start failed", e)
@@ -625,11 +626,13 @@ class MainActivity : ComponentActivity() {
                 // never starts a second time; a restored countdown resumes instead.
                 var autoStartHandled by rememberSaveable { mutableStateOf(false) }
                 var autoStartPending by rememberSaveable { mutableStateOf(false) }
+                // The install the countdown was checked for; a restored countdown reuses it.
+                var autoStartDistroId by rememberSaveable { mutableStateOf<String?>(null) }
                 LaunchedEffect(Unit) {
                     if (!autoStartPending) {
                         if (autoStartHandled || !coldLaunchAutoStart) return@LaunchedEffect
                         autoStartHandled = true
-                        if (!autoStartAllowed()) return@LaunchedEffect
+                        autoStartDistroId = autoStartCheckedDistroId() ?: return@LaunchedEffect
                         withContext(Dispatchers.IO) {
                             com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
                                 .reconcileStale(applicationContext)
@@ -651,7 +654,13 @@ class MainActivity : ComponentActivity() {
                     delay(1500)
                     if (!autoStartPending) return@LaunchedEffect
                     autoStartPending = false
-                    launchUbuntuAutoStart()
+                    // A runtime switch (Settings) during the countdown cancels it: the other
+                    // install was never checked.
+                    val target = UbuntuLaunchPreferences.autoStartTarget(
+                        autoStartDistroId,
+                        com.ivarna.fluxlinux.core.utils.UbuntuRuntime.activeDistroId(applicationContext),
+                    ) ?: return@LaunchedEffect
+                    launchUbuntuAutoStart(target)
                 }
 
                 // Troubleshooting opens from Settings or from Home recovery; Back returns there.
