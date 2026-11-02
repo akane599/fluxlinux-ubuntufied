@@ -141,7 +141,8 @@ if [ -f "$HELPER" ]; then
   sh "$HELPER" mount --x11 || true
   echo "[2/5] X11 via fluxlinux_chroot mount --x11"
   # ~/storage links for the desktop user and root (idempotent, never replaces anything).
-  sh "$HELPER" links --user "$USERNAME" 2>&1 | grep '^FLUX_LINKS' || true
+  # The helper also renames a flux-era Ubuntu chroot to akane first (user migration).
+  sh "$HELPER" links --user "$USERNAME" 2>&1 | grep -e '^FLUX_LINKS' -e '^FLUX_MIGRATE' -e 'using flux' || true
 else
   /system/bin/mount -o remount,dev,suid /data 2>/dev/null \
     || $BB mount -o remount,dev,suid /data 2>/dev/null || true
@@ -166,6 +167,13 @@ else
   fi
   $BB mount --bind "$TARGET_PREFIX/tmp/.X11-unix" "$CHROOT_ROOT/tmp/.X11-unix" 2>/dev/null \
     || mount --bind "$TARGET_PREFIX/tmp/.X11-unix" "$CHROOT_ROOT/tmp/.X11-unix" 2>/dev/null || true
+fi
+
+# A flux-era Ubuntu chroot whose migration could not run still has only flux: use it.
+if [ "$USERNAME" = akane ] && ! grep -q '^akane:' "$CHROOT_ROOT/etc/passwd" 2>/dev/null \
+  && grep -q '^flux:' "$CHROOT_ROOT/etc/passwd" 2>/dev/null; then
+  echo "FluxLinux: akane is not set up in this chroot yet, starting the desktop as flux"
+  USERNAME=flux
 fi
 
 echo "[3/5] Kill stale XFCE in chroot..."

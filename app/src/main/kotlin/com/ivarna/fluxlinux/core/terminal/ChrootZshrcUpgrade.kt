@@ -11,9 +11,10 @@ import java.util.Base64
  *
  * The file is read and written by root **inside** the chroot (the helper's `b64` mode), so a
  * guest symlink can never redirect the write to a host path. Same contract as the PRoot
- * upgrade: symlinked `.zshrc` / `.zshrc.flux-bak` are skipped, the original is kept as
- * `.zshrc.flux-bak` (owner and mode preserved), the new file gets the original's owner and
- * mode and replaces it by rename, and nothing is written when the file changed since it was
+ * upgrade: missing or symlinked `.zshrc` / `.zshrc.flux-bak` are skipped (SKIPPED, so
+ * retried later and never marked done), the original is kept as `.zshrc.flux-bak` (owner
+ * and mode preserved), the new file gets the original's owner and mode and replaces it by
+ * rename, and nothing is written when the file changed since it was
  * read (SHA-256 re-check).
  */
 internal object ChrootZshrcUpgrade {
@@ -27,7 +28,7 @@ internal object ChrootZshrcUpgrade {
     internal const val WRITTEN = "FLUX_ZSHRC_WRITTEN"
 
     internal sealed interface ReadResult {
-        /** Missing, symlinked or not a regular file: never touch it. */
+        /** Missing, symlinked or not a regular file: never touch it, check again later. */
         data object Skip : ReadResult
 
         data class Text(val text: String) : ReadResult
@@ -46,7 +47,9 @@ internal object ChrootZshrcUpgrade {
             timeoutMs = TIMEOUT_MS, context = ctx,
         )
         val text = when (val r = parseRead(read.exitCode, read.stdout)) {
-            ReadResult.Skip -> return ZshPluginSet.UpgradeResult.UNCHANGED
+            // Same as the PRoot upgrade: not checked, so not marked done. A home that is not
+            // there yet (user still flux, rename pending) is retried on the next session.
+            ReadResult.Skip -> return ZshPluginSet.UpgradeResult.SKIPPED
             ReadResult.Failed -> return ZshPluginSet.UpgradeResult.SKIPPED
             is ReadResult.Text -> r.text
         }

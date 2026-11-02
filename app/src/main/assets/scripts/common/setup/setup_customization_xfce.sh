@@ -9,6 +9,11 @@ CUSTOM_USER="${FLUX_GUEST_USER:-flux}"
 case "$CUSTOM_USER" in
     root|[!a-z_]*|*[!a-z0-9_-]*) CUSTOM_USER="flux" ;;
 esac
+# A guest still set up as flux (its rename to akane has not run yet): customize flux.
+if [ "$CUSTOM_USER" != flux ] && ! grep -q "^$CUSTOM_USER:" /etc/passwd 2>/dev/null \
+    && grep -q '^flux:' /etc/passwd 2>/dev/null; then
+    CUSTOM_USER="flux"
+fi
 CUSTOM_GROUP="$CUSTOM_USER"
 USER_HOME="/home/$CUSTOM_USER"
 THEME_DIR="/usr/share/themes"

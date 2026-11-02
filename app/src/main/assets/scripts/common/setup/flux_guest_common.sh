@@ -16,6 +16,12 @@ case "${FLUX_GUEST_USER:-}" in
     ''|root|[!a-z_]*|*[!a-z0-9_-]*) FLUX_GUEST_USER=flux ;;
 esac
 [ "${#FLUX_GUEST_USER}" -le 32 ] || FLUX_GUEST_USER=flux
+# A guest still set up as flux (its rename to akane has not run yet): keep flux instead
+# of creating a second user next to it.
+if [ "$FLUX_GUEST_USER" != flux ] && ! grep -q "^$FLUX_GUEST_USER:" /etc/passwd 2>/dev/null \
+    && grep -q '^flux:' /etc/passwd 2>/dev/null; then
+    FLUX_GUEST_USER=flux
+fi
 FLUX_USER_HOME="/home/$FLUX_GUEST_USER"
 export FLUX_GUEST_USER FLUX_USER_HOME
 

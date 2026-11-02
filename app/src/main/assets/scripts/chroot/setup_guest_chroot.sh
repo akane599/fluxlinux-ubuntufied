@@ -237,6 +237,158 @@ extract_file() {
     goodbye
 }
 
+# --- user migration (v3.0) ----------------------------------------------------
+# One copy each in fluxlinux_chroot.sh and setup_guest_chroot.sh; keep them identical
+# (ChrootGuestUserScriptTest). Renames guest user OLD to NEW in place, the root-side twin
+# of GuestUserMigration.kt (Ubuntu chroots created as flux before akane):
+#  1. home/OLD (real dir) is renamed to home/NEW with one mv (rename(2): links inside move
+#     as links, nothing is followed), unless home/NEW exists (then no merge);
+#  2. compat link home/OLD -> NEW once home/OLD is gone;
+#  3. per-user entries (AccountsService, crontabs, mail) are renamed;
+#  4. sudoers.d lines/file and the doas.conf identity token are rewritten;
+#  5. account files, field-wise, temp + rename: subuid, subgid, gshadow, group, shadow,
+#     passwd LAST (the commit point).
+# Keyed on passwd (O = has OLD, N = has NEW): O+N conflict (nothing touched); O only:
+# steps 1-5, each skips done work, so a crash resumes next time; N only: home repair
+# (home/NEW missing, home/OLD a real dir); neither: n/a. Runs as root INSIDE the chroot,
+# so a guest symlink can never point it at a host path. Args: OLD NEW [ROOT prefix, tests].
+# Prints one "FLUX_MIGRATE result=migrated|repaired|already|conflict|n/a|failed" line.
+user_migration_body() {
+  cat <<'MIGRATE'
+_o=$1; _n=$2; _R=${3:-}
+_res() { echo "FLUX_MIGRATE result=$1"; exit "${2:-0}"; }
+_dir() { [ -d "$1" ] && [ ! -L "$1" ]; }
+_file() { [ -f "$1" ] && [ ! -L "$1" ]; }
+_there() { [ -e "$1" ] || [ -L "$1" ]; }
+_E="$_R/etc"; _H="$_R/home"
+{ _dir "$_E" && _file "$_E/passwd"; } || _res n/a
+_pw() { awk -F: -v u="$1" -v f="$2" '!/^[ \t]*#/ && NF >= 7 && $1 == u { print $f; exit }' "$_E/passwd"; }
+_has() { [ -n "$(_pw "$1" 1)" ]; }
+# _rw FILE AWK-ARGS...: rewrite FILE through awk, temp + rename, owner and mode kept.
+_rw() {
+  _f=$1; shift
+  _file "$_f" || return 0
+  _t="$_f.flux-migrate"
+  rm -f "$_t"
+  awk "$@" "$_f" > "$_t" || { rm -f "$_t"; return 1; }
+  chown --reference="$_f" "$_t" 2>/dev/null || chown 0:0 "$_t" 2>/dev/null
+  chmod --reference="$_f" "$_t" 2>/dev/null || chmod 600 "$_t"
+  mv -f "$_t" "$_f" || { rm -f "$_t"; return 1; }
+}
+# Steps 1-2. Returns 0 when home/OLD is no longer a real dir (moved or never there).
+_home() {
+  _dir "$_H" || return 0
+  if _dir "$_H/$_o"; then
+    if _there "$_H/$_n"; then
+      echo "fluxlinux: home/$_n exists; leaving home/$_o in place (no merge)" >&2
+    else
+      mv "$_H/$_o" "$_H/$_n" || return 1
+    fi
+  fi
+  if ! _there "$_H/$_o" && _dir "$_H/$_n"; then
+    ln -s "$_n" "$_H/$_o" 2>/dev/null || true
+  fi
+  return 0
+}
+_O=0; _N=0
+_has "$_o" && _O=1
+_has "$_n" && _N=1
+if [ "$_O" = 1 ] && [ "$_N" = 1 ]; then _res conflict; fi
+if [ "$_O" = 0 ]; then
+  [ "$_N" = 1 ] || _res n/a
+  if [ "$(_pw "$_n" 6)" = "/home/$_n" ] && _dir "$_H" && ! _there "$_H/$_n" && _dir "$_H/$_o"; then
+    _home && _res repaired
+  fi
+  _res already
+fi
+_gid=$(_pw "$_o" 4)
+_home || _res failed 1
+for _d in var/lib/AccountsService/users var/spool/cron/crontabs var/mail; do
+  _dir "$_R/$_d" || continue
+  if _there "$_R/$_d/$_o" && ! _there "$_R/$_d/$_n"; then mv "$_R/$_d/$_o" "$_R/$_d/$_n" 2>/dev/null || true; fi
+done
+if _dir "$_E/sudoers.d"; then
+  for _s in "$_E"/sudoers.d/*; do
+    case "$_s" in *.flux-migrate) continue ;; esac
+    _file "$_s" || continue
+    _rw "$_s" -v o="$_o" -v n="$_n" '
+      !/^[ \t]*#/ { match($0, /^[ \t]*/); l = substr($0, 1, RLENGTH); r = substr($0, RLENGTH + 1)
+        if (index(r, o) == 1 && (length(r) == length(o) || substr(r, length(o) + 1, 1) ~ /[ \t]/))
+          $0 = l n substr(r, length(o) + 1) }
+      { print }' || true
+  done
+  if _file "$_E/sudoers.d/$_o" && ! _there "$_E/sudoers.d/$_n"; then
+    mv "$_E/sudoers.d/$_o" "$_E/sudoers.d/$_n" 2>/dev/null || true
+  fi
+fi
+_rw "$_E/doas.conf" -v o="$_o" -v n="$_n" '
+  ($1 == "permit" || $1 == "deny") { for (i = 2; i <= NF; i++) { if ($i == "as" || $i == "cmd" || $i ~ /^#/) break
+    if ($i == o) { $i = n; break } } }
+  { print }' || true
+_rg=0
+if _file "$_E/group" && [ -n "$_gid" ]; then
+  awk -F: -v o="$_o" -v g="$_gid" '!/^[ \t]*#/ && NF >= 4 && $1 == o && $3 == g { f = 1 } END { exit !f }' "$_E/group" \
+    && ! awk -F: -v n="$_n" '!/^[ \t]*#/ && NF >= 4 && $1 == n { f = 1 } END { exit !f }' "$_E/group" && _rg=1
+fi
+_first() {
+  _rw "$1" -v o="$_o" -v n="$_n" -v m="$2" '
+    BEGIN { FS = OFS = ":" }
+    NR == FNR { if (!/^[ \t]*#/ && $1 == n) have = 1; next }
+    !have && !/^[ \t]*#/ && NF >= m && $1 == o { $1 = n }
+    { print }' "$1"
+}
+_grp() {
+  _rw "$1" -v o="$_o" -v n="$_n" -v rg="$_rg" -v gs="$2" '
+    function fix(s,  a, c, i, v, r, hit, seen) {
+      c = split(s, a, ","); for (i = 1; i <= c; i++) if (a[i] == o) hit = 1
+      if (!hit) return s
+      r = ""; for (i = 1; i <= c; i++) { v = (a[i] == o) ? n : a[i]
+        if (!(v in seen)) { seen[v] = 1; r = (r == "") ? v : r "," v } }
+      return r }
+    BEGIN { FS = OFS = ":" }
+    !/^[ \t]*#/ && NF >= 4 { if (rg == 1 && $1 == o) $1 = n
+      if (gs == 1 && $3 != "") $3 = fix($3)
+      if ($4 != "") $4 = fix($4) }
+    { print }'
+}
+_first "$_E/subuid" 3 || _res failed 1
+_first "$_E/subgid" 3 || _res failed 1
+_grp "$_E/gshadow" 1 || _res failed 1
+_grp "$_E/group" 0 || _res failed 1
+_first "$_E/shadow" 2 || _res failed 1
+_rw "$_E/passwd" -v o="$_o" -v n="$_n" '
+  BEGIN { FS = OFS = ":" }
+  !/^[ \t]*#/ && NF >= 7 && $1 == o { $1 = n; if ($6 == "/home/" o) $6 = "/home/" n }
+  { print }' || _res failed 1
+_res migrated
+MIGRATE
+}
+
+# 0 when something is mounted at or below ROOTFS/home/USER (never rename across a mount),
+# and when /proc/mounts cannot be checked (fails closed). grep -F: toybox has no awk.
+user_migration_mount_busy() {
+  grep -qF -e " $1/home/$2 " -e " $1/home/$2/" /proc/mounts 2>/dev/null
+  [ "$?" -ne 1 ]
+}
+# --- end user migration -------------------------------------------------------
+
+# A chroot set up as flux before akane: rename flux to $USERNAME in place ([user
+# migration]) instead of adding a second user next to it. 0 = nothing to do or renamed.
+migrate_flux_user() {
+    [ "$USERNAME" != flux ] || return 0
+    grep -q "^$USERNAME:" "$GUESTPATH/etc/passwd" 2>/dev/null && return 0
+    grep -q '^flux:' "$GUESTPATH/etc/passwd" 2>/dev/null || return 0
+    if user_migration_mount_busy "$GUESTPATH" flux; then
+        error "Something is mounted under $GUESTPATH/home/flux: not renaming flux to $USERNAME"
+        return 1
+    fi
+    progress "Renaming user flux to $USERNAME (home, groups, sudoers)..."
+    $BB chroot "$GUESTPATH" /usr/bin/env -i \
+        PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+        /bin/sh -c "$(user_migration_body)" flux-migrate flux "$USERNAME"
+    grep -q "^$USERNAME:" "$GUESTPATH/etc/passwd" 2>/dev/null
+}
+
 ensure_chroot_tmp() {
     HOST_TMP="/data/data/${PKG}/files/usr/tmp"
     mkdir -p "$GUESTPATH/tmp" "$HOST_TMP" "$GUESTPATH/mnt/host-tmp" "$GUESTPATH/var/tmp"
@@ -295,6 +447,11 @@ configure_guest_chroot() {
         fi
     ' || goodbye
 
+    # Never a second user next to an existing flux: rename it, else keep using flux.
+    if ! migrate_flux_user; then
+        error "Could not rename flux to $USERNAME; keeping user flux"
+        USERNAME=flux
+    fi
     progress "Creating User ($USERNAME)..."
     # Android only lets members of aid_inet (3003) open sockets and aid_net_raw (3004)
     # use raw ones (ping): without them a non-root guest user has no network.
@@ -399,6 +556,12 @@ fi
         exit 1
     fi
 
+    # Configured as flux before akane: rename in place. When that cannot run, the
+    # existing flux install stays (the app logs in as flux until it can).
+    if [ -f "$GUESTPATH/.flux_configured" ] && ! migrate_flux_user; then
+        error "Could not rename flux to $USERNAME yet; the existing flux user stays"
+        USERNAME=flux
+    fi
     if [ -f "$GUESTPATH/.flux_configured" ] && \
        { [ -e "$GUESTPATH/bin/bash" ] || [ -e "$GUESTPATH/usr/bin/bash" ]; } && \
        grep -q "^$USERNAME:" "$GUESTPATH/etc/passwd" 2>/dev/null; then

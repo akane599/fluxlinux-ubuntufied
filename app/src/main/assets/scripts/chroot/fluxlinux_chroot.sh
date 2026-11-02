@@ -39,6 +39,7 @@ FLUX_PREFIX="${FLUX_PREFIX:-/data/data/${FLUX_PACKAGE}/files/usr}"
 LOGIN_SHELL="${FLUX_SHELL:-zsh}"
 USER_NAME=""
 USER_HOME=""
+NO_MIGRATE=0
 LOGIN_WORKDIR=""
 WANT_X11=0
 MODE=""
@@ -372,6 +373,141 @@ ensure_mounts() {
   mount_unlock "$FLUX_CHROOT"
 }
 
+# --- user migration (v3.0) ----------------------------------------------------
+# One copy each in fluxlinux_chroot.sh and setup_guest_chroot.sh; keep them identical
+# (ChrootGuestUserScriptTest). Renames guest user OLD to NEW in place, the root-side twin
+# of GuestUserMigration.kt (Ubuntu chroots created as flux before akane):
+#  1. home/OLD (real dir) is renamed to home/NEW with one mv (rename(2): links inside move
+#     as links, nothing is followed), unless home/NEW exists (then no merge);
+#  2. compat link home/OLD -> NEW once home/OLD is gone;
+#  3. per-user entries (AccountsService, crontabs, mail) are renamed;
+#  4. sudoers.d lines/file and the doas.conf identity token are rewritten;
+#  5. account files, field-wise, temp + rename: subuid, subgid, gshadow, group, shadow,
+#     passwd LAST (the commit point).
+# Keyed on passwd (O = has OLD, N = has NEW): O+N conflict (nothing touched); O only:
+# steps 1-5, each skips done work, so a crash resumes next time; N only: home repair
+# (home/NEW missing, home/OLD a real dir); neither: n/a. Runs as root INSIDE the chroot,
+# so a guest symlink can never point it at a host path. Args: OLD NEW [ROOT prefix, tests].
+# Prints one "FLUX_MIGRATE result=migrated|repaired|already|conflict|n/a|failed" line.
+user_migration_body() {
+  cat <<'MIGRATE'
+_o=$1; _n=$2; _R=${3:-}
+_res() { echo "FLUX_MIGRATE result=$1"; exit "${2:-0}"; }
+_dir() { [ -d "$1" ] && [ ! -L "$1" ]; }
+_file() { [ -f "$1" ] && [ ! -L "$1" ]; }
+_there() { [ -e "$1" ] || [ -L "$1" ]; }
+_E="$_R/etc"; _H="$_R/home"
+{ _dir "$_E" && _file "$_E/passwd"; } || _res n/a
+_pw() { awk -F: -v u="$1" -v f="$2" '!/^[ \t]*#/ && NF >= 7 && $1 == u { print $f; exit }' "$_E/passwd"; }
+_has() { [ -n "$(_pw "$1" 1)" ]; }
+# _rw FILE AWK-ARGS...: rewrite FILE through awk, temp + rename, owner and mode kept.
+_rw() {
+  _f=$1; shift
+  _file "$_f" || return 0
+  _t="$_f.flux-migrate"
+  rm -f "$_t"
+  awk "$@" "$_f" > "$_t" || { rm -f "$_t"; return 1; }
+  chown --reference="$_f" "$_t" 2>/dev/null || chown 0:0 "$_t" 2>/dev/null
+  chmod --reference="$_f" "$_t" 2>/dev/null || chmod 600 "$_t"
+  mv -f "$_t" "$_f" || { rm -f "$_t"; return 1; }
+}
+# Steps 1-2. Returns 0 when home/OLD is no longer a real dir (moved or never there).
+_home() {
+  _dir "$_H" || return 0
+  if _dir "$_H/$_o"; then
+    if _there "$_H/$_n"; then
+      echo "fluxlinux: home/$_n exists; leaving home/$_o in place (no merge)" >&2
+    else
+      mv "$_H/$_o" "$_H/$_n" || return 1
+    fi
+  fi
+  if ! _there "$_H/$_o" && _dir "$_H/$_n"; then
+    ln -s "$_n" "$_H/$_o" 2>/dev/null || true
+  fi
+  return 0
+}
+_O=0; _N=0
+_has "$_o" && _O=1
+_has "$_n" && _N=1
+if [ "$_O" = 1 ] && [ "$_N" = 1 ]; then _res conflict; fi
+if [ "$_O" = 0 ]; then
+  [ "$_N" = 1 ] || _res n/a
+  if [ "$(_pw "$_n" 6)" = "/home/$_n" ] && _dir "$_H" && ! _there "$_H/$_n" && _dir "$_H/$_o"; then
+    _home && _res repaired
+  fi
+  _res already
+fi
+_gid=$(_pw "$_o" 4)
+_home || _res failed 1
+for _d in var/lib/AccountsService/users var/spool/cron/crontabs var/mail; do
+  _dir "$_R/$_d" || continue
+  if _there "$_R/$_d/$_o" && ! _there "$_R/$_d/$_n"; then mv "$_R/$_d/$_o" "$_R/$_d/$_n" 2>/dev/null || true; fi
+done
+if _dir "$_E/sudoers.d"; then
+  for _s in "$_E"/sudoers.d/*; do
+    case "$_s" in *.flux-migrate) continue ;; esac
+    _file "$_s" || continue
+    _rw "$_s" -v o="$_o" -v n="$_n" '
+      !/^[ \t]*#/ { match($0, /^[ \t]*/); l = substr($0, 1, RLENGTH); r = substr($0, RLENGTH + 1)
+        if (index(r, o) == 1 && (length(r) == length(o) || substr(r, length(o) + 1, 1) ~ /[ \t]/))
+          $0 = l n substr(r, length(o) + 1) }
+      { print }' || true
+  done
+  if _file "$_E/sudoers.d/$_o" && ! _there "$_E/sudoers.d/$_n"; then
+    mv "$_E/sudoers.d/$_o" "$_E/sudoers.d/$_n" 2>/dev/null || true
+  fi
+fi
+_rw "$_E/doas.conf" -v o="$_o" -v n="$_n" '
+  ($1 == "permit" || $1 == "deny") { for (i = 2; i <= NF; i++) { if ($i == "as" || $i == "cmd" || $i ~ /^#/) break
+    if ($i == o) { $i = n; break } } }
+  { print }' || true
+_rg=0
+if _file "$_E/group" && [ -n "$_gid" ]; then
+  awk -F: -v o="$_o" -v g="$_gid" '!/^[ \t]*#/ && NF >= 4 && $1 == o && $3 == g { f = 1 } END { exit !f }' "$_E/group" \
+    && ! awk -F: -v n="$_n" '!/^[ \t]*#/ && NF >= 4 && $1 == n { f = 1 } END { exit !f }' "$_E/group" && _rg=1
+fi
+_first() {
+  _rw "$1" -v o="$_o" -v n="$_n" -v m="$2" '
+    BEGIN { FS = OFS = ":" }
+    NR == FNR { if (!/^[ \t]*#/ && $1 == n) have = 1; next }
+    !have && !/^[ \t]*#/ && NF >= m && $1 == o { $1 = n }
+    { print }' "$1"
+}
+_grp() {
+  _rw "$1" -v o="$_o" -v n="$_n" -v rg="$_rg" -v gs="$2" '
+    function fix(s,  a, c, i, v, r, hit, seen) {
+      c = split(s, a, ","); for (i = 1; i <= c; i++) if (a[i] == o) hit = 1
+      if (!hit) return s
+      r = ""; for (i = 1; i <= c; i++) { v = (a[i] == o) ? n : a[i]
+        if (!(v in seen)) { seen[v] = 1; r = (r == "") ? v : r "," v } }
+      return r }
+    BEGIN { FS = OFS = ":" }
+    !/^[ \t]*#/ && NF >= 4 { if (rg == 1 && $1 == o) $1 = n
+      if (gs == 1 && $3 != "") $3 = fix($3)
+      if ($4 != "") $4 = fix($4) }
+    { print }'
+}
+_first "$_E/subuid" 3 || _res failed 1
+_first "$_E/subgid" 3 || _res failed 1
+_grp "$_E/gshadow" 1 || _res failed 1
+_grp "$_E/group" 0 || _res failed 1
+_first "$_E/shadow" 2 || _res failed 1
+_rw "$_E/passwd" -v o="$_o" -v n="$_n" '
+  BEGIN { FS = OFS = ":" }
+  !/^[ \t]*#/ && NF >= 7 && $1 == o { $1 = n; if ($6 == "/home/" o) $6 = "/home/" n }
+  { print }' || _res failed 1
+_res migrated
+MIGRATE
+}
+
+# 0 when something is mounted at or below ROOTFS/home/USER (never rename across a mount),
+# and when /proc/mounts cannot be checked (fails closed). grep -F: toybox has no awk.
+user_migration_mount_busy() {
+  grep -qF -e " $1/home/$2 " -e " $1/home/$2/" /proc/mounts 2>/dev/null
+  [ "$?" -ne 1 ]
+}
+# --- end user migration -------------------------------------------------------
+
 # --- guest user (v3.0) -------------------------------------------------------
 # Non-root login user. An explicit --user wins but must be a plain name that the
 # guest /etc/passwd lists (or root). Default: akane when the guest has it (Ubuntu
@@ -392,9 +528,53 @@ default_guest_user() {
   if guest_has_user akane; then printf '%s' akane; else printf '%s' flux; fi
 }
 
+# home/flux still a real dir while home/akane is missing (interrupted migration).
+guest_home_needs_repair() {
+  [ -d "$FLUX_CHROOT/home/flux" ] && [ ! -L "$FLUX_CHROOT/home/flux" ] \
+    && [ ! -e "$FLUX_CHROOT/home/akane" ] && [ ! -L "$FLUX_CHROOT/home/akane" ]
+}
+
+# Ubuntu chroots created as flux (before akane): rename flux to akane in place
+# ([user migration]), as root inside the chroot, under the mount lock, never while
+# something is mounted below the old home. Prints the FLUX_MIGRATE line; 1 = not run.
+migrate_guest_user() {
+  { [ -e "$FLUX_CHROOT/bin/sh" ] || [ -L "$FLUX_CHROOT/bin/sh" ]; } || return 1
+  [ ! -e "$FLUX_CHROOT/.flux_uninstalling" ] || return 1
+  if user_migration_mount_busy "$FLUX_CHROOT" "$1"; then
+    echo "FLUX_MIGRATE result=busy"
+    return 1
+  fi
+  mount_lock "$FLUX_CHROOT" || return 1
+  _mb=$(user_migration_body)
+  if [ -n "${BB:-}" ] && bb_has "$BB" chroot; then
+    $BB chroot "$FLUX_CHROOT" /usr/bin/env -i "PATH=$GUEST_PATH_ROOT" \
+      /bin/sh -c "$_mb" flux-migrate "$1" "$2"
+  else
+    /system/bin/chroot "$FLUX_CHROOT" /usr/bin/env -i "PATH=$GUEST_PATH_ROOT" \
+      /bin/sh -c "$_mb" flux-migrate "$1" "$2"
+  fi
+  _mrc=$?
+  mount_unlock "$FLUX_CHROOT"
+  return "$_mrc"
+}
+
 # Sets USER_NAME (default when empty) and USER_HOME; dies on an invalid/unknown user.
 resolve_guest_user() {
   [ -n "$USER_NAME" ] || USER_NAME=$(default_guest_user)
+  # The Ubuntu user on a chroot still set up as flux: migrate it in place; when that
+  # cannot run (busy mount, conflict, failure) keep logging in as flux instead of dying.
+  # NO_MIGRATE=1 (links-status): read-only, fall back without renaming anything.
+  if [ "$USER_NAME" = akane ]; then
+    if ! guest_has_user akane && guest_has_user flux; then
+      [ "${NO_MIGRATE:-0}" = 1 ] || migrate_guest_user flux akane >&2 || true
+      if ! guest_has_user akane; then
+        echo "fluxlinux-chroot: akane is not set up in $FLUX_CHROOT yet, using flux" >&2
+        USER_NAME=flux
+      fi
+    elif [ "${NO_MIGRATE:-0}" != 1 ] && guest_has_user akane && guest_home_needs_repair; then
+      migrate_guest_user flux akane >&2 || true
+    fi
+  fi
   if [ "$USER_NAME" = root ]; then
     USER_HOME=/root
     return 0
@@ -1023,6 +1203,7 @@ case "$MODE" in
       USER_NAME=$(default_guest_user)
       guest_has_user "$USER_NAME" || USER_NAME=root
     fi
+    [ "$MODE" = links ] || NO_MIGRATE=1
     resolve_guest_user
     if [ "$MODE" = links ]; then
       run_storage_links ensure || die "no guest shell in $FLUX_CHROOT"

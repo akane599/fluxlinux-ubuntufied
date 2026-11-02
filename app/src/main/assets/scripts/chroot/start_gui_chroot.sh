@@ -56,8 +56,8 @@ case "$DISTRO_HINT" in
   ubuntu|ubuntu_chroot)
     CHROOT_PATH="${CHROOT_PATH:-/data/local/tmp/chrootUbuntu}"
     ROOT_GUI_NAME="${ROOT_GUI_NAME:-start_guest_gui.sh}"
-    # Ubuntu chroot desktop user (UbuntuRuntime.UBUNTU_GUEST_USER); env override wins.
-    FLUX_GUEST_USER="${FLUX_GUEST_USER:-akane}"
+    # Desktop user: FLUX_GUEST_USER from DesktopLauncher; when unset, start_guest_gui.sh
+    # resolves it from the guest passwd (akane, else flux).
     ;;
   kali|kali_chroot)
     CHROOT_PATH="${CHROOT_PATH:-/data/local/tmp/chrootKali}"
