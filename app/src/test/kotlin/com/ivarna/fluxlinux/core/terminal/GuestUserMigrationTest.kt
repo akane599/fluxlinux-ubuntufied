@@ -16,6 +16,10 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.PosixFilePermissions
+import java.util.concurrent.Callable
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class GuestUserMigrationTest {
 
@@ -156,7 +160,7 @@ class GuestUserMigrationTest {
         assertEquals("r--r-----", mode("etc/sudoers.d/akane"))
         // No temp files left behind.
         val leftovers = Files.newDirectoryStream(rootfs.resolve("etc")).use { s -> s.map { it.fileName.toString() } }
-        assertTrue(leftovers.toString(), leftovers.none { it.endsWith(".flux-migrate") })
+        assertTrue(leftovers.toString(), leftovers.none { it.contains(".flux-migrate") })
     }
 
     @Test
@@ -273,6 +277,39 @@ class GuestUserMigrationTest {
             assertTrue(rel, Files.isRegularFile(rootfs.resolve("$rel/akane"), nofollow))
         }
         assertTrue(Files.exists(rootfs.resolve("var/mail/fluxbox")))
+    }
+
+    @Test
+    fun concurrentRuns_neverFail_exactlyOneMigrates() {
+        val pool = Executors.newFixedThreadPool(4)
+        try {
+            repeat(10) { round ->
+                rootfs = tmp.resolve("rootfs$round")
+                legacyInstall()
+                val barrier = CyclicBarrier(4)
+                val outcomes = (1..4).map {
+                    pool.submit(Callable { barrier.await(); GuestUserMigration.migrate(rootfs) })
+                }.map { it.get(30, TimeUnit.SECONDS) }
+
+                assertTrue(outcomes.toString(), outcomes.none { it == Outcome.FAILED })
+                assertEquals(outcomes.toString(), 1, outcomes.count { it == Outcome.MIGRATED })
+                assertEquals(3, outcomes.count { it == Outcome.ALREADY_MIGRATED })
+                assertMigrated()
+            }
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun staleTempFromInterruptedRun_isRemoved() {
+        legacyInstall()
+        write("etc/.passwd.flux-migrate.deadbeef", "half")
+
+        assertEquals(Outcome.MIGRATED, GuestUserMigration.migrate(rootfs))
+
+        assertFalse(Files.exists(rootfs.resolve("etc/.passwd.flux-migrate.deadbeef"), nofollow))
+        assertMigrated()
     }
 
     // --- interrupted / partial states -------------------------------------------------

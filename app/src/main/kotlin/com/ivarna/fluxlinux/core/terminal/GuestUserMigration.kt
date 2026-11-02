@@ -16,6 +16,7 @@ import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermission
+import java.util.UUID
 
 /**
  * Host-side, in-place rename of the Ubuntu PRoot guest user `flux` to `akane`
@@ -51,6 +52,9 @@ import java.nio.file.attribute.PosixFilePermission
  *    install without `home/flux` is never given a compat link. Otherwise
  *    [Outcome.ALREADY_MIGRATED], a passwd read and two stats.
  *
+ * Callers on different threads (desktop start, sessions, install) are serialised by one
+ * process-wide lock, so a run never sees another run's half-written state or temp files.
+ *
  * Never throws; failures are logged.
  */
 object GuestUserMigration {
@@ -58,6 +62,7 @@ object GuestUserMigration {
     private const val TAG = "GuestUserMigration"
     private const val TMP_SUFFIX = ".flux-migrate"
     private val NOFOLLOW = arrayOf(LinkOption.NOFOLLOW_LINKS)
+    private val LOCK = Any()
     private val WS_SPLIT = Regex("""(?<=\s)(?=\S)|(?<=\S)(?=\s)""")
 
     /** Per-user entries (files or dirs) named after the user, relative to the rootfs. */
@@ -87,11 +92,13 @@ object GuestUserMigration {
         rootfs: Path,
         oldUser: String = UbuntuRuntime.LEGACY_GUEST_USER,
         newUser: String = UbuntuRuntime.UBUNTU_GUEST_USER,
-    ): Outcome = try {
-        migrateOrThrow(rootfs, oldUser, newUser)
-    } catch (e: Exception) {
-        Log.w(TAG, "$oldUser -> $newUser failed in $rootfs: ${e.message}")
-        Outcome.FAILED
+    ): Outcome = synchronized(LOCK) {
+        try {
+            migrateOrThrow(rootfs, oldUser, newUser)
+        } catch (e: Exception) {
+            Log.w(TAG, "$oldUser -> $newUser failed in $rootfs: ${e.message}")
+            Outcome.FAILED
+        }
     }
 
     private fun migrateOrThrow(rootfs: Path, oldUser: String, newUser: String): Outcome {
@@ -204,7 +211,7 @@ object GuestUserMigration {
     private fun rewriteSudoers(etc: Path, oldUser: String, newUser: String) {
         val dir = realDirOrNull(etc, "sudoers.d") ?: return
         val files = Files.newDirectoryStream(dir).use { s ->
-            s.filter { Files.isRegularFile(it, *NOFOLLOW) && !it.fileName.toString().endsWith(TMP_SUFFIX) }
+            s.filter { Files.isRegularFile(it, *NOFOLLOW) && !it.fileName.toString().contains(TMP_SUFFIX) }
         }
         for (f in files) {
             rewriteIfPresent(f) { text ->
@@ -325,11 +332,17 @@ object GuestUserMigration {
         }
     }
 
-    /** Temp file in the same dir, fsynced, original mode, then an atomic rename over [path]. */
+    /**
+     * Temp file in the same dir, fsynced, original mode, then an atomic rename over [path].
+     * The temp name is unique per write (`.<name>.flux-migrate.<random>`, dotted so sudo
+     * ignores it in sudoers.d); leftovers of an interrupted run are removed first, which is
+     * safe because [LOCK] is held.
+     */
     private fun atomicWrite(path: Path, text: String) {
         val perms = Files.getPosixFilePermissions(path, *NOFOLLOW)
-        val tmp = path.resolveSibling(".${path.fileName}$TMP_SUFFIX")
-        Files.deleteIfExists(tmp)
+        val tmpPrefix = ".${path.fileName}$TMP_SUFFIX."
+        removeStaleTemps(path.parent, tmpPrefix)
+        val tmp = path.resolveSibling(tmpPrefix + UUID.randomUUID().toString().substring(0, 8))
         try {
             FileChannel.open(tmp, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).use { ch ->
                 val buf = ByteBuffer.wrap(text.toByteArray(Charsets.UTF_8))
@@ -342,6 +355,11 @@ object GuestUserMigration {
             runCatching { Files.deleteIfExists(tmp) }
             throw e
         }
+    }
+
+    private fun removeStaleTemps(dir: Path, prefix: String) {
+        val stale = Files.newDirectoryStream(dir).use { s -> s.filter { it.fileName.toString().startsWith(prefix) } }
+        for (f in stale) runCatching { Files.deleteIfExists(f) }
     }
 
     /** [root]/[rel] when every component below [root] is a real directory (never a symlink). */
