@@ -147,6 +147,8 @@ internal class RootScripts(
                 append("{ [ -e \"\$F\" ] || [ -L \"\$F\" ]; } || exit 2\n")
                 append("{ [ -e \"\$P\" ] || [ -L \"\$P\" ]; } && exit 17\n")
                 // -a = -dpR: links are copied as links, never followed.
+                // Past this marker the destination is ours: a failed copy may remove exactly it.
+                append("\$X printf '%s\\n' $COPY_STARTED\n")
                 append("\$X cp -a -- \"\$F\" \"\$P\" || exit 33\n")
             }
             is RootMutation.WriteTemp -> {
@@ -222,6 +224,9 @@ internal class RootScripts(
 
     companion object {
         const val ANDROID_PATH = "/system/bin:/system/xbin"
+
+        /** Printed by the Copy script right before `cp`, after every refusal check passed. */
+        const val COPY_STARTED = "__FLUX_COPY_STARTED__"
 
         private val SAFE_BUSYBOX_PATH = Regex("^/[A-Za-z0-9._+/-]+$")
 

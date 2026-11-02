@@ -60,7 +60,8 @@ internal interface RootRunner {
         if (code == null) {
             job.kill()
             reader.join(2_000)
-            return RootResult(-2, ByteArray(0), job.stderrText())
+            // Partial stdout: callers read progress markers from it (e.g. "copy started").
+            return RootResult(-2, out.toByteArray(), job.stderrText())
         }
         reader.join(5_000)
         if (overflow.get()) return RootResult(-3, ByteArray(0), job.stderrText())
@@ -70,6 +71,12 @@ internal interface RootRunner {
     companion object {
         /** Per-command budget for every bounded root call. */
         const val TIMEOUT_MS = 10_000L
+
+        /**
+         * Budget for work that scales with data size (recursive copy/delete, moves that may copy).
+         * The SAF copy/delete/move calls carry no CancellationSignal, so this is the only bound.
+         */
+        const val LONG_TIMEOUT_MS = 30 * 60 * 1000L
         const val MAX_OUTPUT = 64 * 1024 * 1024
     }
 }

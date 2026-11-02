@@ -187,10 +187,33 @@ internal class ShellRootOps(
     override fun mounts(): List<String> = RootScripts.parseMountsOutput(exec(scripts.mounts()))
 
     override fun mutate(m: RootMutation): Boolean {
-        val r = runner.run(scripts.mutation(m))
+        val r = runner.run(scripts.mutation(m), timeoutFor(m))
+        if (m is RootMutation.Copy && r.exitCode != 0 &&
+            String(r.stdout, Charsets.UTF_8).contains(RootScripts.COPY_STARTED)
+        ) {
+            removePartialCopy(m.to)
+        }
         failure(r.exitCode)?.let { throw RootFsException(it) }
         if (r.exitCode != 0) Log.w(TAG, "root ${m::class.simpleName} refused/failed: exit ${r.exitCode} ${r.stderr.take(200)}")
         return r.exitCode == 0
+    }
+
+    /** Data-sized work gets [RootRunner.LONG_TIMEOUT_MS]; everything else the 10 s budget. */
+    private fun timeoutFor(m: RootMutation): Long = when (m) {
+        is RootMutation.Copy, is RootMutation.Delete, is RootMutation.Move -> RootRunner.LONG_TIMEOUT_MS
+        else -> RootRunner.TIMEOUT_MS
+    }
+
+    /**
+     * A copy that started `cp` but failed, timed out (tree-killed) or was cut off leaves a partial
+     * tree under its fresh unique name, which would look like a real copy. Remove exactly that
+     * path, through the same `_inside`/`_nolink`/`_guard`-checked Delete script.
+     */
+    private fun removePartialCopy(dest: String) {
+        val ok = runCatching {
+            runner.run(scripts.mutation(RootMutation.Delete(dest)), RootRunner.LONG_TIMEOUT_MS).exitCode == 0
+        }.getOrDefault(false)
+        Log.w(TAG, "removed partial copy ${HostPaths.name(dest)}: $ok")
     }
 
     private fun exec(script: String): ByteArray {

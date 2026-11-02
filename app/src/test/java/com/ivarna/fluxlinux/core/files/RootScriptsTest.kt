@@ -220,6 +220,23 @@ open class RootScriptsTest {
     }
 
     @Test
+    fun copy_failingMidway_leavesNoPartialDestination() {
+        assumeTrue("needs a non-root user (unreadable file)", System.getProperty("user.name") != "root")
+        val src = File(home, "src dir").apply { mkdirs() }
+        File(src, "a.txt").writeText("a")
+        val locked = File(src, "locked.txt").apply { writeText("secret") }
+        assertTrue(locked.setReadable(false, false))
+        try {
+            val dest = File(home, "src dir (1)")
+            assertFalse(ops.mutate(RootMutation.Copy(src.path, dest.path)))
+            assertFalse("partial copy removed", Files.exists(dest.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+            assertTrue(File(src, "a.txt").exists())
+        } finally {
+            locked.setReadable(true, false)
+        }
+    }
+
+    @Test
     fun delete_unlinksLinkButNeverItsTarget() {
         val link = File(home, "victim")
         Files.createSymbolicLink(link.toPath(), victim.toPath())
