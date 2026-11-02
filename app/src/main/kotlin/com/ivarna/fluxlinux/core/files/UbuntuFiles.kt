@@ -100,6 +100,7 @@ object UbuntuFiles {
     fun notifyRootsChanged(ctx: Context) {
         chrootAvailability = null
         SuRootRunner.invalidate()
+        ChrootFilesBusyBox.invalidate()
         ctx.contentResolver.notifyChange(DocumentsContract.buildRootsUri(authority(ctx)), null)
     }
 }

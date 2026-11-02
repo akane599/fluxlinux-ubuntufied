@@ -151,3 +151,26 @@ internal object SuRootRunner : RootRunner {
         override fun stderrText(): String = synchronized(err) { err.toString() }
     }
 }
+
+/**
+ * Root BusyBox for the chroot file scripts ([RootScripts] `busybox`). Uses [RootShell]'s cached,
+ * SHA-verified resolver result; when cold, stages and runs the resolver once per process
+ * (again after [invalidate]). Null means the scripts use toybox. Background threads only.
+ */
+internal object ChrootFilesBusyBox {
+    @Volatile
+    private var attempted = false
+
+    fun path(ctx: android.content.Context): String? {
+        RootShell.cachedBusyBox()?.let { return it }
+        if (attempted) return null
+        attempted = true
+        return runCatching {
+            if (RootShell.ensureBusyBoxResolver(ctx)) RootShell.resolveBusyBox() else null
+        }.getOrNull()
+    }
+
+    fun invalidate() {
+        attempted = false
+    }
+}

@@ -31,14 +31,16 @@ import java.io.IOException
  * guest symlinks guest-style (confined to the container dir or shared storage), while
  * delete/rename/move act on the entry itself, never on a link's target. Documents reached
  * through a link are browse-only, and tree grants never cross a link. Chroot only: entries
- * on filesystems mounted inside the rootfs (/proc, /sys, /dev, the /sdcard bind) are list-only.
+ * on filesystems mounted inside the rootfs (/proc, /sys, /dev, the /sdcard bind) are list-only,
+ * while guest links into `/sdcard` / `/storage/emulated/0` reach host shared storage directly
+ * ([SharedStorageRoutingFs]).
  */
 class UbuntuDocumentsProvider : DocumentsProvider() {
 
     private val ctx: Context get() = requireNotNull(context)
     private val prootRootfs: File get() = File(ctx.filesDir, "usr/var/lib/proot-distro/containers/ubuntu/rootfs")
 
-    /** Host shared storage, only when this app can actually read it (PRoot only). */
+    /** Host shared storage, only when this app can actually read it. */
     private val sharedRoot: File?
         get() = Environment.getExternalStorageDirectory()?.takeIf { it.canRead() }
 
@@ -54,8 +56,13 @@ class UbuntuDocumentsProvider : DocumentsProvider() {
         )
         GuestLayout.CHROOT -> {
             val rootfs = ChrootPaths.UBUNTU_CHROOT_PATH
-            // No shared storage: guest links into it stay unresolvable through root.
-            GuestTree(RootGuestFs(ShellRootOps(SuRootRunner, rootfs), rootfs), rootfs, null, GuestLayout.CHROOT)
+            val scripts = RootScripts(rootfs, busybox = ChrootFilesBusyBox.path(ctx))
+            val root = RootGuestFs(ShellRootOps(SuRootRunner, rootfs, scripts), rootfs)
+            // Guest links into /sdcard or /storage/emulated/0 reach host shared storage directly
+            // (All files access, as in PRoot mode); without access they stay unresolvable.
+            val shared = sharedRoot?.absolutePath
+            val fs = if (shared == null) root else SharedStorageRoutingFs(root, LocalGuestFs, shared)
+            GuestTree(fs, rootfs, shared, GuestLayout.CHROOT)
         }
     }
 

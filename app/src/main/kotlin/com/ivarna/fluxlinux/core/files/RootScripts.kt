@@ -41,6 +41,12 @@ internal sealed interface RootMutation {
  *
  * Output framing never depends on names being free of newlines: listing records are
  * `./NAME/FIELDS\n` (a name cannot contain `/`), and link targets / sections are NUL-framed.
+ *
+ * Commands used (all as `$X <applet>`, i.e. the resolved BusyBox when known, else toybox):
+ * `stat -c` with `%f %s %Y %u %g %n %a`, `find . -mindepth 1 -maxdepth 1 [-type l] -exec … {} +`,
+ * `printf '\0'` / `'%s\0'`, plain `readlink` (no -f), `cat`, `cp -a`, `mv`, `mv -f`, `rm -f`,
+ * `rm -rf`, `rmdir`, `mkdir`, `chown UID:GID`, `chmod OCTAL`. No `-print0`, `readlink -f`,
+ * `mv -T` or GNU-only flags. Shell: POSIX `sh` (mksh on Android) builtins only otherwise.
  */
 internal class RootScripts(
     private val rootfs: String,
@@ -48,7 +54,14 @@ internal class RootScripts(
     private val searchPath: String = ANDROID_PATH,
     /** Mount table read by the guards (tests point it at a fixture). */
     private val mountsFile: String = "/proc/self/mounts",
+    /**
+     * Resolved root BusyBox ([com.ivarna.fluxlinux.core.root.RootShell.resolveBusyBox]). When set,
+     * every external command runs as a BusyBox applet (`$X stat …`); otherwise the toybox applets
+     * on [searchPath]. Ignored unless it is a plain absolute path (it is expanded unquoted).
+     */
+    busybox: String? = null,
 ) {
+    private val busybox: String? = busybox?.takeIf { SAFE_BUSYBOX_PATH.matches(it) }
 
     fun chain(base: String, names: List<String>): String = buildString {
         append(header())
@@ -58,15 +71,15 @@ internal class RootScripts(
             |{ [ "${'$'}B" = "${'$'}R" ] || _inside "${'$'}B"; } || exit 34
             |[ -d "${'$'}R" ] && [ ! -L "${'$'}R" ] || exit 3
             |_mnt || exit 6
-            |printf '\0'
+            |${'$'}X printf '\0'
             |[ -d "${'$'}B" ] && [ ! -L "${'$'}B" ] || exit 0
             |_p=${'$'}B
             |for _n in ${names.joinToString(" ") { q(it) }}; do
             |  _p=${'$'}_p/${'$'}_n
-            |  if [ ! -e "${'$'}_p" ] && [ ! -L "${'$'}_p" ]; then printf '%s\0' -; exit 0; fi
-            |  stat -c '$STAT_FMT' -- "${'$'}_p" || exit 4
-            |  printf '\0'
-            |  if [ -L "${'$'}_p" ]; then readlink -- "${'$'}_p"; printf '\0'; exit 0; fi
+            |  if [ ! -e "${'$'}_p" ] && [ ! -L "${'$'}_p" ]; then ${'$'}X printf '%s\0' -; exit 0; fi
+            |  ${'$'}X stat -c '$STAT_FMT' -- "${'$'}_p" || exit 4
+            |  ${'$'}X printf '\0'
+            |  if [ -L "${'$'}_p" ]; then ${'$'}X readlink -- "${'$'}_p"; ${'$'}X printf '\0'; exit 0; fi
             |  [ -d "${'$'}_p" ] || exit 0
             |done
             |exit 0
@@ -83,12 +96,12 @@ internal class RootScripts(
             |{ [ "${'$'}D" = "${'$'}R" ] || _inside "${'$'}D"; } || exit 34
             |[ -d "${'$'}D" ] && [ ! -L "${'$'}D" ] || exit 3
             |_mnt || exit 6
-            |printf '\0'
+            |${'$'}X printf '\0'
             |cd "${'$'}D" || exit 3
-            |find . -mindepth 1 -maxdepth 1 -exec stat -c '%n/$STAT_FMT' {} +
+            |${'$'}X find . -mindepth 1 -maxdepth 1 -exec ${'$'}X stat -c '%n/$STAT_FMT' {} +
             |[ ${'$'}? -le 1 ] || exit 4
-            |printf '\0'
-            |find . -mindepth 1 -maxdepth 1 -type l -exec sh -c 'for l; do printf "%s\0" "${'$'}l"; readlink -- "${'$'}l"; printf "\0"; done' sh {} +
+            |${'$'}X printf '\0'
+            |${'$'}X find . -mindepth 1 -maxdepth 1 -type l -exec sh -c 'X=${'$'}1; shift; for l; do ${'$'}X printf "%s\0" "${'$'}l"; ${'$'}X readlink -- "${'$'}l"; ${'$'}X printf "\0"; done' sh "${'$'}X" {} +
             |[ ${'$'}? -le 1 ] || exit 5
             |exit 0
             |
@@ -105,19 +118,19 @@ internal class RootScripts(
                 entryChecks(m.path)
                 append("{ [ -e \"\$P\" ] || [ -L \"\$P\" ]; } && exit 17\n")
                 append("set -C\n: > \"\$P\" || exit 32\nset +C\n")
-                append("_o=\$(stat -c %u:%g -- \"\$D\") && chown \"\$_o\" \"\$P\" || { rm -f -- \"\$P\"; exit 33; }\n")
+                append("_o=\$(\$X stat -c %u:%g -- \"\$D\") && \$X chown \"\$_o\" \"\$P\" || { \$X rm -f -- \"\$P\"; exit 33; }\n")
             }
             is RootMutation.Mkdir -> {
                 entryChecks(m.path)
                 append("{ [ -e \"\$P\" ] || [ -L \"\$P\" ]; } && exit 17\n")
-                append("mkdir -- \"\$P\" || exit 32\n")
-                append("_o=\$(stat -c %u:%g -- \"\$D\") && chown \"\$_o\" \"\$P\" || { rmdir -- \"\$P\"; exit 33; }\n")
+                append("\$X mkdir -- \"\$P\" || exit 32\n")
+                append("_o=\$(\$X stat -c %u:%g -- \"\$D\") && \$X chown \"\$_o\" \"\$P\" || { \$X rmdir -- \"\$P\"; exit 33; }\n")
             }
             is RootMutation.Delete -> {
                 entryChecks(m.path)
                 append("{ [ -e \"\$P\" ] || [ -L \"\$P\" ]; } || exit 2\n")
                 // rm -r never follows links; _guard proved no mount lies inside.
-                append("rm -rf -- \"\$P\" || exit 33\n")
+                append("\$X rm -rf -- \"\$P\" || exit 33\n")
             }
             is RootMutation.Move -> {
                 entryChecks(m.from)
@@ -125,7 +138,7 @@ internal class RootScripts(
                 entryChecks(m.to)
                 append("{ [ -e \"\$F\" ] || [ -L \"\$F\" ]; } || exit 2\n")
                 append("{ [ -e \"\$P\" ] || [ -L \"\$P\" ]; } && exit 17\n")
-                append("mv -- \"\$F\" \"\$P\" || exit 33\n")
+                append("\$X mv -- \"\$F\" \"\$P\" || exit 33\n")
             }
             is RootMutation.Copy -> {
                 entryChecks(m.from)
@@ -134,14 +147,14 @@ internal class RootScripts(
                 append("{ [ -e \"\$F\" ] || [ -L \"\$F\" ]; } || exit 2\n")
                 append("{ [ -e \"\$P\" ] || [ -L \"\$P\" ]; } && exit 17\n")
                 // -a = -dpR: links are copied as links, never followed.
-                append("cp -a -- \"\$F\" \"\$P\" || exit 33\n")
+                append("\$X cp -a -- \"\$F\" \"\$P\" || exit 33\n")
             }
             is RootMutation.WriteTemp -> {
                 entryChecks(m.temp)
                 append("umask 077\nset -C\n")
                 // Noclobber open first: a failure here must not remove a file we did not create.
                 append("exec 3> \"\$P\" || exit 17\n")
-                append("cat >&3 || { rm -f -- \"\$P\"; exit 32; }\n")
+                append("\$X cat >&3 || { \$X rm -f -- \"\$P\"; exit 32; }\n")
                 append("exec 3>&-\n")
             }
             is RootMutation.CommitTemp -> {
@@ -151,15 +164,15 @@ internal class RootScripts(
                 append(
                     """
                     |[ -f "${'$'}N" ] && [ ! -L "${'$'}N" ] || exit 2
-                    |[ -L "${'$'}P" ] && { rm -f -- "${'$'}N"; exit 35; }
+                    |[ -L "${'$'}P" ] && { ${'$'}X rm -f -- "${'$'}N"; exit 35; }
                     |if [ -e "${'$'}P" ]; then
-                    |  [ -f "${'$'}P" ] || { rm -f -- "${'$'}N"; exit 36; }
-                    |  _o=${'$'}(stat -c %u:%g -- "${'$'}P") && _m=${'$'}(stat -c %a -- "${'$'}P") || { rm -f -- "${'$'}N"; exit 33; }
+                    |  [ -f "${'$'}P" ] || { ${'$'}X rm -f -- "${'$'}N"; exit 36; }
+                    |  _o=${'$'}(${'$'}X stat -c %u:%g -- "${'$'}P") && _m=${'$'}(${'$'}X stat -c %a -- "${'$'}P") || { ${'$'}X rm -f -- "${'$'}N"; exit 33; }
                     |else
-                    |  _o=${'$'}(stat -c %u:%g -- "${'$'}D") || { rm -f -- "${'$'}N"; exit 33; }
+                    |  _o=${'$'}(${'$'}X stat -c %u:%g -- "${'$'}D") || { ${'$'}X rm -f -- "${'$'}N"; exit 33; }
                     |  _m=644
                     |fi
-                    |chown "${'$'}_o" "${'$'}N" && chmod "${'$'}_m" "${'$'}N" && mv -f -- "${'$'}N" "${'$'}P" || { rm -f -- "${'$'}N"; exit 37; }
+                    |${'$'}X chown "${'$'}_o" "${'$'}N" && ${'$'}X chmod "${'$'}_m" "${'$'}N" && ${'$'}X mv -f -- "${'$'}N" "${'$'}P" || { ${'$'}X rm -f -- "${'$'}N"; exit 37; }
                     |
                     """.trimMargin(),
                 )
@@ -168,17 +181,17 @@ internal class RootScripts(
                 append("P=").append(q(m.temp)).append('\n')
                 append("_inside \"\$P\" || exit 34\n")
                 append("[ -L \"\$P\" ] || [ -f \"\$P\" ] || exit 0\n")
-                append("rm -f -- \"\$P\"\n")
+                append("\$X rm -f -- \"\$P\"\n")
             }
             is RootMutation.Append -> {
                 entryChecks(m.path)
                 append("[ -f \"\$P\" ] && [ ! -L \"\$P\" ] || exit 36\n")
-                append("cat >> \"\$P\" || exit 32\n")
+                append("\$X cat >> \"\$P\" || exit 32\n")
             }
             is RootMutation.Read -> {
                 entryChecks(m.path)
                 append("[ -f \"\$P\" ] && [ ! -L \"\$P\" ] || exit 36\n")
-                append("exec cat -- \"\$P\"\n")
+                append("exec \$X cat -- \"\$P\"\n")
             }
         }
         append("exit 0\n")
@@ -200,6 +213,7 @@ internal class RootScripts(
 
     private fun header(): String = buildString {
         append("export PATH=").append(q(searchPath)).append('\n')
+        append("X=").append(busybox?.let(::q) ?: "").append('\n')
         append("umask 022\n")
         append("R=").append(q(rootfs)).append("; ER=").append(q(mountEscape(rootfs)))
         append("; MT=").append(q(mountsFile)).append('\n')
@@ -208,6 +222,8 @@ internal class RootScripts(
 
     companion object {
         const val ANDROID_PATH = "/system/bin:/system/xbin"
+
+        private val SAFE_BUSYBOX_PATH = Regex("^/[A-Za-z0-9._+/-]+$")
 
         /** Raw mode (hex) : size : mtime (s) : uid : gid — no `/`, no newline. */
         const val STAT_FMT = "%f:%s:%Y:%u:%g"
@@ -222,7 +238,7 @@ internal class RootScripts(
             |_mnt() {
             |  [ -r "${'$'}MT" ] || return 1
             |  while read -r _d _m _r; do
-            |    case "${'$'}_m" in "${'$'}ER"/*) printf '%s\n' "${'$'}_m" ;; esac
+            |    case "${'$'}_m" in "${'$'}ER"/*) ${'$'}X printf '%s\n' "${'$'}_m" ;; esac
             |  done < "${'$'}MT"
             |  return 0
             |}

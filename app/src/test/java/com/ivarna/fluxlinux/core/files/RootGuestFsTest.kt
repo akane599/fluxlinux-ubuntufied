@@ -227,6 +227,57 @@ class RootGuestFsTest {
         assertTrue("$e", e is RootFsException)
     }
 
+    // ---- shared storage (direct access, through links only) -----------------------------
+
+    @Test
+    fun sharedStorageLinks_reachHostSharedStorageDirectly_browseCreateOnly() {
+        val shared = Files.createTempDirectory("root-guestfs-shared").toFile().canonicalFile
+        try {
+            File(shared, "Download").mkdirs()
+            File(shared, "Download/report.pdf").writeText("pdf")
+            link("home/akane/storage/downloads", "/sdcard/Download")
+            link("home/akane/storage/shared", "/storage/emulated/0")
+            link("home/akane/storage/up", "/sdcard/../..")
+            val t = GuestTree(
+                SharedStorageRoutingFs(RootGuestFs(ops, rootfs.path), LocalGuestFs, shared.path),
+                rootfs.path,
+                shared.path,
+                GuestLayout.CHROOT,
+            )
+            val report = "/home/akane/storage/downloads/report.pdf"
+            assertEquals(File(shared, "Download/report.pdf").path, t.resolve(report))
+            assertEquals(shared.path, t.resolve("/home/akane/storage/shared"))
+            assertNull(t.resolve("/home/akane/storage/up"))
+
+            // Reached through a link: browse/create only, never granted, never deleted.
+            val home = DocId(GuestDocumentPaths.ROOT_CHROOT_HOME, "")
+            assertTrue(t.traversesLink(report))
+            assertTrue(t.finalLinkLeavesContainer("/home/akane/storage/downloads"))
+            assertFalse(t.isChildWithoutLink(home, DocId(GuestDocumentPaths.ROOT_CHROOT_HOME, "storage/downloads/report.pdf")))
+            assertFalse(t.deleteEntry(report))
+            assertTrue(File(shared, "Download/report.pdf").exists())
+
+            // Shared paths never go through root.
+            val before = ops.calls
+            val dir = t.resolve("/home/akane/storage/downloads")!!
+            assertEquals(listOf("report.pdf"), t.fs.list(dir))
+            assertEquals(GuestFs.Type.FILE, t.fs.lstat(File(dir, "report.pdf").path)?.type)
+            assertTrue(t.fs.canWrite(dir))
+            assertFalse(t.fs.isForeignMount(dir))
+            assertTrue(t.fs.createFile(File(dir, "new.txt").path))
+            assertTrue(File(shared, "Download/new.txt").exists())
+            assertEquals(before, ops.calls)
+
+            // No moves/copies across the two backends.
+            assertFalse(t.fs.copyTree(File(dir, "report.pdf").path, File(rootfs, "home/akane/r.pdf").path))
+            assertTrue(runCatching { t.fs.move(File(dir, "new.txt").path, File(rootfs, "home/akane/n.txt").path) }.isFailure)
+            assertTrue(File(shared, "Download/new.txt").exists())
+            assertAllRootPathsInside()
+        } finally {
+            assertTrue(SafeFiles.deleteTree(shared))
+        }
+    }
+
     // ---- document-id namespacing --------------------------------------------------------
 
     @Test

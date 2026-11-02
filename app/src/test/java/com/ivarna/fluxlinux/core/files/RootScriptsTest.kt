@@ -18,7 +18,13 @@ import java.nio.file.Files
  * the real scripts with the host `sh` against temp dirs (links only inside temp fixtures;
  * cleanup via [SafeFiles.deleteTree]). Injection payloads only ever `touch`/`mkdir` a marker.
  */
-class RootScriptsTest {
+open class RootScriptsTest {
+    /** Root BusyBox used by the scripts; null = the `PATH` tools (toybox on Android). */
+    protected open val busybox: String? = null
+
+    /** Command search path for the scripts. */
+    protected open fun searchPath(tmp: File): String = HostShellRunner.hostPath
+
     private lateinit var tmp: File
     private lateinit var rootfs: File
     private lateinit var home: File
@@ -60,7 +66,8 @@ class RootScriptsTest {
         File(victim, "sentinel.txt").writeText("keep me")
         mounts = File(tmp, "mounts").apply { writeText("") }
         runner = HostShellRunner(cwd)
-        scripts = RootScripts(rootfs.path, HostShellRunner.hostPath, mounts.path)
+        busybox?.let { assumeTrue("busybox at $it", File(it).canExecute()) }
+        scripts = RootScripts(rootfs.path, searchPath(tmp), mounts.path, busybox)
         ops = ShellRootOps(runner, rootfs.path, scripts)
     }
 
@@ -112,6 +119,15 @@ class RootScriptsTest {
             assertTrue(s, s.contains(RootScripts.q(evil)) || s.contains(RootScripts.q("\$(touch PWNED)")))
             assertFalse(s, s.contains("'\$(touch PWNED)'; touch PWNED3; ''"))
         }
+    }
+
+    @Test
+    fun busyboxPrefix_onlyForPlainAbsolutePaths() {
+        assertTrue(RootScripts("/r", busybox = "/data/adb/ksu/bin/busybox").mounts().contains("X='/data/adb/ksu/bin/busybox'\n"))
+        for (bad in listOf("busybox", "/a b/busybox", "/x;rm", "/x\$(y)")) {
+            assertTrue(bad, RootScripts("/r", busybox = bad).mounts().contains("X=\n"))
+        }
+        assertTrue(RootScripts("/r").mounts().contains("X=\n"))
     }
 
     @Test
@@ -262,7 +278,7 @@ class RootScriptsTest {
 
     @Test
     fun guard_failsClosedWithoutMountTable() {
-        val s = RootScripts(rootfs.path, HostShellRunner.hostPath, File(tmp, "missing-mounts").path)
+        val s = RootScripts(rootfs.path, searchPath(tmp), File(tmp, "missing-mounts").path, busybox)
         val o = ShellRootOps(runner, rootfs.path, s)
         assertFalse(o.mutate(RootMutation.CreateFile(File(home, "x").path)))
         assertFalse(File(home, "x").exists())
