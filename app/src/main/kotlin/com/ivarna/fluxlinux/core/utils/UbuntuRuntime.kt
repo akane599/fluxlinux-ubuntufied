@@ -17,8 +17,10 @@ enum class UbuntuRuntimeMode(val prefValue: String, val distroId: String) {
  * Single source of truth for which Ubuntu install the app's Ubuntu-first surfaces (Home,
  * auto-start, onboarding, terminal default tab, Files) act on.
  *
- * PRoot (`ubuntu`, guest user `flux`) and chroot (`ubuntu_chroot`, guest user `akane`) are
- * separate rootfs trees that can coexist; switching the mode never touches either install.
+ * PRoot (`ubuntu`) and chroot (`ubuntu_chroot`) are separate rootfs trees that can coexist;
+ * switching the mode never touches either install. Both log in as [UBUNTU_GUEST_USER]; older
+ * PRoot installs created as `flux` are migrated in place ([LEGACY_GUEST_USER]). Other (legacy)
+ * distros keep `flux`.
  * The stored mode is only a preference: callers that need root must still check root
  * availability and chroot install state off the main thread.
  */
@@ -27,9 +29,19 @@ object UbuntuRuntime {
     const val PROOT_ID = "ubuntu"
     const val CHROOT_ID = "ubuntu_chroot"
 
-    /** Guest login user of the Ubuntu chroot (PRoot keeps `flux`). */
-    const val CHROOT_GUEST_USER = "akane"
-    const val CHROOT_GUEST_HOME = "/home/$CHROOT_GUEST_USER"
+    /** Guest login user of both Ubuntu installs (PRoot and chroot). */
+    const val UBUNTU_GUEST_USER = "akane"
+    const val UBUNTU_GUEST_HOME = "/home/$UBUNTU_GUEST_USER"
+
+    /** User of pre-akane Ubuntu PRoot installs and of every other (legacy) distro. */
+    const val LEGACY_GUEST_USER = "flux"
+    const val LEGACY_GUEST_HOME = "/home/$LEGACY_GUEST_USER"
+
+    /** Non-root guest user for [distroId]: akane for Ubuntu (both modes), flux otherwise. */
+    fun guestUserFor(distroId: String?): String =
+        if (isUbuntuId(distroId)) UBUNTU_GUEST_USER else LEGACY_GUEST_USER
+
+    fun guestHomeFor(distroId: String?): String = "/home/" + guestUserFor(distroId)
 
     private const val PREFS_NAME = "flux_ubuntu_runtime"
     private const val KEY_MODE = "runtime_mode"
