@@ -4,6 +4,7 @@ import android.content.Context
 import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.data.terminalComponentFor
 import com.ivarna.fluxlinux.core.install.DistroInstallProfile
+import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.termux.terminal.TerminalSession
 
@@ -137,6 +138,10 @@ object InstallSessionFactory {
             extra["FLUX_ROOTFS_URL"] = rootfsProfile.rootfsUrl
             extra["FLUX_ROOTFS_SHA256"] = rootfsProfile.rootfsSha256
             extra["FLUX_ROOTFS_NAME"] = rootfsProfile.rootfsFileName
+            if (rootfsProfile.method == "chroot") {
+                // setup_guest_chroot.sh creates this login user (akane on the Ubuntu chroot).
+                extra[GuestUsers.ENV_GUEST_USER] = GuestUsers.chrootUser(rootfsProfile.distroId)
+            }
         }
         val exports = extra.entries.joinToString(" ") { (k, v) ->
             "$k='${v.replace("'", "'\\''")}'"
@@ -159,6 +164,7 @@ object InstallSessionFactory {
     ): Boolean {
         val profile = DistroInstallProfile.require(distroId)
         // Re-running setup repairs a broken guest: its login must work before it can switch.
+        GuestUserMigration.migrateIfNeeded(ctx, distroId)
         GuestCoreutilsRepair.repairIfNeeded(distroId)
         val args = if (setupB64.isNullOrEmpty() || setupB64 == "null") {
             arrayOf(profile.prootName)

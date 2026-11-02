@@ -130,6 +130,77 @@ class ZshPluginSetTest {
     }
 
     @Test
+    fun chrootHelper_profileBlockMatchesKotlin() {
+        val helper = repoFile("src/main/assets/scripts/chroot/fluxlinux_chroot.sh").readText()
+        assertTrue(
+            "fluxlinux_chroot.sh drifted from ZshPluginSet.managedBlock()",
+            helper.contains("  ZSH_DISABLE_COMPFIX=true\n" + ZshPluginSet.managedBlock() + "fi\n"),
+        )
+        assertFalse(helper.contains(ZshPluginSet.LEGACY_PLUGINS_LINE))
+    }
+
+    @Test
+    fun chrootZshrcUpgrade_parseRead() {
+        val text = legacyZshrc
+        val b64 = java.util.Base64.getEncoder().encodeToString(text.toByteArray())
+        val ok = ChrootZshrcUpgrade.parseRead(
+            0, "noise\n${ChrootZshrcUpgrade.BEGIN}\n$b64\n${ChrootZshrcUpgrade.END}\n",
+        )
+        assertEquals(ChrootZshrcUpgrade.ReadResult.Text(text), ok)
+        assertEquals(
+            ChrootZshrcUpgrade.ReadResult.Skip,
+            ChrootZshrcUpgrade.parseRead(0, "${ChrootZshrcUpgrade.SKIP}\n"),
+        )
+        assertEquals(ChrootZshrcUpgrade.ReadResult.Failed, ChrootZshrcUpgrade.parseRead(1, ""))
+        assertEquals(
+            ChrootZshrcUpgrade.ReadResult.Failed,
+            ChrootZshrcUpgrade.parseRead(0, "${ChrootZshrcUpgrade.BEGIN}\n@@@\n${ChrootZshrcUpgrade.END}"),
+        )
+        assertEquals(
+            ChrootZshrcUpgrade.ReadResult.Failed,
+            ChrootZshrcUpgrade.parseRead(0, "${ChrootZshrcUpgrade.BEGIN}\n$b64\n"),
+        )
+    }
+
+    /** The chroot read/write scripts run against a temp home with /bin/sh (root-free). */
+    @Test
+    fun chrootZshrcUpgrade_scriptsRoundTripAndRefuseSymlinks() {
+        org.junit.Assume.assumeTrue(File("/bin/sh").canExecute())
+        val home = File(tmp, "home/akane").apply { mkdirs() }
+        val zshrc = File(home, ".zshrc").apply { writeText(legacyZshrc) }
+        fun sh(script: String): Pair<Int, String> {
+            val p = ProcessBuilder("/bin/sh", "-c", script).redirectErrorStream(true).start()
+            val out = String(p.inputStream.readBytes())
+            return p.waitFor() to out
+        }
+        val (rc, out) = sh(ChrootZshrcUpgrade.readScript(home.absolutePath))
+        val read = ChrootZshrcUpgrade.parseRead(rc, out)
+        assertEquals(ChrootZshrcUpgrade.ReadResult.Text(legacyZshrc), read)
+        val upgraded = ZshPluginSet.upgradeManagedZshrc(legacyZshrc) ?: error("no upgrade")
+        val sha = com.ivarna.fluxlinux.core.root.RootShell.sha256Hex(legacyZshrc.toByteArray())
+
+        // Stale hash: nothing written.
+        val (staleRc, _) = sh(ChrootZshrcUpgrade.writeScript(home.absolutePath, "0".repeat(64), upgraded))
+        assertEquals(4, staleRc)
+        assertEquals(legacyZshrc, zshrc.readText())
+
+        val (wrc, wout) = sh(ChrootZshrcUpgrade.writeScript(home.absolutePath, sha, upgraded))
+        assertEquals(wout, 0, wrc)
+        assertTrue(wout.contains(ChrootZshrcUpgrade.WRITTEN))
+        assertEquals(upgraded, zshrc.readText())
+        assertEquals(legacyZshrc, File(home, ".zshrc.flux-bak").readText())
+
+        // Symlinked .zshrc: skipped by both scripts, victim untouched.
+        val victim = File(tmp, "victim").apply { writeText(legacyZshrc) }
+        zshrc.delete()
+        Files.createSymbolicLink(zshrc.toPath(), victim.toPath())
+        val (src, sout) = sh(ChrootZshrcUpgrade.readScript(home.absolutePath))
+        assertEquals(ChrootZshrcUpgrade.ReadResult.Skip, ChrootZshrcUpgrade.parseRead(src, sout))
+        assertEquals(3, sh(ChrootZshrcUpgrade.writeScript(home.absolutePath, sha, upgraded)).first)
+        assertEquals(legacyZshrc, victim.readText())
+    }
+
+    @Test
     fun sources_arePinnedToFullCommits() {
         val pins = ZshPluginSet.EXTERNAL_PLUGINS.values + ZshPluginSet.OMZ
         pins.forEach { pin ->

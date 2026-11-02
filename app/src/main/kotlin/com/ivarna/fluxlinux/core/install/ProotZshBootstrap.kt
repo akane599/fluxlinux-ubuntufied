@@ -2,6 +2,7 @@ package com.ivarna.fluxlinux.core.install
 
 import android.content.Context
 import android.util.Log
+import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.system.SafeFiles
 import com.ivarna.fluxlinux.core.terminal.GroupKillingProcess
 import com.ivarna.fluxlinux.core.terminal.HostCommandBuilder
@@ -27,7 +28,8 @@ object ProotZshBootstrap {
     private const val APT_TIMEOUT_SEC = 600L
     private val FULL_SHA = Regex("[0-9a-f]{40}")
 
-    fun omzDir(rootfs: File): File = File(rootfs, "home/flux/.oh-my-zsh")
+    /** Oh My Zsh of the login user ([GuestUsers.prootHome]: akane on Ubuntu, else flux). */
+    fun omzDir(rootfs: File): File = File(GuestUsers.prootHome(rootfs), ".oh-my-zsh")
 
     fun isOmzInstalled(rootfs: File): Boolean =
         File(omzDir(rootfs), "oh-my-zsh.sh").isFile
@@ -105,7 +107,7 @@ object ProotZshBootstrap {
         val missingPkgs = ZshPluginSet.missingAptPackages(rootfs)
         if (missingPlugins.isEmpty() && missingPkgs.isEmpty()) return
         // A user who customized the plugin line did not ask for these packages.
-        if (!ZshPluginSet.isManaged(File(rootfs, "home/flux/.zshrc"))) return
+        if (!ZshPluginSet.isManaged(File(GuestUsers.prootHome(rootfs), ".zshrc"))) return
         if (!depsAttempted.compareAndSet(false, true)) return
         Thread({
             val log: (String) -> Unit = { Log.i(TAG, it) }

@@ -6,10 +6,11 @@
 # Env (from DistroInstallProfile / OnboardingInstallRunner):
 #   FLUX_CHROOT, FLUX_ROOTFS_PATH, FLUX_ROOTFS_SHA256, FLUX_ROOTFS_NAME,
 #   FLUX_ROOTFS_URL (GitHub release download fallback)
+#   FLUX_GUEST_USER (guest login user: akane for ubuntu_chroot, default flux)
 #   TERMUX_APP__PACKAGE_NAME, TERMUX__HOME
 
 GUESTPATH="${FLUX_CHROOT:-/data/local/tmp/chrootGuest}"
-USERNAME="flux"
+USERNAME="${FLUX_GUEST_USER:-flux}"
 DISTRO_LABEL="${FLUX_DISTRO_LABEL:-guest}"
 
 PKG="${TERMUX_APP__PACKAGE_NAME:-com.ivarna.fluxlinux}"
@@ -22,6 +23,14 @@ ROOTFS_URL="${FLUX_ROOTFS_URL:-}"
 progress() { printf "\033[1;36m[+] %s\033[0m\n" "$1"; }
 success()  { printf "\033[1;32m[✓] %s\033[0m\n" "$1"; }
 error()    { printf "\033[1;31m[!] %s\033[0m\n" "$1"; }
+
+# Guest user names end up in guest shell strings: plain names only (no root).
+valid_user_name() {
+    case "$1" in
+        ''|root|[!a-z_]*|*[!a-z0-9_-]*) return 1 ;;
+    esac
+    [ "${#1}" -le 32 ]
+}
 
 PROC_MOUNTS=/proc/mounts
 
@@ -287,18 +296,26 @@ configure_guest_chroot() {
     ' || goodbye
 
     progress "Creating User ($USERNAME)..."
+    # Android only lets members of aid_inet (3003) open sockets and aid_net_raw (3004)
+    # use raw ones (ping): without them a non-root guest user has no network.
     guest_sh "
         if ! id $USERNAME >/dev/null 2>&1; then
             if command -v useradd >/dev/null 2>&1; then
                 useradd -m -s /bin/bash $USERNAME 2>/dev/null || useradd -m -s /bin/sh $USERNAME
+            elif command -v adduser >/dev/null 2>&1; then
+                adduser -D -s /bin/sh $USERNAME 2>/dev/null || true
             fi
             echo '$USERNAME:flux' | chpasswd 2>/dev/null || true
         fi
-        if command -v usermod >/dev/null 2>&1; then
-            for g in wheel audio video users aid_inet; do
+        id $USERNAME >/dev/null 2>&1 || { echo 'user $USERNAME could not be created' >&2; exit 1; }
+        for g in wheel sudo audio video users aid_inet aid_net_raw; do
+            grep -q \"^\$g:\" /etc/group 2>/dev/null || continue
+            if command -v usermod >/dev/null 2>&1; then
                 usermod -aG \$g $USERNAME 2>/dev/null || true
-            done
-        fi
+            else
+                addgroup $USERNAME \$g 2>/dev/null || true
+            fi
+        done
         mkdir -p /etc/sudoers.d
         echo '$USERNAME ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/$USERNAME
         chmod 0440 /etc/sudoers.d/$USERNAME
@@ -376,9 +393,14 @@ fi
 
     GUESTPATH="${FLUX_CHROOT:-/data/local/tmp/chrootGuest}"
 
+    if ! valid_user_name "$USERNAME"; then
+        error "Invalid FLUX_GUEST_USER: $USERNAME"
+        exit 1
+    fi
+
     if [ -f "$GUESTPATH/.flux_configured" ] && \
        { [ -e "$GUESTPATH/bin/bash" ] || [ -e "$GUESTPATH/usr/bin/bash" ]; } && \
-       grep -q '^flux:' "$GUESTPATH/etc/passwd" 2>/dev/null; then
+       grep -q "^$USERNAME:" "$GUESTPATH/etc/passwd" 2>/dev/null; then
         success "$DISTRO_LABEL Chroot already installed."
         progress "VERIFY: chroot present at $GUESTPATH"
         am start -a android.intent.action.VIEW \

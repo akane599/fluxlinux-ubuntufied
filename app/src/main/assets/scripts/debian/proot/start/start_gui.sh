@@ -223,13 +223,30 @@ else
   if [ ! -x "$ROOTFS/bin/bash" ] && [ ! -x "$ROOTFS/usr/bin/bash" ]; then
     GUEST_SHELL=/bin/sh
   fi
+  # Desktop user: FLUX_GUEST_USER (DesktopLauncher: akane on Ubuntu, flux before the
+  # migration and on other distros) when it is a plain name the guest passwd lists, else flux.
+  GUEST_USER="${FLUX_GUEST_USER:-flux}"
+  case "$GUEST_USER" in
+    root|[!a-z_]*|*[!a-z0-9_-]*) GUEST_USER=flux ;;
+  esac
+  [ "${#GUEST_USER}" -le 32 ] || GUEST_USER=flux
+  if [ "$GUEST_USER" != flux ] && ! grep -q "^$GUEST_USER:" "$ROOTFS/etc/passwd" 2>/dev/null; then
+    echo "FluxLinux: user $GUEST_USER not in guest passwd, using flux"
+    GUEST_USER=flux
+  fi
+  echo "FluxLinux: desktop user $GUEST_USER"
   _KGSL_BIND=""
   if [ -e /dev/kgsl-3d0 ]; then
     _KGSL_BIND="--bind=/dev/kgsl-3d0"
   fi
   python "$TERMUX_PREFIX/bin/proot-distro" login "$DISTRO" --shared-tmp $_KGSL_BIND -- \
-    env FLUX_DESKTOP="$FLUX_DESKTOP" FLUX_GPU_RUNTIME="${FLUX_GPU_RUNTIME:-}" $GUEST_SHELL -c '
+    env FLUX_DESKTOP="$FLUX_DESKTOP" FLUX_GPU_RUNTIME="${FLUX_GPU_RUNTIME:-}" \
+    FLUX_GUEST_USER="$GUEST_USER" $GUEST_SHELL -c '
     export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    # Desktop user (validated on the host) and its home.
+    _U="$FLUX_GUEST_USER"
+    _UH="/home/$_U"
+    _UG=$(id -gn "$_U" 2>/dev/null || echo "$_U")
     unset PROOT_TMP_DIR
     export TMPDIR=/tmp
     export DISPLAY=:0
@@ -248,9 +265,9 @@ else
     unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID DBUS_SESSION_BUS_WINDOWID
     export XDG_CONFIG_DIRS=/etc/xdg
     export XDG_DATA_DIRS=/usr/local/share:/usr/share
-    # Runtime dir must be 700 *and* writable by flux. /tmp/runtime-flux lives on
-    # --shared-tmp (host PREFIX/tmp, app uid) so guest flux cannot chmod/chown it.
-    export XDG_RUNTIME_DIR=/home/flux/.cache/runtime
+    # Runtime dir must be 700 *and* writable by the user. /tmp/runtime-<user> lives on
+    # --shared-tmp (host PREFIX/tmp, app uid) so the guest user cannot chmod/chown it.
+    export XDG_RUNTIME_DIR=$_UH/.cache/runtime
     mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
     mkdir -p /tmp/.ICE-unix && chmod 1777 /tmp/.ICE-unix
 
@@ -261,27 +278,27 @@ else
     # already inside proot-distro login ... -c '...' ).
     # The recursive walk is slow under ptrace, so it runs only when the ownership
     # signature changed since the last pass (first start, app reinstall = new uid).
-    if [ -d /home/flux ]; then
+    if [ -d "$_UH" ]; then
       _home_uid=$(stat -c %u /home 2>/dev/null || true)
       _home_gid=$(stat -c %g /home 2>/dev/null || true)
       _perm_mark=/etc/fluxlinux/home_perms
-      _perm_sig() { echo "v1 $(stat -c %u:%g /home /home/flux /home/flux/.config 2>/dev/null | tr "\n" " ")"; }
+      _perm_sig() { echo "v1 $(stat -c %u:%g /home "$_UH" "$_UH/.config" 2>/dev/null | tr "\n" " ")"; }
       if [ -n "$_home_uid" ] && [ "$(cat "$_perm_mark" 2>/dev/null)" != "$(_perm_sig)" ]; then
-        chown -R "$_home_uid:$_home_gid" /home/flux 2>/dev/null || true
+        chown -R "$_home_uid:$_home_gid" "$_UH" 2>/dev/null || true
         if [ "$_home_uid" = "0" ]; then
-          chown -R flux:flux /home/flux 2>/dev/null || true
+          chown -R "$_U:$_UG" "$_UH" 2>/dev/null || true
         fi
-        mkdir -p /home/flux/.config /home/flux/.cache /home/flux/.local/share
+        mkdir -p "$_UH/.config" "$_UH/.cache" "$_UH/.local/share"
         # Proot writes as the app uid, which owns these files: owner rwX is enough.
-        chmod -R u+rwX /home/flux/.config /home/flux/.cache /home/flux/.local 2>/dev/null || true
+        chmod -R u+rwX "$_UH/.config" "$_UH/.cache" "$_UH/.local" 2>/dev/null || true
         mkdir -p /etc/fluxlinux 2>/dev/null && _perm_sig >"$_perm_mark" 2>/dev/null || true
       fi
-      mkdir -p /home/flux/.config /home/flux/.cache /home/flux/.local/share
-      chmod 755 /home/flux 2>/dev/null || true
+      mkdir -p "$_UH/.config" "$_UH/.cache" "$_UH/.local/share"
+      chmod 755 "$_UH" 2>/dev/null || true
     fi
-    if [ -d /home/flux/.cache/runtime ]; then
-      chmod 700 /home/flux/.cache/runtime 2>/dev/null || true
-      chown flux:flux /home/flux/.cache/runtime 2>/dev/null || true
+    if [ -d "$_UH/.cache/runtime" ]; then
+      chmod 700 "$_UH/.cache/runtime" 2>/dev/null || true
+      chown "$_U:$_UG" "$_UH/.cache/runtime" 2>/dev/null || true
     fi
     # dbus machine-id (session bus soft-depends on it on some builds)
     if command -v dbus-uuidgen >/dev/null 2>&1; then
@@ -412,18 +429,18 @@ KDE_EOF
     if [ ! -x /bin/bash ] && [ ! -x /usr/bin/bash ]; then
       FLUX_SU_SHELL=/bin/sh
     fi
-    su -s "$FLUX_SU_SHELL" - flux -c "
+    su -s "$FLUX_SU_SHELL" - "$_U" -c "
       unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID DBUS_SESSION_BUS_WINDOWID
       export DISPLAY=:0
       export PULSE_SERVER=unix:/tmp/pulse-native
       export XDG_CONFIG_DIRS=/etc/xdg
       export XDG_DATA_DIRS=/usr/local/share:/usr/share
-      export HOME=/home/flux
-      export XDG_CONFIG_HOME=/home/flux/.config
-      export XDG_CACHE_HOME=/home/flux/.cache
-      export XDG_DATA_HOME=/home/flux/.local/share
-      export XDG_RUNTIME_DIR=/home/flux/.cache/runtime
-      mkdir -p /home/flux/.config /home/flux/.cache /home/flux/.local/share
+      export HOME=$_UH
+      export XDG_CONFIG_HOME=$_UH/.config
+      export XDG_CACHE_HOME=$_UH/.cache
+      export XDG_DATA_HOME=$_UH/.local/share
+      export XDG_RUNTIME_DIR=$_UH/.cache/runtime
+      mkdir -p $_UH/.config $_UH/.cache $_UH/.local/share
       mkdir -p \"\$XDG_RUNTIME_DIR\" && chmod 700 \"\$XDG_RUNTIME_DIR\"
       export VTEST_SOCKET_NAME=/tmp/.virgl_test
       export GLYCIN_DISABLE_SANDBOX=i-know-the-risks

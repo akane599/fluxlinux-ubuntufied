@@ -5,6 +5,7 @@ import android.util.Base64
 import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.data.ScriptManager
+import com.ivarna.fluxlinux.core.root.GuestUsers
 
 /**
  * Minimal base desktop install: rootfs + family (XFCE) + customization.
@@ -49,6 +50,16 @@ object BaseDesktopInstallPlan {
     /** Back-compat overload used by existing tests. */
     fun phasesFor(method: String): List<Phase> = phasesFor(method, "Debian")
 
+    /**
+     * `export K='V'` lines for [GuestUsers.scriptEnv] of [profile]: chroot guests get their
+     * login user (`FLUX_GUEST_USER=akane` on the Ubuntu chroot) and `FLUX_PROOT=0`; the
+     * Ubuntu PRoot gets `FLUX_GUEST_USER=akane`; other PRoot payloads get nothing.
+     */
+    internal fun guestEnvExports(profile: DistroInstallProfile): String =
+        GuestUsers.scriptEnv(profile.distroId, profile.method).entries.joinToString("") { (k, v) ->
+            "export $k='$v'\n"
+        }
+
     fun familySetupPayload(ctx: Context, theme: String, distroId: String = "debian"): String {
         val profile = DistroInstallProfile.forId(distroId)
             ?: DistroInstallProfile.require("debian")
@@ -60,6 +71,7 @@ object BaseDesktopInstallPlan {
         return buildString {
             append("export FLUX_THEME='").append(theme).append("'\n")
             append("export FLUX_DESKTOP_ENV='xfce'\n")
+            append(guestEnvExports(profile))
             append("export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n\n")
             if (common.isNotBlank()) {
                 append(common).append("\n\n")
@@ -80,6 +92,7 @@ object BaseDesktopInstallPlan {
         val body = ScriptManager(ctx).getScriptContent(profile.customizationScript)
         return buildString {
             append("export FLUX_THEME='").append(theme).append("'\n")
+            append(guestEnvExports(profile))
             // Guest installs pokemon (60s budget). Host never ships it.
             append("export FLUX_SKIP_POKEMON='0'\n")
             append("export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n\n")
@@ -109,6 +122,7 @@ object BaseDesktopInstallPlan {
         return buildString {
             append("export FLUX_GPU='").append(fluxGpu).append("'\n")
             append("export FLUX_GPU_VENDOR='").append(vendor).append("'\n")
+            append(guestEnvExports(profile))
             extraEnv.forEach { (k, v) ->
                 append("export ").append(k).append("='").append(v.replace("'", "")).append("'\n")
             }

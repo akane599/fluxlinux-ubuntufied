@@ -87,10 +87,17 @@ class ProotStartGuiContractTest {
     @Test
     fun guest_homePermsRunOnceBehindMarker_withoutWorldWritable() {
         assertFalse(start.contains("chmod -R 777"))
-        assertTrue(guest.contains("chmod -R u+rwX /home/flux/.config"))
+        // The desktop user's home: _UH=/home/$_U (akane on Ubuntu, else flux).
+        assertTrue(guest.contains("chmod -R u+rwX \"\$_UH/.config\""))
         val gate = guest.indexOf("!= \"\$(_perm_sig)\" ]")
         assertTrue(gate > 0)
-        assertTrue(gate < guest.indexOf("chown -R \"\$_home_uid:\$_home_gid\" /home/flux"))
+        assertTrue(gate < guest.indexOf("chown -R \"\$_home_uid:\$_home_gid\" \"\$_UH\""))
+        assertTrue(guest.contains("su -s \"\$FLUX_SU_SHELL\" - \"\$_U\" -c"))
+        assertFalse(guest.contains("/home/flux"))
+        // Host validates FLUX_GUEST_USER against the guest passwd, falls back to flux.
+        assertTrue(start.contains("GUEST_USER=\"\${FLUX_GUEST_USER:-flux}\""))
+        assertTrue(start.contains("grep -q \"^\$GUEST_USER:\" \"\$ROOTFS/etc/passwd\""))
+        assertTrue(start.contains("FLUX_GUEST_USER=\"\$GUEST_USER\" \$GUEST_SHELL -c '"))
         assertTrue(guest.contains("_perm_sig >\"\$_perm_mark\""))
     }
 

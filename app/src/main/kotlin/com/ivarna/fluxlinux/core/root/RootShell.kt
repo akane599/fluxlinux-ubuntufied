@@ -671,11 +671,12 @@ object RootShell {
 
     /**
      * Blocking capture inside chroot (bg thread only). Prefer for probe/status.
-     * Pass [context] to stage helper from assets when missing.
+     * Pass [context] to stage helper from assets when missing. [user]: `root`, a guest user
+     * name, or null for the default user of [chrootPath] ([GuestUsers.chrootUserForPath]).
      */
     fun captureInChroot(
         cmd: String,
-        user: String = "flux",
+        user: String? = null,
         chrootPath: String = ChrootPaths.CHROOT_PATH,
         timeoutMs: Long = 60_000L,
         context: Context? = null,
@@ -683,7 +684,7 @@ object RootShell {
         processHolder: AtomicReference<Process?>? = null
     ): CaptureResult {
         context?.let { ensureChrootHelper(it) }
-        val u = if (user == "root") "root" else "flux"
+        val u = GuestUsers.resolveChrootUser(user, chrootPath)
         val b64 = android.util.Base64.encodeToString(
             cmd.toByteArray(Charsets.UTF_8),
             android.util.Base64.NO_WRAP
@@ -702,6 +703,16 @@ object RootShell {
      * (verified before the rename). Without a known hash it refuses to run (exit 127).
      */
     internal fun buildChrootHelperCmd(user: String, b64: String, chrootPath: String): String {
+        require(GuestUsers.isValidName(user)) { "invalid guest user name: $user" }
+        return buildChrootHelperModeCmd("b64 --user $user -- $b64", chrootPath)
+    }
+
+    /**
+     * Root command running `sh helper <modeArgs>` behind the same self-heal + SHA-256 guard as
+     * [buildChrootHelperCmd]. [modeArgs] is spliced verbatim: callers build it from validated
+     * tokens only (mode names, [GuestUsers.isValidName] users, base64).
+     */
+    internal fun buildChrootHelperModeCmd(modeArgs: String, chrootPath: String): String {
         val helper = ChrootPaths.CHROOT_HELPER
         val pkg = com.ivarna.fluxlinux.BuildConfig.APPLICATION_ID
         val prefix = "/data/data/$pkg/files/usr"
@@ -726,7 +737,27 @@ object RootShell {
             selfHealSnippet(helper, sha, "fluxlinux_chroot.sh", pkg) +
             selfHealSnippet(BusyBoxPaths.RESOLVER_ON_DEVICE, resolverSha, "resolve_bb.sh", pkg) +
             helperGuardBody(sha, resolverSha) +
-            "sh '$helper' b64 --user $user -- $b64"
+            "sh '$helper' $modeArgs"
+    }
+
+    /**
+     * `~/storage` links in the chroot at [chrootPath] for [user] and root, via the helper's
+     * `links` ([ensure]) or `links-status` mode, which run as root inside the chroot (never
+     * through a guest symlink). Blocking su: background thread only. Exit -1 = no su,
+     * -2 = timeout, 127 = helper not staged/verified; the result line starts `FLUX_LINKS`.
+     */
+    fun chrootStorageLinks(
+        context: Context,
+        ensure: Boolean,
+        user: String,
+        chrootPath: String,
+        timeoutMs: Long = 20_000L,
+    ): CaptureResult {
+        require(GuestUsers.isValidName(user)) { "invalid guest user name: $user" }
+        if (!isRootAvailable()) return CaptureResult(-1, "")
+        if (!ensureChrootHelper(context)) return CaptureResult(127, "")
+        val mode = if (ensure) "links" else "links-status"
+        return captureResult(buildChrootHelperModeCmd("$mode --user $user", chrootPath), timeoutMs)
     }
 
     /** Re-stage [dest] from the app-private copies (verified before rename) when it fails its hash. */

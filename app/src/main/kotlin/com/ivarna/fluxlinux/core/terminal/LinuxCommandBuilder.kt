@@ -1,6 +1,8 @@
 package com.ivarna.fluxlinux.core.terminal
 
 import android.content.Context
+import java.io.File
+import com.ivarna.fluxlinux.core.root.GuestUsers
 
 /** Entry point for building terminal commands.
  *  Delegates to ProotCommandBuilder or ChrootCommandBuilder based on method.
@@ -17,20 +19,29 @@ object LinuxCommandBuilder {
     var currentMethod = "proot"
 
     /**
-     * Guest user for session type.
+     * Guest user for session type, distro unknown.
      * - shell-root / component → root (apt/dpkg & setup scripts)
-     * - interactive shell / default → flux
+     * - interactive shell / default → flux (pass the distro to get akane for Ubuntu)
      */
     fun sessionUserForType(type: String): String =
+        sessionUserForType(type, method = "proot", distroId = null)
+
+    /**
+     * Guest user for session type on [method]/[distroId]: root for shell-root/component,
+     * else the guest's default user ([GuestUsers.defaultUser]: `akane` for both Ubuntu
+     * installs, `flux` for every other distro).
+     */
+    fun sessionUserForType(type: String, method: String?, distroId: String?): String =
         when (type) {
-            "shell-root", "component" -> "root"
-            else -> "flux"
+            "shell-root", "component" -> GuestUsers.ROOT
+            else -> GuestUsers.defaultUser(method, distroId)
         }
 
+    /** [user]: `root`, a guest user, or null for the default user of [method]/[distroId]. */
     fun build(
         ctx: Context,
         shellCmd: String,
-        user: String = "flux",
+        user: String? = null,
         useSharedTmp: Boolean = true,
         method: String = currentMethod,
         distroId: String? = null,
@@ -43,19 +54,27 @@ object LinuxCommandBuilder {
             "chroot" -> ChrootCommandBuilder.build(
                 ctx,
                 shellCmd,
-                user,
+                user, // null → default user of the chroot path (akane for Ubuntu)
                 chrootPath = profile?.chrootPath
                     ?: com.ivarna.fluxlinux.core.root.ChrootPaths.CHROOT_PATH,
                 loginShell = loginShell
             )
-            else -> ProotCommandBuilder.build(
-                ctx,
-                shellCmd,
-                user,
-                useSharedTmp,
-                distro = profile?.prootName ?: "debian",
-                loginShell = loginShell ?: GuestLoginShell.DEFAULT
-            )
+            else -> {
+                val prootName = profile?.prootName?.ifBlank { null } ?: "debian"
+                ProotCommandBuilder.build(
+                    ctx,
+                    shellCmd,
+                    // null → default user of the distro (akane for Ubuntu); an Ubuntu rootfs
+                    // that still has only flux (migration failed) keeps logging in as flux.
+                    GuestUsers.prootLoginUser(
+                        user ?: GuestUsers.userFor(distroId),
+                        File("${TermuxHostPaths.PREFIX}/var/lib/proot-distro/containers/$prootName/rootfs"),
+                    ),
+                    useSharedTmp,
+                    distro = prootName,
+                    loginShell = loginShell ?: GuestLoginShell.DEFAULT
+                )
+            }
         }
     }
 }

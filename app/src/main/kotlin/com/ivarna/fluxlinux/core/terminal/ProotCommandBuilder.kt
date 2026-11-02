@@ -2,6 +2,7 @@ package com.ivarna.fluxlinux.core.terminal
 
 import android.content.Context
 import android.util.Log
+import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.utils.TerminalPreferences
 import java.io.File
 import java.io.FileInputStream
@@ -28,8 +29,10 @@ object ProotCommandBuilder {
 
     /** `KEY=value` list behind [guestLoginEnv]; [term] is the TERM value as written. */
     fun guestEnvVars(user: String, term: String): List<String> {
-        val u = if (user == "root") "root" else "flux"
-        val home = if (u == "root") "/root" else "/home/flux"
+        // A plain user name passes through (akane on the Ubuntu PRoot); anything else is
+        // never spliced into the env -i list and falls back to the legacy user.
+        val u = if (GuestUsers.isValidName(user)) user else GuestUsers.LEGACY_USER
+        val home = GuestUsers.homeOf(u)
         // Do not force LANG/LC_ALL here: missing en_US.UTF-8 prints
         // "cannot change locale" from /bin/sh before profile.d can pick.
         // Guest flux-locale.sh / .zshrc select a locale that exists.
@@ -219,7 +222,7 @@ object ProotCommandBuilder {
         shell: String,
         prootDistro: String,
         shellCmd: String,
-        user: String = "flux",
+        user: String = GuestUsers.LEGACY_USER,
         useSharedTmp: Boolean = true,
         distro: String = "debian",
         loginShell: GuestLoginShell = GuestLoginShell.DEFAULT
@@ -248,7 +251,7 @@ object ProotCommandBuilder {
     fun build(
         ctx: Context,
         shellCmd: String,
-        user: String = "flux",
+        user: String = GuestUsers.LEGACY_USER,
         useSharedTmp: Boolean = true,
         distro: String = "debian",
         loginShell: GuestLoginShell = GuestLoginShell.DEFAULT

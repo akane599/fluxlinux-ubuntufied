@@ -3,6 +3,7 @@ package com.ivarna.fluxlinux.core.terminal
 import android.content.Context
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.root.ChrootPaths
+import com.ivarna.fluxlinux.core.root.GuestUsers
 
 /**
  * SSOT for Terminal page shell cards (nativecode `ToolLauncherCatalog` parity).
@@ -170,7 +171,7 @@ object TerminalShellCatalog {
             TerminalShellDef(
                 "shell",
                 "$label Shell",
-                "User: flux",
+                "User: ${GuestUsers.chrootUser(id)}",
                 "chroot",
                 icon,
                 id

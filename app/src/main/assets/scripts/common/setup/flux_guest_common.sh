@@ -10,6 +10,15 @@ unset LD_PRELOAD
 
 _flux_log() { echo "FluxLinux: $*"; }
 
+# Guest login user: flux (PRoot, older chroots) unless FLUX_GUEST_USER names another
+# plain user (the app exports akane for the Ubuntu chroot). Never root.
+case "${FLUX_GUEST_USER:-}" in
+    ''|root|[!a-z_]*|*[!a-z0-9_-]*) FLUX_GUEST_USER=flux ;;
+esac
+[ "${#FLUX_GUEST_USER}" -le 32 ] || FLUX_GUEST_USER=flux
+FLUX_USER_HOME="/home/$FLUX_GUEST_USER"
+export FLUX_GUEST_USER FLUX_USER_HOME
+
 # Portable stat: GNU coreutils uses `-c %u`, BSD userland (Chimera) uses `-f %u`.
 _flux_stat_u() { stat -c %u "$1" 2>/dev/null || stat -f %u "$1" 2>/dev/null || true; }
 _flux_stat_g() { stat -c %g "$1" 2>/dev/null || stat -f %g "$1" 2>/dev/null || true; }
@@ -90,30 +99,43 @@ _flux_ensure_groups() {
 }
 
 _flux_ensure_user() {
+    _u="$FLUX_GUEST_USER"
     # bash may not exist yet (Chimera bootstrap). Fall back to /bin/sh.
     _flux_shell="/bin/bash"
     if [ ! -e /bin/bash ] && [ ! -e /usr/bin/bash ]; then
         _flux_shell="/bin/sh"
     fi
-    if ! id flux >/dev/null 2>&1; then
-        _flux_log "Creating user flux (shell $_flux_shell)..."
+    if ! id "$_u" >/dev/null 2>&1; then
+        _flux_log "Creating user $_u (shell $_flux_shell)..."
         if command -v useradd >/dev/null 2>&1; then
             if ! id -u 1000 >/dev/null 2>&1; then
-                useradd -m -u 1000 -s "$_flux_shell" flux 2>/dev/null \
-                    || useradd -m -s "$_flux_shell" flux
+                useradd -m -u 1000 -s "$_flux_shell" "$_u" 2>/dev/null \
+                    || useradd -m -s "$_flux_shell" "$_u"
             else
-                useradd -m -s "$_flux_shell" flux
+                useradd -m -s "$_flux_shell" "$_u"
             fi
         else
-            adduser -D -s "$_flux_shell" flux 2>/dev/null || true
+            adduser -D -s "$_flux_shell" "$_u" 2>/dev/null || true
         fi
-        echo "flux:flux" | chpasswd 2>/dev/null || true
+        echo "$_u:flux" | chpasswd 2>/dev/null || true
     fi
     for g in wheel audio video netdev input users; do
         if command -v usermod >/dev/null 2>&1; then
-            usermod -aG "$g" flux 2>/dev/null || true
+            usermod -aG "$g" "$_u" 2>/dev/null || true
         else
-            addgroup flux "$g" 2>/dev/null || true
+            addgroup "$_u" "$g" 2>/dev/null || true
+        fi
+    done
+    # Rooted chroots only: setup_guest_chroot.sh creates the Android groups. Android
+    # allows sockets only for aid_inet (3003) members and ping for aid_net_raw (3004).
+    # PRoot guests have no aid_* groups, and flux keeps its old group set (no sudo).
+    for g in aid_inet aid_net_raw sudo; do
+        grep -q "^$g:" /etc/group 2>/dev/null || continue
+        [ "$g" = sudo ] && [ "$_u" = flux ] && continue
+        if command -v usermod >/dev/null 2>&1; then
+            usermod -aG "$g" "$_u" 2>/dev/null || true
+        else
+            addgroup "$_u" "$g" 2>/dev/null || true
         fi
     done
 }
@@ -158,8 +180,8 @@ PAM
 _flux_ensure_sudo() {
     if command -v sudo >/dev/null 2>&1; then
         mkdir -p /etc/sudoers.d
-        echo "flux ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/flux
-        chmod 0440 /etc/sudoers.d/flux
+        echo "$FLUX_GUEST_USER ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$FLUX_GUEST_USER"
+        chmod 0440 "/etc/sudoers.d/$FLUX_GUEST_USER"
         chmod 0755 /etc/sudoers.d 2>/dev/null || true
         if [ -f /etc/sudoers ] && ! grep -qE '@includedir[[:space:]]+/etc/sudoers\.d' /etc/sudoers 2>/dev/null; then
             echo '@includedir /etc/sudoers.d' >> /etc/sudoers
@@ -170,12 +192,12 @@ _flux_ensure_sudo() {
             chown root:root "$_sc" 2>/dev/null || true
             chmod 0644 "$_sc" 2>/dev/null || true
         done
-        chown root:root /etc/sudoers /etc/sudoers.d /etc/sudoers.d/flux 2>/dev/null || true
+        chown root:root /etc/sudoers /etc/sudoers.d "/etc/sudoers.d/$FLUX_GUEST_USER" 2>/dev/null || true
         chmod 4755 /usr/bin/sudo 2>/dev/null || chmod 4755 /usr/sbin/sudo 2>/dev/null || true
         _flux_repair_sudo_pam
     elif command -v doas >/dev/null 2>&1; then
         # Chimera ships doas (opendoas), not sudo.
-        printf 'permit nopass flux\n' > /etc/doas.conf
+        printf 'permit nopass %s\n' "$FLUX_GUEST_USER" > /etc/doas.conf
         # OpenDoas reads the config as the calling user before elevate.
         # 0400 root:root → "doas is not enabled, Permission denied" under proot.
         chmod 0644 /etc/doas.conf
@@ -185,7 +207,7 @@ _flux_ensure_sudo() {
             mkdir -p /usr/local/bin
             cat > /usr/local/bin/sudo <<'EOF'
 #!/bin/sh
-# FluxLinux shim: sudo -> doas (nopass flux).
+# FluxLinux shim: sudo -> doas (nopass guest user).
 exec doas "$@"
 EOF
             chmod 755 /usr/local/bin/sudo
@@ -194,32 +216,35 @@ EOF
 }
 
 _flux_ensure_home() {
-    if [ ! -d /home/flux ]; then
-        mkdir -p /home/flux
+    _u="$FLUX_GUEST_USER"
+    _h="$FLUX_USER_HOME"
+    if [ ! -d "$_h" ]; then
+        mkdir -p "$_h"
     fi
     _home_uid=$(_flux_stat_u /home)
     _home_gid=$(_flux_stat_g /home)
+    _ugid=$(id -g "$_u" 2>/dev/null || echo "$_u")
     if [ -n "$_home_uid" ]; then
-        chown -R "$_home_uid:$_home_gid" /home/flux 2>/dev/null || true
+        chown -R "$_home_uid:$_home_gid" "$_h" 2>/dev/null || true
         # Proot: /home is the Android app uid. chown flux:flux (uid 1000) makes
         # xfconfd unable to write ~/.config → failsafe / "cannot create /home/flux".
-        # Only apply guest flux:flux ownership in real-root chroot (home owner 0).
+        # Only apply guest user ownership in real-root chroot (home owner 0).
         if [ "$_home_uid" = "0" ]; then
-            chown -R flux:flux /home/flux 2>/dev/null || true
+            chown -R "$_u:$_ugid" "$_h" 2>/dev/null || true
         fi
     else
-        chown -R flux:flux /home/flux 2>/dev/null || true
+        chown -R "$_u:$_ugid" "$_h" 2>/dev/null || true
     fi
-    chmod 755 /home/flux 2>/dev/null || true
-    mkdir -p /home/flux/.config /home/flux/.cache /home/flux/.local/share /home/flux/.vnc
-    chmod -R u+rwX /home/flux/.config /home/flux/.cache /home/flux/.local 2>/dev/null || true
-    cat > /home/flux/.vnc/xstartup <<'EOF'
+    chmod 755 "$_h" 2>/dev/null || true
+    mkdir -p "$_h/.config" "$_h/.cache" "$_h/.local/share" "$_h/.vnc"
+    chmod -R u+rwX "$_h/.config" "$_h/.cache" "$_h/.local" 2>/dev/null || true
+    cat > "$_h/.vnc/xstartup" <<'EOF'
 #!/bin/sh
 export PULSE_SERVER="unix:/tmp/pulse-native unix:/mnt/host-tmp/pulse-native"
 [ -f "$HOME/.Xresources" ] && xrdb "$HOME/.Xresources"
 exec startxfce4
 EOF
-    chmod +x /home/flux/.vnc/xstartup
+    chmod +x "$_h/.vnc/xstartup"
     if command -v _flux_write_pulse_client >/dev/null 2>&1; then
         _flux_write_pulse_client
     fi
@@ -504,8 +529,8 @@ _flux_write_pulse_client() {
             printf 'autospawn = no\n' >> /etc/pulse/client.conf
         fi
     fi
-    if [ -f /home/flux/.vnc/xstartup ]; then
-        _flux_sed_i "s|^export PULSE_SERVER=.*|export PULSE_SERVER=\"$_srv\"|" /home/flux/.vnc/xstartup
+    if [ -f "$FLUX_USER_HOME/.vnc/xstartup" ]; then
+        _flux_sed_i "s|^export PULSE_SERVER=.*|export PULSE_SERVER=\"$_srv\"|" "$FLUX_USER_HOME/.vnc/xstartup"
     fi
 }
 

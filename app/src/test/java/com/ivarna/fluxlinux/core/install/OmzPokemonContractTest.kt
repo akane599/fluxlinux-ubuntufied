@@ -211,8 +211,10 @@ class OmzPokemonContractTest {
         val proot = repoFile(
             "src/main/assets/scripts/debian/proot/start/start_gui.sh"
         ).readText()
-        assertTrue(proot.contains("XDG_RUNTIME_DIR=/home/flux/.cache/runtime"))
-        assertFalse(proot.contains("XDG_RUNTIME_DIR=/tmp/runtime-flux"))
+        // Runtime dir lives in the desktop user's home (_UH: /home/akane on Ubuntu, else /home/flux).
+        assertTrue(proot.contains("XDG_RUNTIME_DIR=\$_UH/.cache/runtime"))
+        assertTrue(proot.contains("_UH=\"/home/\$_U\""))
+        assertFalse(proot.contains("XDG_RUNTIME_DIR=/tmp/runtime-"))
     }
 
     @Test

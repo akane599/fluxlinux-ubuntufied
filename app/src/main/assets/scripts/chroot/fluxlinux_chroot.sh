@@ -1,23 +1,30 @@
 #!/system/bin/sh
-# fluxlinux-chroot v2.9
+# fluxlinux-chroot v3.0
 # SSOT chroot runner for NativeCode Debian 13 (requires root).
 # Do not nest this under run_debian13_root.sh — it already owns mounts + one chroot.
 # Guest entry always uses env -i + Debian PATH (never Android /system PATH).
 # v2.2: TTY-safe b64 (no stdin pipe), login --workdir, devpts ptmx heal.
+# v3.0: --user takes any guest user (validated); default akane (Ubuntu chroot) else
+#       flux; ~/storage links (links / links-status); zsh profile seeds ZshPluginSet.
 #
 # Usage:
 #   fluxlinux_chroot.sh version
 #   fluxlinux_chroot.sh mount [--x11]
-#   fluxlinux_chroot.sh login [--user flux|root] [--shell zsh|bash] [--workdir PATH]
-#   fluxlinux_chroot.sh sh    [--user flux|root] -- 'shell string'
-#   fluxlinux_chroot.sh exec  [--user flux|root] -- CMD [ARGS...]
-#   fluxlinux_chroot.sh b64   [--user flux|root] -- BASE64_PAYLOAD
+#   fluxlinux_chroot.sh login [--user USER|root] [--shell zsh|bash] [--workdir PATH]
+#   fluxlinux_chroot.sh sh    [--user USER|root] -- 'shell string'
+#   fluxlinux_chroot.sh exec  [--user USER|root] -- CMD [ARGS...]
+#   fluxlinux_chroot.sh b64   [--user USER|root] -- BASE64_PAYLOAD
+#   fluxlinux_chroot.sh links [--user USER]          (create ~/storage links)
+#   fluxlinux_chroot.sh links-status [--user USER]   (print FLUX_LINKS … present=0|1)
+#
+# USER: ^[a-z_][a-z0-9_-]{0,31}$ and present in the guest /etc/passwd. Default: akane
+# when the guest has it (Ubuntu chroot), else flux (older Debian/Alpine/… chroots).
 #
 # Env:
 #   FLUX_CHROOT  FLUX_PACKAGE  FLUX_HOST_TMP  FLUX_PREFIX  FLUX_BB  FLUX_SHELL
 set -u
 
-VERSION_STR="fluxlinux-chroot v2.9"
+VERSION_STR="fluxlinux-chroot v3.0"
 # Prefer caller-pinned env (RootShell / start_gui). Fallbacks cover both store flavors.
 if [ -z "${FLUX_PACKAGE:-}" ]; then
   if [ -d /data/data/com.zenithblue.fluxlinux/files/usr ]; then
@@ -30,7 +37,8 @@ FLUX_CHROOT="${FLUX_CHROOT:-/data/local/tmp/chrootDebian13}"
 FLUX_HOST_TMP="${FLUX_HOST_TMP:-/data/data/${FLUX_PACKAGE}/files/usr/tmp}"
 FLUX_PREFIX="${FLUX_PREFIX:-/data/data/${FLUX_PACKAGE}/files/usr}"
 LOGIN_SHELL="${FLUX_SHELL:-zsh}"
-USER_NAME="flux"
+USER_NAME=""
+USER_HOME=""
 LOGIN_WORKDIR=""
 WANT_X11=0
 MODE=""
@@ -46,10 +54,12 @@ usage() {
 usage:
   fluxlinux_chroot.sh version
   fluxlinux_chroot.sh mount [--x11]
-  fluxlinux_chroot.sh login [--user flux|root] [--shell zsh|bash] [--workdir PATH]
-  fluxlinux_chroot.sh sh    [--user flux|root] -- SHELL_STRING
-  fluxlinux_chroot.sh exec  [--user flux|root] -- CMD [ARGS...]
-  fluxlinux_chroot.sh b64   [--user flux|root] -- BASE64_PAYLOAD
+  fluxlinux_chroot.sh login [--user USER|root] [--shell zsh|bash] [--workdir PATH]
+  fluxlinux_chroot.sh sh    [--user USER|root] -- SHELL_STRING
+  fluxlinux_chroot.sh exec  [--user USER|root] -- CMD [ARGS...]
+  fluxlinux_chroot.sh b64   [--user USER|root] -- BASE64_PAYLOAD
+  fluxlinux_chroot.sh links [--user USER]
+  fluxlinux_chroot.sh links-status [--user USER]
 EOF
   exit 2
 }
@@ -362,6 +372,119 @@ ensure_mounts() {
   mount_unlock "$FLUX_CHROOT"
 }
 
+# --- guest user (v3.0) -------------------------------------------------------
+# Non-root login user. An explicit --user wins but must be a plain name that the
+# guest /etc/passwd lists (or root). Default: akane when the guest has it (Ubuntu
+# chroot, UbuntuRuntime.UBUNTU_GUEST_USER), else flux (older chroots keep working).
+valid_user_name() {
+  case "$1" in
+    ''|[!a-z_]*|*[!a-z0-9_-]*) return 1 ;;
+  esac
+  [ "${#1}" -le 32 ]
+}
+
+# Only call with a name valid_user_name accepted (used in a grep pattern).
+guest_has_user() {
+  [ -f "$FLUX_CHROOT/etc/passwd" ] && grep -q "^$1:" "$FLUX_CHROOT/etc/passwd" 2>/dev/null
+}
+
+default_guest_user() {
+  if guest_has_user akane; then printf '%s' akane; else printf '%s' flux; fi
+}
+
+# Sets USER_NAME (default when empty) and USER_HOME; dies on an invalid/unknown user.
+resolve_guest_user() {
+  [ -n "$USER_NAME" ] || USER_NAME=$(default_guest_user)
+  if [ "$USER_NAME" = root ]; then
+    USER_HOME=/root
+    return 0
+  fi
+  valid_user_name "$USER_NAME" || die "invalid user name: $USER_NAME"
+  guest_has_user "$USER_NAME" || die "user $USER_NAME not in $FLUX_CHROOT/etc/passwd (re-run chroot setup)"
+  # passwd home only when it is a plain absolute path (it lands in the env -i list).
+  _uh=$(awk -F: -v u="$USER_NAME" '$1==u {print $6; exit}' "$FLUX_CHROOT/etc/passwd" 2>/dev/null)
+  case "$_uh" in
+    /*) case "$_uh" in *[!A-Za-z0-9._/-]*) _uh="" ;; esac ;;
+    *) _uh="" ;;
+  esac
+  USER_HOME="${_uh:-/home/$USER_NAME}"
+  unset _uh
+}
+# --- end guest user -----------------------------------------------------------
+
+# --- storage links (v3.0) -----------------------------------------------------
+# Termux-style ~/storage/{shared,downloads,...} for the user's home and /root, same
+# contract as GuestStorageLinks.kt: idempotent, creates only what is missing, never
+# deletes, replaces or writes through a symlink. Targets use /sdcard, the only shared
+# storage bind (ensure_mounts). Runs as root INSIDE the chroot, so a guest symlink can
+# never point it at a host path. Args: MODE(ensure|status) USER HOME [ROOT prefix, tests].
+storage_links_body() {
+  cat <<'LINKS'
+_mode=$1; _user=$2; _uhome=$3; _R=${4:-}
+_c=0; _e=0; _s=""; _seen=0; _ok=1
+_ugrp=$(id -gn "$_user" 2>/dev/null) || _ugrp=""
+_real_dir() {
+  _p=$_R; _rest=${1#/}
+  while [ -n "$_rest" ]; do
+    _seg=${_rest%%/*}
+    case "$_rest" in */*) _rest=${_rest#*/} ;; *) _rest="" ;; esac
+    [ -n "$_seg" ] || continue
+    _p="$_p/$_seg"
+    { [ -d "$_p" ] && [ ! -L "$_p" ]; } || return 1
+  done
+  return 0
+}
+if [ "$_user" = root ]; then _homes="/root:root:root"; else _homes="$_uhome:$_user:${_ugrp:-$_user} /root:root:root"; fi
+for _ent in $_homes; do
+  _h=${_ent%%:*}; _own=${_ent#*:}
+  _real_dir "$_h" || continue
+  _seen=1
+  _st="$_R$_h/storage"
+  if [ -L "$_st" ] || { [ -e "$_st" ] && [ ! -d "$_st" ]; }; then
+    _s="$_s,$_h/storage"; _ok=0; continue
+  fi
+  if [ ! -d "$_st" ]; then
+    if [ "$_mode" != ensure ]; then _ok=0; continue; fi
+    mkdir "$_st" 2>/dev/null || { _s="$_s,$_h/storage"; _ok=0; continue; }
+    chown "$_own" "$_st" 2>/dev/null || true
+  fi
+  for _l in shared:/sdcard downloads:/sdcard/Download documents:/sdcard/Documents \
+            dcim:/sdcard/DCIM pictures:/sdcard/Pictures music:/sdcard/Music \
+            movies:/sdcard/Movies; do
+    _n=${_l%%:*}; _t=${_l#*:}; _lp="$_st/$_n"
+    if [ -L "$_lp" ] && [ "$(readlink "$_lp")" = "$_t" ]; then
+      _e=$((_e + 1))
+    elif [ -e "$_lp" ] || [ -L "$_lp" ]; then
+      _s="$_s,$_h/storage/$_n"; _ok=0
+    elif [ "$_mode" = ensure ] && ln -s "$_t" "$_lp" 2>/dev/null; then
+      chown -h "$_own" "$_lp" 2>/dev/null || true
+      _c=$((_c + 1))
+    else
+      _ok=0
+      [ "$_mode" = ensure ] && _s="$_s,$_h/storage/$_n"
+    fi
+  done
+done
+_present=0
+[ "$_seen" = 1 ] && [ "$_ok" = 1 ] && _present=1
+echo "FLUX_LINKS mode=$_mode created=$_c existing=$_e present=$_present skipped=${_s#,}"
+LINKS
+}
+
+# MODE = ensure|status. USER_NAME / USER_HOME must be resolved. No mounts needed.
+run_storage_links() {
+  [ -e "$FLUX_CHROOT/bin/sh" ] || [ -L "$FLUX_CHROOT/bin/sh" ] || return 1
+  _lb=$(storage_links_body)
+  if [ -n "${BB:-}" ] && bb_has "$BB" chroot; then
+    $BB chroot "$FLUX_CHROOT" /usr/bin/env -i "PATH=$GUEST_PATH_ROOT" \
+      /bin/sh -c "$_lb" flux-links "$1" "$USER_NAME" "$USER_HOME"
+  else
+    /system/bin/chroot "$FLUX_CHROOT" /usr/bin/env -i "PATH=$GUEST_PATH_ROOT" \
+      /bin/sh -c "$_lb" flux-links "$1" "$USER_NAME" "$USER_HOME"
+  fi
+}
+# --- end storage links --------------------------------------------------------
+
 # Single-quote escape for embedding into su -c '…'
 sq() {
   # shellcheck disable=SC2001
@@ -389,7 +512,7 @@ guest_path_for_user() {
   if [ "$USER_NAME" = "root" ]; then
     printf '%s' "$GUEST_PATH_ROOT"
   else
-    printf '%s' "/home/flux/.local/bin:/home/flux/bin:/home/flux/.cargo/bin:/opt/nodejs/bin:$GUEST_PATH_ROOT"
+    printf '%s' "$USER_HOME/.local/bin:$USER_HOME/bin:$USER_HOME/.cargo/bin:/opt/nodejs/bin:$GUEST_PATH_ROOT"
   fi
 }
 
@@ -403,7 +526,7 @@ build_guest_env_args() {
   if [ "$USER_NAME" = "root" ]; then
     GUEST_ENV_ARGS="PATH=$_gp HOME=/root USER=root LOGNAME=root TERM=$_term LANG=$_lang TMPDIR=/tmp XDG_RUNTIME_DIR=/tmp PULSE_SERVER=unix:/mnt/host-tmp/pulse-native DEBIAN_FRONTEND=noninteractive"
   else
-    GUEST_ENV_ARGS="PATH=$_gp HOME=/home/flux USER=flux LOGNAME=flux NVM_DIR=/home/flux/.nvm TERM=$_term LANG=$_lang TMPDIR=/tmp XDG_RUNTIME_DIR=/tmp PULSE_SERVER=unix:/mnt/host-tmp/pulse-native DEBIAN_FRONTEND=noninteractive"
+    GUEST_ENV_ARGS="PATH=$_gp HOME=$USER_HOME USER=$USER_NAME LOGNAME=$USER_NAME NVM_DIR=$USER_HOME/.nvm TERM=$_term LANG=$_lang TMPDIR=/tmp XDG_RUNTIME_DIR=/tmp PULSE_SERVER=unix:/mnt/host-tmp/pulse-native DEBIAN_FRONTEND=noninteractive"
   fi
 }
 
@@ -437,7 +560,7 @@ guest_bin_path() {
 # Android busybox chroot is "NEWROOT [PROG]" only — GNU --userspec is treated
 # as NEWROOT and fails with "can't change root directory to '--userspec=…'".
 # Stage host busybox into the guest (argv0 must be "busybox") and drop uid
-# with setuidgid NUMERIC (name lookup does not see guest "flux").
+# with setuidgid NUMERIC (name lookup does not see the guest user).
 guest_userspec() {
   _pw="$FLUX_CHROOT/etc/passwd"
   _uid=$(awk -F: -v u="$USER_NAME" '$1==u {print $3; exit}' "$_pw")
@@ -525,12 +648,13 @@ resolve_login_shell() {
   printf '%s' "sh"
 }
 
-# Seed Flux zsh profile when customization never wrote one (Alpine chroot).
+# Seed a Flux zsh profile when customization never wrote one (Alpine chroot) for the
+# non-root user. Host-side write into the rootfs: skips any symlinked home or file.
 ensure_flux_zsh_profile() {
-  [ "$USER_NAME" = "flux" ] || return 0
-  _home="$FLUX_CHROOT/home/flux"
-  [ -d "$_home" ] || return 0
-  if [ ! -f "$_home/.zshrc" ]; then
+  [ "$USER_NAME" != "root" ] || return 0
+  _home="$FLUX_CHROOT$USER_HOME"
+  [ -d "$_home" ] && [ ! -L "$_home" ] && [ ! -L "$FLUX_CHROOT/home" ] || return 0
+  if [ ! -e "$_home/.zshrc" ] && [ ! -L "$_home/.zshrc" ]; then
     cat > "$_home/.zshrc" <<'ZSHRC'
 # Guest PATH only — never inherit host PREFIX/bin (nested proot glue errors).
 export PATH="$HOME/.local/bin:/opt/nodejs/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -572,30 +696,65 @@ if [ -f "$ZSH/oh-my-zsh.sh" ]; then
   DISABLE_UPDATE_PROMPT=true
   DISABLE_AUTO_UPDATE=true
   ZSH_DISABLE_COMPFIX=true
-  plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
+  # flux-zsh-plugins v1: managed by FluxLinux (ZshPluginSet.kt). Edit freely; Flux never rewrites it.
+  _flux_zc="${ZSH_CUSTOM:-$ZSH/custom}"
+  plugins=()
+  for _flux_p in git extract colored-man-pages copypath copyfile command-not-found fzf zoxide fzf-tab zsh-autosuggestions zsh-syntax-highlighting history-substring-search; do
+    [[ -d "$_flux_zc/plugins/$_flux_p" || -d "$ZSH/plugins/$_flux_p" ]] || continue
+    case "$_flux_p" in
+      fzf|fzf-tab) (( $+commands[fzf] )) || continue ;;
+      zoxide) (( $+commands[zoxide] )) || continue ;;
+      command-not-found) [[ -x /usr/lib/command-not-found || -x /usr/share/command-not-found/command-not-found ]] || continue ;;
+    esac
+    plugins+=("$_flux_p")
+  done
+  unset _flux_zc _flux_p
   source "$ZSH/oh-my-zsh.sh"
+  if (( $+functions[history-substring-search-up] )); then
+    bindkey '^[[A' history-substring-search-up
+    bindkey '^[[B' history-substring-search-down
+    bindkey '^[OA' history-substring-search-up
+    bindkey '^[OB' history-substring-search-down
+    if [[ -n "${terminfo[kcuu1]}" ]]; then
+      bindkey "${terminfo[kcuu1]}" history-substring-search-up
+    fi
+    if [[ -n "${terminfo[kcud1]}" ]]; then
+      bindkey "${terminfo[kcud1]}" history-substring-search-down
+    fi
+  fi
 fi
 
-if command -v apk >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
-  apk() { command sudo apk "$@"; }
+if command -v sudo >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get() { command sudo apt-get "$@"; }
+  fi
+  if command -v apt >/dev/null 2>&1; then
+    apt() { command sudo apt "$@"; }
+  fi
+  if command -v apk >/dev/null 2>&1; then
+    apk() { command sudo apk "$@"; }
+  fi
 fi
 ZSHRC
   fi
-  if [ ! -f "$_home/.zprofile" ]; then
+  if [ ! -e "$_home/.zprofile" ] && [ ! -L "$_home/.zprofile" ]; then
     printf '%s\n' '[[ -o interactive ]] || { [ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc"; }' \
       > "$_home/.zprofile"
   fi
   if [ -x "$FLUX_CHROOT/bin/zsh" ] && [ -f "$FLUX_CHROOT/etc/passwd" ] && \
-     grep -q '^flux:' "$FLUX_CHROOT/etc/passwd" && \
-     ! grep -q '^flux:.*zsh$' "$FLUX_CHROOT/etc/passwd"; then
-    sed -i 's|^\(flux:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*\):.*|\1:/bin/zsh|' \
+     grep -q "^$USER_NAME:" "$FLUX_CHROOT/etc/passwd" && \
+     ! grep -q "^$USER_NAME:.*zsh\$" "$FLUX_CHROOT/etc/passwd"; then
+    sed -i "s|^\\($USER_NAME:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*\\):.*|\\1:/bin/zsh|" \
       "$FLUX_CHROOT/etc/passwd" 2>/dev/null || true
   fi
-  chown --reference="$_home" "$_home/.zshrc" "$_home/.zprofile" 2>/dev/null || true
+  for _zf in "$_home/.zshrc" "$_home/.zprofile"; do
+    [ -L "$_zf" ] || chown --reference="$_home" "$_zf" 2>/dev/null || true
+  done
 }
-
 guest_login() {
   ensure_flux_zsh_profile
+  # ~/storage links (cheap, idempotent; never fatal for the login).
+  run_storage_links ensure >/dev/null 2>&1 || true
   LOGIN_SHELL="$(resolve_login_shell "${LOGIN_SHELL:-zsh}")"
   # Optional project cwd (workspace shell). Path must not contain single quotes.
   _cd=""
@@ -632,7 +791,7 @@ guest_login() {
           ;;
       esac
       ;;
-    flux|*)
+    *)
       guest_login_user
       ;;
   esac
@@ -663,7 +822,7 @@ guest_sh() {
   fi
 }
 
-# Argv-preserving exec (root: chroot + binary; flux: su -c with quoted argv).
+# Argv-preserving exec (root: chroot + binary; user: su -c with quoted argv).
 guest_exec() {
   if [ "$#" -lt 1 ]; then
     die "exec requires CMD"
@@ -741,7 +900,7 @@ case "$MODE" in
     echo "$VERSION_STR"
     exit 0
     ;;
-  mount|login|sh|exec|b64) ;;
+  mount|login|sh|exec|b64|links|links-status) ;;
   -h|--help|help) usage ;;
   *) die "unknown mode: $MODE" ;;
 esac
@@ -752,7 +911,7 @@ resolve_bb || die "root-capable busybox not found"
 # Flag parse: collect until -- or end; modes sh/exec/b64 need --
 REMAINING_ARGS=""
 WANT_X11=0
-USER_NAME="flux"
+USER_NAME=""
 LOGIN_SHELL="${FLUX_SHELL:-zsh}"
 
 case "$MODE" in
@@ -786,7 +945,7 @@ case "$MODE" in
         *) die "login: unknown arg $1" ;;
       esac
     done
-    case "$USER_NAME" in root|flux) ;; *) die "user must be flux|root" ;; esac
+    resolve_guest_user
     ensure_mounts
     guest_login
     ;;
@@ -805,7 +964,7 @@ case "$MODE" in
           ;;
       esac
     done
-    case "$USER_NAME" in root|flux) ;; *) die "user must be flux|root" ;; esac
+    resolve_guest_user
     [ "$#" -ge 1 ] || die "sh requires a shell string"
     # Join remaining as one command string (caller may pass one quoted arg)
     CMD_STR="$*"
@@ -824,7 +983,7 @@ case "$MODE" in
         *) break ;;
       esac
     done
-    case "$USER_NAME" in root|flux) ;; *) die "user must be flux|root" ;; esac
+    resolve_guest_user
     [ "$#" -ge 1 ] || die "exec requires CMD"
     ensure_mounts
     guest_exec "$@"
@@ -841,10 +1000,34 @@ case "$MODE" in
         *) break ;;
       esac
     done
-    case "$USER_NAME" in root|flux) ;; *) die "user must be flux|root" ;; esac
+    resolve_guest_user
     [ "$#" -ge 1 ] || die "b64 requires payload"
     B64_PAYLOAD="$1"
     ensure_mounts
     guest_b64 "$B64_PAYLOAD"
+    ;;
+  links|links-status)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --user)
+          [ "$#" -ge 2 ] || die "--user needs value"
+          USER_NAME="$2"; shift 2
+          ;;
+        *) die "$MODE: unknown arg $1" ;;
+      esac
+    done
+    [ -d "$FLUX_CHROOT" ] || die "chroot missing: $FLUX_CHROOT"
+    [ ! -e "$FLUX_CHROOT/.flux_uninstalling" ] || die "chroot is being uninstalled: $FLUX_CHROOT"
+    # Default user missing (bare rootfs): links for /root only.
+    if [ -z "$USER_NAME" ]; then
+      USER_NAME=$(default_guest_user)
+      guest_has_user "$USER_NAME" || USER_NAME=root
+    fi
+    resolve_guest_user
+    if [ "$MODE" = links ]; then
+      run_storage_links ensure || die "no guest shell in $FLUX_CHROOT"
+    else
+      run_storage_links status || die "no guest shell in $FLUX_CHROOT"
+    fi
     ;;
 esac

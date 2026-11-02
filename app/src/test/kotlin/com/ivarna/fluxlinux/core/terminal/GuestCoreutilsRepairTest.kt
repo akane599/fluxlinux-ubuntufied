@@ -47,6 +47,12 @@ class GuestCoreutilsRepairTest {
     private fun gnu(dir: File, name: String) = File(dir, "gnu$name").writeText("#gnu $name")
 
     @Test
+    fun chrootProfiles_neverRepaired() {
+        org.junit.Assert.assertNull(GuestCoreutilsRepair.prootNameOrNull("ubuntu_chroot"))
+        assertEquals("ubuntu", GuestCoreutilsRepair.prootNameOrNull("ubuntu"))
+    }
+
+    @Test
     fun repointsBrokenUutilsLinksToGnuTwins() {
         l2sUtil("wc")
         link(File(bin, "wc"), "../lib/cargo/bin/coreutils/wc")

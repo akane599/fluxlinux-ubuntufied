@@ -3,6 +3,7 @@ package com.ivarna.fluxlinux.core.terminal
 import android.content.Context
 import android.util.Log
 import com.ivarna.fluxlinux.core.root.ChrootPaths
+import com.ivarna.fluxlinux.core.root.GuestUsers
 import java.io.File
 import java.nio.file.Files
 
@@ -134,7 +135,12 @@ fi
         val prefs = ctx.getSharedPreferences(GuestRepairCache.PREFS, Context.MODE_PRIVATE)
         repairProfileIfNeeded(ctx, prefs, method, distroId)
         if (ZshPluginSet.appliesTo(distroId)) {
-            upgradeZshPluginsIfNeeded(ctx, prefs, method, distroId)
+            if (method == "chroot") {
+                // The chroot rootfs is root-only: read/transform/write through su.
+                upgradeChrootZshPluginsIfNeeded(prefs, ctx, distroId)
+            } else {
+                upgradeZshPluginsIfNeeded(ctx, prefs, method, distroId)
+            }
             if (method == "proot") {
                 // Background, best-effort: fzf-tab clone + guest apt deps.
                 runCatching {
@@ -173,6 +179,35 @@ fi
         }
     }
 
+    /**
+     * Chroot twin of [upgradeZshPluginsIfNeeded] for the Ubuntu chroot user's `~/.zshrc`
+     * ([ChrootZshrcUpgrade], root I/O inside the chroot). Background thread only: skipped
+     * on the main thread and when root is unavailable (retried on the next session).
+     */
+    private fun upgradeChrootZshPluginsIfNeeded(
+        prefs: android.content.SharedPreferences,
+        ctx: Context,
+        distroId: String?,
+    ) {
+        if (distroId.isNullOrBlank()) return
+        val key = ZshPluginSet.upgradeKey(distroId)
+        if (prefs.getBoolean(key, false)) return
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return
+        val result = try {
+            ChrootZshrcUpgrade.run(
+                ctx,
+                ChrootPaths.pathForDistro(distroId),
+                GuestUsers.chrootUser(distroId),
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "chroot zsh plugin upgrade failed: ${e.message}")
+            ZshPluginSet.UpgradeResult.SKIPPED
+        }
+        if (result != ZshPluginSet.UpgradeResult.SKIPPED) {
+            prefs.edit().putBoolean(key, true).apply()
+        }
+    }
+
     private fun repairProfileIfNeeded(
         ctx: Context,
         prefs: android.content.SharedPreferences,
@@ -184,7 +219,7 @@ fi
         val cacheKey = GuestRepairCache.zshrcKey(distroId ?: method)
         if (prefs.getBoolean(cacheKey, false)) return
         val zshrc = resolveZshrc(ctx, method, distroId) ?: return
-        val rootfs = zshrc.parentFile?.parentFile?.parentFile // home/flux/.zshrc → rootfs
+        val rootfs = zshrc.parentFile?.parentFile?.parentFile // home/<user>/.zshrc → rootfs
         val isApkGuest = isApkGuest(distroId)
         val needsPmWrap = !isApkGuest && isGlibcGuest(distroId)
         val ubuntuPlugins = ZshPluginSet.appliesTo(distroId)
@@ -524,14 +559,15 @@ exit 1
                     distroId != null -> ChrootPaths.pathForDistro(distroId)
                     else -> ChrootPaths.CHROOT_PATH
                 }
-                File(root, "home/flux/.zshrc")
+                // akane on the Ubuntu chroot, flux on older chroots.
+                val home = GuestUsers.homeOf(GuestUsers.chrootUser(distroId)).removePrefix("/")
+                File(root, "$home/.zshrc")
             }
             "proot" -> {
                 val prootName = resolveProotName(distroId)
-                File(
-                    ctx.filesDir,
-                    "usr/var/lib/proot-distro/containers/$prootName/rootfs/home/flux/.zshrc"
-                )
+                val rootfs = File(ctx.filesDir, "usr/var/lib/proot-distro/containers/$prootName/rootfs")
+                // akane on the Ubuntu PRoot (flux until migrated), flux elsewhere.
+                File(GuestUsers.prootHome(rootfs, prootName), ".zshrc")
             }
             else -> null
         }

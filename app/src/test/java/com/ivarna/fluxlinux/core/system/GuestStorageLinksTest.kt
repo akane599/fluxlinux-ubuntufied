@@ -214,6 +214,66 @@ class GuestStorageLinksTest {
         assertFalse(GuestStorageLinks.linksPresent(ctx, "debian"))
     }
 
+    @Test
+    fun ubuntu_migratedHome_linksInAkaneAndCompatLinkUntouched() {
+        assertEquals(listOf("home/akane", "home/flux", "root"), GuestStorageLinks.homesFor("ubuntu"))
+        assertEquals(listOf("home/flux", "root"), GuestStorageLinks.homesFor("debian"))
+        mkHome("home/akane")
+        mkHome("root")
+        // After GuestUserMigration: home/flux -> akane (relative compat link).
+        Files.createSymbolicLink(rootfs.resolve("home/flux"), Paths.get("akane"))
+        val report = GuestStorageLinks.ensureIn(rootfs.toFile(), "ubuntu")
+        assertEquals(GuestStorageLinks.Report(14, 0, emptyList()), report)
+        assertAllLinks("home/akane")
+        assertAllLinks("root")
+        assertTrue(Files.isSymbolicLink(rootfs.resolve("home/flux")))
+        assertEquals(Paths.get("akane"), Files.readSymbolicLink(rootfs.resolve("home/flux")))
+    }
+
+    @Test
+    fun chroot_parseHelperLine() {
+        val ok = GuestStorageLinks.parseChrootLinksLine(
+            0, "x\nFLUX_LINKS mode=ensure created=3 existing=11 present=0 skipped=/root/storage,/home/akane/storage/music\n",
+        )
+        assertEquals(
+            GuestStorageLinks.ChrootLinksLine(
+                GuestStorageLinks.Report(3, 11, listOf("/root/storage", "/home/akane/storage/music")),
+                present = false,
+            ),
+            ok,
+        )
+        val clean = GuestStorageLinks.parseChrootLinksLine(
+            0, "FLUX_LINKS mode=status created=0 existing=14 present=1 skipped=",
+        )
+        assertEquals(GuestStorageLinks.Report(0, 14, emptyList()), clean?.report)
+        assertEquals(true, clean?.present)
+        assertNull(GuestStorageLinks.parseChrootLinksLine(1, "FLUX_LINKS mode=ensure created=0 existing=0 present=1 skipped="))
+        assertNull(GuestStorageLinks.parseChrootLinksLine(0, "nothing"))
+        assertNull(GuestStorageLinks.parseChrootLinksLine(0, "FLUX_LINKS created=x existing=0 present=1"))
+        assertNull(GuestStorageLinks.parseChrootLinksLine(0, "FLUX_LINKS created=0 existing=0 present=maybe"))
+    }
+
+    @Test
+    fun chroot_linksMatchHelperAndProotNames() {
+        assertEquals(GuestStorageLinks.LINKS.map { it.name }, GuestStorageLinks.CHROOT_LINKS.map { it.name })
+        val rel = "src/main/assets/scripts/chroot/fluxlinux_chroot.sh"
+        val cwd = File("").absoluteFile
+        val helper = listOf(File(cwd, rel), File(cwd, "app/$rel")).first { it.isFile }.readText()
+        for (link in GuestStorageLinks.CHROOT_LINKS) {
+            assertTrue("helper lists ${link.name}", helper.contains("${link.name}:${link.target}"))
+        }
+    }
+
+    /** JVM tests run on the "main" looper (both null): chroot probes never block it with su. */
+    @Test
+    fun chroot_onMainThread_unknownAndNoWrites() {
+        val ctx = FakeContext(filesDir.toFile(), "/fake/jni")
+        assertNull(GuestStorageLinks.chrootLinksStatus(ctx, "ubuntu_chroot"))
+        assertNull(GuestStorageLinks.ensureChroot(ctx, "ubuntu_chroot"))
+        assertNull(GuestStorageLinks.ensure(ctx, "ubuntu_chroot"))
+        assertFalse(GuestStorageLinks.linksPresent(ctx, "ubuntu_chroot"))
+    }
+
     /** Test-local cleanup: never follows a symlink; a link is deleted as a link. */
     private fun deleteNoFollow(root: Path) {
         if (!Files.exists(root, NOFOLLOW_LINKS)) return

@@ -6,10 +6,13 @@ import android.os.Looper
 import android.util.Log
 import com.ivarna.fluxlinux.core.files.UbuntuFiles
 import com.ivarna.fluxlinux.core.gpu.GpuDriverInstaller
+import com.ivarna.fluxlinux.core.root.BusyBoxPaths
+import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.service.BaseInstallService
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.terminal.GpuAccelDetector
+import com.ivarna.fluxlinux.core.terminal.GuestUserMigration
 import com.ivarna.fluxlinux.core.terminal.HostCommandBuilder
 import com.ivarna.fluxlinux.core.terminal.ShellCommandRunner
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
@@ -240,6 +243,9 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
 
         enter(phases, rootfsIdx, onProgress, "Installing ${profile.displayName} via proot-distro…")
         if (abortIfCancelled(gen, phases, onProgress)) return
+        // Re-running setup over an Ubuntu PRoot created as flux: rename it to akane first, or
+        // the family setup (FLUX_GUEST_USER=akane) would add a second user next to flux.
+        GuestUserMigration.migrateIfNeeded(appCtx, distroId)
         val bash = TermuxHostPaths.libBash(appCtx).absolutePath
         val installScript = TermuxHostPaths.hostScript(appCtx, "flux_install.sh").absolutePath
         val setupB64 = BaseDesktopInstallPlan.familySetupB64(appCtx, theme, distroId)
@@ -315,6 +321,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                 "FLUX_SKIP_OMZ=$skipOmz " +
                 "FLUX_SKIP_POKEMON=0 " +
                 "FLUX_PROOT=1 " +
+                prootGuestUserEnv(profile) +
                 "FLUX_ASSET_DIR=/tmp/flux_xfce_assets"
         )
         if (abortIfCancelled(gen, phases, onProgress)) return
@@ -433,24 +440,26 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
 
         enter(phases, rootfsIdx, onProgress, "Extracting chroot rootfs (may take several minutes)…")
         if (abortIfCancelled(gen, phases, onProgress)) return
-        val staged = RootShell.stageAsset(appCtx, setupAsset)
-            ?: TermuxHostPaths.hostScript(appCtx, setupName).absolutePath
-        val envHome = TermuxHostPaths.HOME
+        // M14: root runs the setup script only from the root-only verified stage, next to
+        // its verified resolve_bb.sh sidecar (never app-writable filesDir/staged_scripts).
+        val stagedSetup = ChrootSetupCommand.stagedPath(setupName)
+        if (!RootShell.ensureBusyBoxResolver(appCtx) ||
+            !RootShell.stageVerified(appCtx, setupAsset, stagedSetup)
+        ) {
+            postFail(onProgress, phases, "Could not stage $setupName as root (verify failed)")
+            return
+        }
         // Do not wrap with $PREFIX/bin/stdbuf — host W^X denies exec from app data.
-        val label = profile.distroId.removeSuffix("_chroot")
-        val bbExport = if (!resolvedBb.isNullOrEmpty()) "export FLUX_BB='$resolvedBb'; " else ""
-        val rootCmd =
-            bbExport +
-            "export FLUX_ROOTFS_PATH='$envHome/${profile.rootfsFileName}'; " +
-                "export FLUX_ROOTFS_NAME='${profile.rootfsFileName}'; " +
-                "export FLUX_ROOTFS_SHA256='${profile.rootfsSha256}'; " +
-                "export FLUX_ROOTFS_URL='${profile.rootfsUrl}'; " +
-                "export FLUX_CHROOT='$chrootPath'; " +
-                "export FLUX_DISTRO_LABEL='$label'; " +
-                "export TERMUX_APP__PACKAGE_NAME='${TermuxHostPaths.PACKAGE}'; " +
-                "export TERMUX__HOME='$envHome'; " +
-                "export PYTHONUNBUFFERED=1; " +
-                "sh '$staged'"
+        val rootCmd = ChrootSetupCommand.build(
+            profile = profile,
+            scriptName = setupName,
+            scriptSha256 = assetSha(setupAsset),
+            resolverSha256 = assetSha(BusyBoxPaths.RESOLVER_ASSET),
+            resolvedBb = resolvedBb,
+            chrootPath = chrootPath,
+            rootfsHome = TermuxHostPaths.HOME,
+            packageName = TermuxHostPaths.PACKAGE,
+        )
         val rootResult = RootShell.captureResult(
             rootCmd,
             timeoutMs = 0L,
@@ -530,6 +539,12 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         completePhase(phases, customIdx, onProgress, "Customization done")
 
         if (abortIfCancelled(gen, phases, onProgress)) return
+        // Termux-style ~/storage links for the guest user and root (root, in the chroot).
+        runCatching { GuestStorageLinks.ensure(appCtx, distroId) }.getOrNull()?.let {
+            log(phases, customIdx, onProgress, "~/storage links: ${it.created} created, ${it.existing} present")
+        }
+        // The Ubuntu file-manager roots appear once the rootfs exists; make DocumentsUI re-query.
+        runCatching { UbuntuFiles.notifyRootsChanged(appCtx) }
         StateManager.setDistroInstalled(appCtx, distroId, true)
         StateManager.setComponentInstalled(appCtx, distroId, "xfce4_desktop", true)
         if (hwOk) {
@@ -582,7 +597,8 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                     phases, phaseIndex, onProgress, gen,
                     prootName = profile.prootName,
                     scriptAssetPath = script,
-                    envPrefix = "FLUX_GPU=${gpu.mode} FLUX_GPU_VENDOR=${gpu.vendorHint}" +
+                    envPrefix = prootGuestUserEnv(profile) +
+                        "FLUX_GPU=${gpu.mode} FLUX_GPU_VENDOR=${gpu.vendorHint}" +
                         driverEnv.entries.joinToString("") {
                             " ${it.key}='${it.value.replace("'", "")}'"
                         }
@@ -611,6 +627,9 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         return ok
     }
 
+    private fun assetSha(asset: String): String =
+        RootShell.sha256Hex(appCtx.assets.open(asset).use { it.readBytes() })
+
     private fun stageFluxGpuCommon() {
         val tmp = File(TermuxHostPaths.TMPDIR)
         if (!tmp.exists()) tmp.mkdirs()
@@ -620,6 +639,11 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         }
         dest.setExecutable(true)
     }
+
+    /** `FLUX_GUEST_USER=akane ` for the Ubuntu PRoot, else empty (scripts default to flux). */
+    private fun prootGuestUserEnv(profile: DistroInstallProfile): String =
+        GuestUsers.scriptEnv(profile.distroId, profile.method).entries
+            .joinToString("") { (k, v) -> "$k=$v " }
 
     private fun runProotGuestScript(
         phases: List<BaseDesktopInstallPlan.Phase>,

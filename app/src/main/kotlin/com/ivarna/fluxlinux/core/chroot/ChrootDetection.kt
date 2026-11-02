@@ -87,6 +87,27 @@ object ChrootDetection {
         return snap.installed
     }
 
+    /**
+     * Off-main warm-up: re-probes [path] (root when needed) and refreshes the TTL cache, so a
+     * following main-thread [isInstalled] answers from it. Returns the fresh state, or the
+     * cached one (false when none) if called on the main thread or when the root probe is
+     * inconclusive. Blocking (su, up to ~8 s): call from a background thread, e.g.
+     * `withContext(Dispatchers.IO) { ChrootDetection.warmUp(path) }`.
+     */
+    fun warmUp(path: String): Boolean {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            Log.w(TAG, "warmUp($path) called on the main thread; returning cache")
+            return cache[path]?.installed ?: completeToApp(path)
+        }
+        if (completeToApp(path)) {
+            putCache(path, true)
+            return true
+        }
+        val snap = probe(forceRoot = true, path = path)
+        if (snap.conclusive) putCache(path, snap.installed)
+        return if (snap.conclusive) snap.installed else cache[path]?.installed ?: snap.installed
+    }
+
     fun invalidate() {
         cache.clear()
     }

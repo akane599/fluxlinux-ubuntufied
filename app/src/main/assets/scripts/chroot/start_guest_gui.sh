@@ -15,7 +15,23 @@ if [ -z "${TARGET_PREFIX:-}" ]; then
     TARGET_PREFIX="/data/data/com.ivarna.fluxlinux/files/usr"
   fi
 fi
-USERNAME="${USERNAME:-flux}"
+# Guest desktop user: USERNAME / FLUX_GUEST_USER (start_gui_chroot.sh passes it), else
+# akane when the guest has it (Ubuntu chroot), else flux (older chroots).
+USERNAME="${USERNAME:-${FLUX_GUEST_USER:-}}"
+if [ -z "$USERNAME" ]; then
+  if grep -q '^akane:' "$CHROOT_ROOT/etc/passwd" 2>/dev/null; then
+    USERNAME=akane
+  else
+    USERNAME=flux
+  fi
+fi
+# The name is spliced into guest shell strings below: plain names only.
+case "$USERNAME" in
+  root|[!a-z_]*|*[!a-z0-9_-]*)
+    echo "FluxLinux: ERROR — invalid guest user: $USERNAME" >&2
+    exit 1
+    ;;
+esac
 
 echo "========================================"
 echo "FluxLinux: Chroot XFCE (root stage)"
@@ -124,6 +140,8 @@ if [ -f "$HELPER" ]; then
   export NC_HOST_TMP="${TARGET_PREFIX}/tmp"
   sh "$HELPER" mount --x11 || true
   echo "[2/5] X11 via fluxlinux_chroot mount --x11"
+  # ~/storage links for the desktop user and root (idempotent, never replaces anything).
+  sh "$HELPER" links --user "$USERNAME" 2>&1 | grep '^FLUX_LINKS' || true
 else
   /system/bin/mount -o remount,dev,suid /data 2>/dev/null \
     || $BB mount -o remount,dev,suid /data 2>/dev/null || true
@@ -221,11 +239,20 @@ export XDG_RUNTIME_DIR=/home/$USERNAME/.cache/runtime
 mkdir -p \"\$XDG_RUNTIME_DIR\" && chmod 700 \"\$XDG_RUNTIME_DIR\"
 mkdir -p /tmp/.ICE-unix && chmod 1777 /tmp/.ICE-unix
 if id $USERNAME >/dev/null 2>&1; then
-  chown -R $USERNAME:$USERNAME /home/$USERNAME 2>/dev/null || true
+  # The recursive walk runs only when the ownership signature changed since the last
+  # pass (first start, uid change), like start_gui.sh; chown -R never follows links.
+  _perm_mark=/etc/fluxlinux/home_perms
+  _perm_sig() { echo \"v1-chroot $USERNAME \$(id -u $USERNAME):\$(id -g $USERNAME) \$(stat -c %u:%g /home/$USERNAME /home/$USERNAME/.config /home/$USERNAME/.cache /home/$USERNAME/.local 2>/dev/null | tr '\\n' ' ')\"; }
+  if [ \"\$(cat \$_perm_mark 2>/dev/null)\" != \"\$(_perm_sig)\" ]; then
+    chown -R $USERNAME:\$(id -g $USERNAME) /home/$USERNAME 2>/dev/null || true
+    mkdir -p /home/$USERNAME/.config /home/$USERNAME/.cache /home/$USERNAME/.local/share
+    chown $USERNAME:\$(id -g $USERNAME) /home/$USERNAME/.config /home/$USERNAME/.cache /home/$USERNAME/.local /home/$USERNAME/.local/share 2>/dev/null || true
+    chmod -R u+rwX /home/$USERNAME/.config /home/$USERNAME/.cache /home/$USERNAME/.local 2>/dev/null || true
+    mkdir -p /etc/fluxlinux 2>/dev/null && _perm_sig > \$_perm_mark 2>/dev/null || true
+  fi
   mkdir -p /home/$USERNAME/.config /home/$USERNAME/.cache /home/$USERNAME/.local/share
   chmod 755 /home/$USERNAME 2>/dev/null || true
-  chmod -R u+rwX /home/$USERNAME/.config /home/$USERNAME/.cache /home/$USERNAME/.local 2>/dev/null || true
-  chown $USERNAME:$USERNAME \"\$XDG_RUNTIME_DIR\" 2>/dev/null || true
+  chown $USERNAME:\$(id -g $USERNAME) \"\$XDG_RUNTIME_DIR\" 2>/dev/null || true
 fi
 if command -v dbus-uuidgen >/dev/null 2>&1; then
   dbus-uuidgen --ensure=/etc/machine-id 2>/dev/null || true

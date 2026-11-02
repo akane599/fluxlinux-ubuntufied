@@ -11,8 +11,10 @@ import com.ivarna.fluxlinux.core.install.DistroInstallProfile
 import com.ivarna.fluxlinux.core.service.DesktopSessionService
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.PhantomProcessFixer
+import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.terminal.GuestCoreutilsRepair
+import com.ivarna.fluxlinux.core.terminal.GuestUserMigration
 import com.ivarna.fluxlinux.core.terminal.HostScriptDeployer
 import com.ivarna.fluxlinux.core.terminal.ShellCommandRunner
 import com.ivarna.fluxlinux.core.terminal.ShellJob
@@ -304,6 +306,8 @@ object DesktopLauncher {
         }
 
         if (method != "chroot") {
+            // Ubuntu PRoot created as flux → akane, before the links and start_gui use the home.
+            GuestUserMigration.migrateIfNeeded(app, distroId)
             runCatching { GuestStorageLinks.ensure(app, distroId) }
             GuestCoreutilsRepair.repairIfNeeded(distroId)
         }
@@ -322,6 +326,16 @@ object DesktopLauncher {
         val envMap = HashMap<String, String>()
         RootShell.cachedBusyBox()?.let { envMap["FLUX_BB"] = it }
         envMap["FLUX_DESKTOP"] = desktopType
+        // Desktop user: akane on both Ubuntu installs, flux elsewhere. A PRoot Ubuntu whose
+        // flux → akane migration has not happened keeps flux (start_gui.sh re-checks passwd).
+        envMap[GuestUsers.ENV_GUEST_USER] = if (method == "chroot") {
+            GuestUsers.chrootUser(distroId)
+        } else {
+            GuestUsers.prootLoginUser(
+                GuestUsers.userFor(distroId),
+                File("${TermuxHostPaths.PREFIX}/var/lib/proot-distro/containers/$scriptArg/rootfs"),
+            )
+        }
         gpuRuntime?.let { envMap["FLUX_GPU_RUNTIME"] = it }
 
         startJob = ShellCommandRunner.runStreamedCancelable(

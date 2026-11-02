@@ -31,10 +31,13 @@ internal object GuestCoreutilsRepair {
     private val BIN_DIRS = listOf("usr/bin", "usr/sbin")
     private val NOFOLLOW = arrayOf(LinkOption.NOFOLLOW_LINKS)
 
-    /** Repairs the proot container behind [distroId] (same fallback as LinuxCommandBuilder). */
+    /**
+     * Repairs the proot container behind [distroId] (same fallback as LinuxCommandBuilder).
+     * A chroot distro (e.g. `ubuntu_chroot`, blank prootName) is never mapped onto the
+     * fallback debian container: real hard links there, nothing to repair.
+     */
     fun repairIfNeeded(distroId: String?) {
-        val prootName = distroId?.let { DistroInstallProfile.forId(it)?.prootName }
-            ?.ifBlank { null } ?: "debian"
+        val prootName = prootNameOrNull(distroId) ?: return
         val rootfs = File("${TermuxHostPaths.PREFIX}/var/lib/proot-distro/containers/$prootName/rootfs")
         val fixed = runCatching { relinkToGnu(rootfs) }.getOrElse {
             Log.w(TAG, "coreutils repair failed for $prootName: ${it.message}")
@@ -43,6 +46,13 @@ internal object GuestCoreutilsRepair {
         if (fixed > 0) {
             Log.i(TAG, "$prootName: repointed $fixed uutils links to GNU coreutils")
         }
+    }
+
+    /** Proot container for [distroId]; null for chroot distros; `debian` when unknown/null. */
+    internal fun prootNameOrNull(distroId: String?): String? {
+        val profile = distroId?.let { DistroInstallProfile.forId(it) }
+        if (profile?.method == "chroot") return null
+        return profile?.prootName?.ifBlank { null } ?: "debian"
     }
 
     /** Returns the number of links repointed; 0 when nothing is broken. */

@@ -2,9 +2,10 @@ package com.ivarna.fluxlinux.core.terminal
 
 import android.content.Context
 import com.ivarna.fluxlinux.core.root.ChrootPaths
+import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.root.RootShell
 
-/** Builds shell arguments and environment map for chroot Debian sessions (SSOT helper).
+/** Builds shell arguments and environment map for chroot sessions (SSOT helper).
  *  Ported from termux-lib `ChrootCommandBuilder` (fluxlinux_chroot.sh v2.2).
  *  Depends on RootShell (one-way) — RootShell never imports this (plan §2.5). */
 object ChrootCommandBuilder {
@@ -15,13 +16,18 @@ object ChrootCommandBuilder {
     val CHROOT_HELPER_VERSION: String get() = ChrootPaths.CHROOT_HELPER_VERSION
     val SESSION_EXEC: String get() = ChrootPaths.SESSION_EXEC
 
+    /**
+     * [user]: `root`, a guest user name, or null for the default user of [chrootPath]
+     * ([GuestUsers.chrootUserForPath]: `akane` for the Ubuntu chroot, else `flux`).
+     */
     fun build(
         ctx: Context,
         shellCmd: String,
-        user: String = "flux",
+        user: String? = null,
         chrootPath: String = ChrootPaths.CHROOT_PATH,
         loginShell: GuestLoginShell? = null
     ): Pair<Array<String>, HashMap<String, String>> {
+        val guestUser = GuestUsers.resolveChrootUser(user, chrootPath)
         ensureHelperScript(ctx) // also stages the BusyBox resolver
         RootShell.resolveBusyBox()
         // Shell comes from loginShell; helper resolves the real binary as root
@@ -35,7 +41,7 @@ object ChrootCommandBuilder {
             else -> "bash"
         }
         val rootInner = buildRootInner(
-            shellCmd, user,
+            shellCmd, guestUser,
             loginShellFlux = fluxFlag,
             loginShellRoot = rootFlag
         )
@@ -48,7 +54,7 @@ object ChrootCommandBuilder {
         val cmd = RootShell.shellRootCommand(withPath)
         // Inline WINCH trap on outer sh (mShellPid). Keep this shell as parent (no leading exec).
         val winchCmd = winchWrap(cmd)
-        return arrayOf(SESSION_EXEC, "-c", winchCmd) to buildEnv(user, chrootPath)
+        return arrayOf(SESSION_EXEC, "-c", winchCmd) to buildEnv(guestUser, chrootPath)
     }
 
     /**
@@ -70,15 +76,20 @@ object ChrootCommandBuilder {
     fun winchWrap(cmd: String): String =
         "trap 'kill -WINCH -\$\$ 2>/dev/null; kill -WINCH 0 2>/dev/null' WINCH; $cmd"
 
-    /** Pure guest-inner argv builder (unit-testable without Android). */
+    /**
+     * Pure guest-inner argv builder (unit-testable without Android). [user] is `root` or a
+     * plain guest user name (validated: it is spliced into the root command line).
+     * [loginShellFlux] is the login shell of the non-root user.
+     */
     fun buildRootInner(
         shellCmd: String,
-        user: String = "flux",
+        user: String = GuestUsers.LEGACY_USER,
         helper: String = ChrootPaths.CHROOT_HELPER,
         loginShellFlux: String = "zsh",
         loginShellRoot: String = "bash"
     ): String {
-        val u = if (user == "root") "root" else "flux"
+        require(GuestUsers.isValidName(user)) { "invalid guest user name: $user" }
+        val u = user
         val workdir = GuestLoginShell.parseInteractiveWorkdir(shellCmd)
         val isInteractive = GuestLoginShell.isInteractiveLogin(shellCmd)
 
@@ -91,7 +102,7 @@ object ChrootCommandBuilder {
             }
             isInteractive -> {
                 val wd = workdir?.let { " --workdir ${shellSingleQuote(it)}" } ?: ""
-                "exec sh $helper login --user flux --shell $loginShellFlux$wd"
+                "exec sh $helper login --user $u --shell $loginShellFlux$wd"
             }
             isSimpleGuestCmd(shellCmd) -> {
                 val esc = shellCmd.replace("'", "'\\''")
@@ -108,14 +119,14 @@ object ChrootCommandBuilder {
 
     /** Session env for the outer sh (Android PATH + TERM + guest HOME). */
     fun buildEnv(
-        user: String = "flux",
+        user: String? = null,
         chrootPath: String = ChrootPaths.CHROOT_PATH
     ): HashMap<String, String> {
-        val u = if (user == "root") "root" else "flux"
+        val u = GuestUsers.resolveChrootUser(user, chrootPath)
         val envMap = HashMap(System.getenv())
         envMap["PATH"] = "/system/bin:/system/xbin:/sbin:" + (envMap["PATH"] ?: "")
         envMap["TERM"] = "xterm-256color"
-        envMap["HOME"] = if (u == "root") "/root" else "/home/flux"
+        envMap["HOME"] = GuestUsers.homeOf(u)
         envMap["LANG"] = "C"
         envMap.remove("LC_ALL")
         envMap["XDG_RUNTIME_DIR"] = "/tmp"

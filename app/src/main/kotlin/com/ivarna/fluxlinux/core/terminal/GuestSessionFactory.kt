@@ -6,6 +6,7 @@ import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.data.terminalComponentFor
+import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.utils.TerminalPreferences
 import com.termux.terminal.TerminalSession
@@ -47,6 +48,8 @@ object GuestSessionFactory {
         distroId: String? = null
     ): (() -> Boolean)? {
         if (!SessionRegistry.hasFreeTab()) return null
+        // Ubuntu PRoot created as flux → akane, before zsh / storage repairs look at the home.
+        if (method != "chroot" && distroId != null) GuestUserMigration.migrateIfNeeded(ctx, distroId)
         // Patch guest .zshrc if it still hard-sources missing oh-my-zsh / pokemon,
         // or create a missing Flux profile (Alpine installs that never wrote one).
         GuestZshrcRepair.repairIfNeeded(ctx, method, distroId)
@@ -58,7 +61,7 @@ object GuestSessionFactory {
             // Ubuntu uutils broken by l2s: the guest's own `/usr/bin/env -i` would fail too.
             GuestCoreutilsRepair.repairIfNeeded(distroId)
         }
-        val user = LinuxCommandBuilder.sessionUserForType(type)
+        val user = LinuxCommandBuilder.sessionUserForType(type, method, distroId)
         // Always ZSH or BASH from prefs — never null (chroot root follows the pref too).
         val loginShell = TerminalPreferences.getGuestLoginShell(ctx)
         Log.d("GuestSessionFactory", "loginShell=${loginShell.id} method=$method distroId=$distroId")
@@ -130,7 +133,7 @@ object GuestSessionFactory {
     /**
      * Component install/uninstall session for a distro. The component script is
      * base64-injected and runs INSIDE the guest as **root** (apt/dpkg require it;
-     * setup scripts then switch to user `flux` where needed). Same terminal
+     * setup scripts then switch to the guest user where needed). Same terminal
      * component as the parent distro — never Termux intent.
      * [onFinished] fires when the session exits.
      */
@@ -144,14 +147,19 @@ object GuestSessionFactory {
         onFinished: (() -> Unit)? = null
     ): Boolean {
         val method = terminalComponentFor(distro.id).method
+        // Ubuntu PRoot created as flux → akane before a setup script writes into the home.
+        if (method != "chroot") GuestUserMigration.migrateIfNeeded(ctx, distro.id)
         val b64 = android.util.Base64.encodeToString(
             scriptContent.toByteArray(Charsets.UTF_8),
             android.util.Base64.NO_WRAP
         )
-        val guestPayload = componentPayload(b64, isUninstall, extraEnv)
+        // The scripts' login user (akane on both Ubuntu installs) + FLUX_PROOT=0 on chroot.
+        // Caller-supplied values win.
+        val scriptEnv = GuestUsers.scriptEnv(distro.id, method) + extraEnv
+        val guestPayload = componentPayload(b64, isUninstall, scriptEnv)
         if (!SessionRegistry.hasFreeTab()) return false
         // Root required: customization / feature setup scripts call apt & chown.
-        // Interactive shells stay flux via openSession(sessionUserForType).
+        // Interactive shells use the guest user via openSession(sessionUserForType).
         val user = "root"
         val (args, envMap) = LinuxCommandBuilder.build(
             ctx, guestPayload, user = user, method = method, distroId = distro.id

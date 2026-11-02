@@ -56,6 +56,8 @@ case "$DISTRO_HINT" in
   ubuntu|ubuntu_chroot)
     CHROOT_PATH="${CHROOT_PATH:-/data/local/tmp/chrootUbuntu}"
     ROOT_GUI_NAME="${ROOT_GUI_NAME:-start_guest_gui.sh}"
+    # Ubuntu chroot desktop user (UbuntuRuntime.UBUNTU_GUEST_USER); env override wins.
+    FLUX_GUEST_USER="${FLUX_GUEST_USER:-akane}"
     ;;
   kali|kali_chroot)
     CHROOT_PATH="${CHROOT_PATH:-/data/local/tmp/chrootKali}"
@@ -75,6 +77,16 @@ case "$DISTRO_HINT" in
     ;;
 esac
 ROOT_GUI_SCRIPT="$TERMUX_HOME/$ROOT_GUI_NAME"
+# Guest desktop user for start_guest_gui.sh (empty = it resolves akane/flux itself).
+# Spliced into the su -c string below, so plain names only.
+GUEST_USER="${FLUX_GUEST_USER:-}"
+case "$GUEST_USER" in
+  "") ;;
+  root|[!a-z_]*|*[!a-z0-9_-]*)
+    echo "FluxLinux: ERROR — invalid FLUX_GUEST_USER: $GUEST_USER"
+    exit 1
+    ;;
+esac
 HELPER_SRC="$TERMUX_HOME/fluxlinux_chroot.sh"
 RESOLVER_SRC="$TERMUX_HOME/resolve_bb.sh"
 # M14: root runs only copies in a root-only dir (root:root 0700; same path as
@@ -87,7 +99,7 @@ RESOLVER_STAGED="$ROOT_STAGE/resolve_bb.sh"
 
 echo "========================================"
 echo "FluxLinux: START XFCE (chroot mode)"
-echo "  distro=$DISTRO_HINT path=$CHROOT_PATH"
+echo "  distro=$DISTRO_HINT path=$CHROOT_PATH user=${GUEST_USER:-auto}"
 echo "========================================"
 
 # Preflight chroot
@@ -271,7 +283,8 @@ fi
   DEBIANPATH='$CHROOT_PATH' CHROOT_ROOT='$CHROOT_PATH' FLUX_CHROOT='$CHROOT_PATH' \
   TARGET_PREFIX='$TERMUX_PREFIX' HELPER='$HELPER_STAGED' \
   FLUX_DESKTOP='${FLUX_DESKTOP:-xfce4}' FLUX_GPU_RUNTIME='${FLUX_GPU_RUNTIME:-}' \
-  FLUX_BB='${FLUX_BB:-}' FLUX_RESOLVE_BB='$RESOLVER_STAGED' sh '$ROOT_GUI_STAGED'"
+  FLUX_BB='${FLUX_BB:-}' FLUX_RESOLVE_BB='$RESOLVER_STAGED' \
+  USERNAME='$GUEST_USER' FLUX_GUEST_USER='$GUEST_USER' sh '$ROOT_GUI_STAGED'"
 rc=$?
 echo "FluxLinux: chroot GUI exit=$rc"
 exit $rc

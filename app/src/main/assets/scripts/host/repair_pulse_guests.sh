@@ -120,10 +120,14 @@ migrate_chroot_file() {
     && echo "FluxLinux: [AUDIO] migrated chroot $2 to unix socket"
   rm -f "$_f.flux-tmp"
 }
+# Guest login user of a chroot: akane when the guest has it (Ubuntu chroot), else flux.
+chroot_guest_user() {
+  if grep -q '^akane:' "$1/etc/passwd" 2>/dev/null; then echo akane; else echo flux; fi
+}
 migrate_chroot_guest() {
   for _rel in etc/profile.d/flux-pulse.sh etc/environment \
               etc/pulse/client.conf etc/pulse/client.conf.d/99-fluxlinux.conf \
-              home/flux/.vnc/xstartup; do
+              "home/$(chroot_guest_user "$1")/.vnc/xstartup"; do
     migrate_chroot_file "$1" "$_rel"
   done
 }
@@ -155,7 +159,7 @@ repair_chroot_as_root() {
     echo "FluxLinux: [AUDIO] repair chroot $_path"
     FLUX_CHROOT="$_path" FLUX_PACKAGE="$PKG" \
       /system/bin/sh "$_helper" sh --user root -- \
-        'PULSE_SERVER=unix:/mnt/host-tmp/pulse-native /bin/sh /tmp/setup_pulse_guest.sh' \
+        "FLUX_GUEST_USER=$(chroot_guest_user "$_path") "'PULSE_SERVER=unix:/mnt/host-tmp/pulse-native /bin/sh /tmp/setup_pulse_guest.sh' \
       || echo "FluxLinux: [AUDIO] WARN repair failed chroot $_path"
   done
 }

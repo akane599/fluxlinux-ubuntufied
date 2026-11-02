@@ -2,6 +2,7 @@ package com.ivarna.fluxlinux.core.install
 
 import android.content.Context
 import android.util.Log
+import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.system.SafeFiles
 import com.ivarna.fluxlinux.core.terminal.TermuxHostPaths
@@ -299,7 +300,7 @@ object ProotXfceAssetInstaller {
         sel: Selection,
         onLog: (String) -> Unit
     ) {
-        val destDir = File(rootfs, "home/flux/Pictures/Wallpapers").also { it.mkdirs() }
+        val destDir = File(GuestUsers.prootHome(rootfs), "Pictures/Wallpapers").also { it.mkdirs() }
         val dest = File(destDir, sel.wallpaperFileName)
         if (dest.isFile && dest.length() > 10_000) return
         // Optional; atomic so a failed copy never leaves a truncated wallpaper behind.

@@ -66,7 +66,9 @@ printf 'LANG=C\nPULSE_SERVER=tcp:127.0.0.1\n' > "$G/etc/environment"
 printf '; default-server =\n; autospawn = yes\n' > "$G/etc/pulse/client.conf"
 printf '#!/bin/sh\nexport PULSE_SERVER=tcp:127.0.0.1\nexec startxfce4\n' > "$G/home/flux/.vnc/xstartup"
 sed -e "s|/etc/|$G/etc/|g" -e "s|/home/flux/|$G/home/flux/|g" \
+    -e "s|^FLUX_USER_HOME=\"/home/|FLUX_USER_HOME=\"$G/home/|" \
     "$ASSETS/scripts/common/setup/flux_guest_common.sh" > "$T/common.sh"
+grep -q "^FLUX_USER_HOME=\"$G/home/" "$T/common.sh" || fail "FLUX_USER_HOME not found in flux_guest_common.sh"
 # shellcheck source=/dev/null
 . "$T/common.sh"
 _flux_write_pulse_client

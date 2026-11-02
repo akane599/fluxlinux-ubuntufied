@@ -31,6 +31,19 @@ class BaseDesktopInstallPlanTest {
     }
 
     @Test
+    fun guestEnvExports_chrootGetsUserAndProotFlag() {
+        assertEquals(
+            "export FLUX_GUEST_USER='akane'\nexport FLUX_PROOT='0'\n",
+            BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("ubuntu_chroot")),
+        )
+        assertEquals(
+            "export FLUX_GUEST_USER='akane'\n",
+            BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("ubuntu")),
+        )
+        assertEquals("", BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("debian")))
+    }
+
+    @Test
     fun distroById_unknown_returnsNull() {
         assertNull(BaseDesktopInstallPlan.distroById("not-a-distro"))
         assertNull(BaseDesktopInstallPlan.distroById(""))
