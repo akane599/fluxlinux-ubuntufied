@@ -3,6 +3,15 @@
 # Installs Web Development stack (Node, Python, VS Code, Browsers) on Debian-based distros.
 # Usage: setup_webdev_debian.sh [uninstall]
 
+# Guest login user: FLUX_GUEST_USER when it is a plain non-root name (the app exports
+# akane for Ubuntu), else flux. Same rule as flux_guest_common.sh.
+FLUX_USER="${FLUX_GUEST_USER:-flux}"
+case "$FLUX_USER" in
+    root|[!a-z_]*|*[!a-z0-9_-]*) FLUX_USER=flux ;;
+esac
+[ "${#FLUX_USER}" -le 32 ] || FLUX_USER=flux
+FLUX_HOME="/home/$FLUX_USER"
+
 # Packages installed by this component. Used for uninstall.
 PKGS=(
     firefox
@@ -12,14 +21,14 @@ PKGS=(
 # Other artifacts to remove on uninstall (not apt packages):
 #   /usr/local/bin/firefox, /usr/local/bin/chromium (wrappers)
 #   /usr/share/applications/firefox.desktop, chromium.desktop
-#   /home/flux/.local/share/applications/chromium.desktop
+#   ~/.local/share/applications/chromium.desktop
 #   /opt/nodejs (Node.js tarball install)
 #   /usr/local/bin/{node,npm,npx,corepack} (Node.js symlinks)
 #   /etc/profile.d/nodejs.sh
 #   /usr/share/code (VS Code tarball install)
 #   /usr/bin/code (VS Code symlink)
 #   /usr/share/applications/code.desktop
-#   /home/flux/.config/Code (VS Code user config)
+#   ~/.config/Code (VS Code user config)
 #   /etc/apt/sources.list.d/mozilla.list
 #   /etc/apt/preferences.d/mozilla
 #   /etc/apt/keyrings/packages.mozilla.org.asc
@@ -41,7 +50,7 @@ if [ "$1" = "uninstall" ]; then
     rm -f /usr/local/bin/chromium
     rm -f /usr/share/applications/firefox.desktop
     rm -f /usr/share/applications/chromium.desktop
-    rm -f /home/flux/.local/share/applications/chromium.desktop
+    rm -f $FLUX_HOME/.local/share/applications/chromium.desktop
     # (No firefox.desktop in ~/.local/share/applications/ — never created by installer)
 
     # 3. Remove Node.js (manual tarball install + symlinks)
@@ -53,7 +62,7 @@ if [ "$1" = "uninstall" ]; then
     rm -rf /usr/share/code
     rm -f /usr/bin/code
     rm -f /usr/share/applications/code.desktop
-    rm -rf /home/flux/.config/Code
+    rm -rf $FLUX_HOME/.config/Code
 
     # 5. Remove Mozilla apt repo (added by this script)
     rm -f /etc/apt/sources.list.d/mozilla.list
@@ -63,7 +72,7 @@ if [ "$1" = "uninstall" ]; then
     apt update -y 2>/dev/null || true
 
     # 6. Revert .bashrc / .zshrc entries added by the installer
-    for shell_rc in /home/flux/.bashrc /home/flux/.zshrc; do
+    for shell_rc in $FLUX_HOME/.bashrc $FLUX_HOME/.zshrc; do
         if [ -f "$shell_rc" ]; then
             sed -i '/^# Node.js Global Path$/d' "$shell_rc" 2>/dev/null || true
             sed -i '/^export PATH=\$PATH:\/opt\/nodejs\/bin$/d' "$shell_rc" 2>/dev/null || true
@@ -176,7 +185,7 @@ chmod +x /usr/local/bin/chromium
 
 # Override system .desktop so the XFCE app menu also uses the wrapper flags
 # User-level overrides take priority over /usr/share/applications/
-FLUX_LOCAL_APPS="/home/flux/.local/share/applications"
+FLUX_LOCAL_APPS="$FLUX_HOME/.local/share/applications"
 mkdir -p "$FLUX_LOCAL_APPS"
 cat > "$FLUX_LOCAL_APPS/chromium.desktop" << 'EOF'
 [Desktop Entry]
@@ -242,7 +251,7 @@ fi
 echo "FluxLinux: Configuring Node.js Environment..."
 
 # Update .bashrc for current user
-BASHRC="/home/flux/.bashrc"
+BASHRC="$FLUX_HOME/.bashrc"
 if ! grep -q "/opt/nodejs/bin" "$BASHRC"; then
     echo "" >> "$BASHRC"
     echo "# Node.js Global Path" >> "$BASHRC"
@@ -289,8 +298,8 @@ if ! command -v code &> /dev/null; then
     rm -f /tmp/vscode.tar.gz
     
     # Fix for running VS Code in Proot (--no-sandbox wrapper)
-    # We append the alias to .bashrc for the flux user
-    echo "alias code='code --no-sandbox --unity-launch'" >> /home/flux/.bashrc
+    # We append the alias to .bashrc for the guest user
+    echo "alias code='code --no-sandbox --unity-launch'" >> $FLUX_HOME/.bashrc
     
     # Create Desktop Entry (so it appears in the menu)
     mkdir -p /usr/share/applications
@@ -321,13 +330,13 @@ fi
 # Configure VS Code settings to disable extension signature verification
 # This runs every time to ensure settings are always applied
 echo "FluxLinux: Configuring VS Code settings..."
-mkdir -p /home/flux/.config/Code/User
-cat <<'VSCODE_SETTINGS' > /home/flux/.config/Code/User/settings.json
+mkdir -p $FLUX_HOME/.config/Code/User
+cat <<'VSCODE_SETTINGS' > $FLUX_HOME/.config/Code/User/settings.json
 {
     "extensions.verifySignature": false
 }
 VSCODE_SETTINGS
-chown -R flux:$(id -gn flux 2>/dev/null || echo "flux") /home/flux/.config
+chown -R "$FLUX_USER:$(id -gn "$FLUX_USER" 2>/dev/null || echo "$FLUX_USER")" $FLUX_HOME/.config
 
 
 

@@ -3,7 +3,9 @@ package com.ivarna.fluxlinux.core.terminal
 import android.content.Context
 import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.data.terminalComponentFor
+import com.ivarna.fluxlinux.core.install.ChrootSetupCommand
 import com.ivarna.fluxlinux.core.install.DistroInstallProfile
+import com.ivarna.fluxlinux.core.root.BusyBoxPaths
 import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.termux.terminal.TerminalSession
@@ -186,6 +188,12 @@ object InstallSessionFactory {
         )
     }
 
+    /**
+     * Chroot setup in a root terminal tab. M14: the script and its resolver are staged into
+     * the root-only verified stage by the session's own root command
+     * ([ChrootSetupCommand.buildStagingSession]), so nothing calls su on this (main) thread
+     * and root never runs a copy from app-writable `filesDir/staged_scripts`.
+     */
     private fun openChrootInstall(
         ctx: Context,
         distroId: String,
@@ -194,16 +202,31 @@ object InstallSessionFactory {
         val profile = DistroInstallProfile.require(distroId)
         val asset = profile.chrootSetupAsset
             ?: return false
-        val staged = RootShell.stageAsset(ctx, asset)
-            ?: TermuxHostPaths.hostScript(ctx, FileName(asset)).absolutePath
-        return openRootScriptSession(
+        val inner = try {
+            val script = ctx.assets.open(asset).use { it.readBytes() }
+            val resolver = ctx.assets.open(BusyBoxPaths.RESOLVER_ASSET).use { it.readBytes() }
+            ChrootSetupCommand.buildStagingSession(
+                profile = profile,
+                scriptName = FileName(asset),
+                scriptB64 = java.util.Base64.getEncoder().encodeToString(script),
+                scriptSha256 = RootShell.sha256Hex(script),
+                resolverB64 = java.util.Base64.getEncoder().encodeToString(resolver),
+                resolverSha256 = RootShell.sha256Hex(resolver),
+                resolvedBb = RootShell.cachedBusyBox(),
+                chrootPath = profile.chrootPath ?: com.ivarna.fluxlinux.core.root.ChrootPaths.CHROOT_PATH,
+                rootfsHome = TermuxHostPaths.HOME,
+                packageName = TermuxHostPaths.PACKAGE,
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("InstallSessionFactory", "chroot setup payload for $distroId failed: ${e.message}")
+            return false
+        }
+        return openRootInnerSession(
             ctx,
-            staged,
+            inner,
             title = "${profile.displayName} Install",
             onFinished = onFinished,
             rootfsFileName = profile.rootfsFileName,
-            chrootPath = profile.chrootPath,
-            rootfsProfile = profile
         )
     }
 

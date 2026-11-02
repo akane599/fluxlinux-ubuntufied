@@ -4,6 +4,15 @@
 # Target: Debian 13 (Trixie) ARM64
 # Usage: setup_cybersec_debian.sh [uninstall]
 
+# Guest login user: FLUX_GUEST_USER when it is a plain non-root name (the app exports
+# akane for Ubuntu), else flux. Same rule as flux_guest_common.sh.
+FLUX_USER="${FLUX_GUEST_USER:-flux}"
+case "$FLUX_USER" in
+    root|[!a-z_]*|*[!a-z0-9_-]*) FLUX_USER=flux ;;
+esac
+[ "${#FLUX_USER}" -le 32 ] || FLUX_USER=flux
+FLUX_HOME="/home/$FLUX_USER"
+
 # Cyber-security-specific packages. Shared base tools (curl/wget/git/build-essential)
 # and apt sources.list (contrib/non-free) intentionally not reverted.
 PKGS=(
@@ -45,9 +54,9 @@ if [ "$1" = "uninstall" ]; then
     rm -f /usr/share/applications/burpsuite.desktop
     # Don't touch /opt/burpsuite — user may have manually placed the JAR there
 
-    # Remove flux user from wireshark group (cleanup)
-    if id "flux" &>/dev/null; then
-        gpasswd -d flux wireshark 2>/dev/null || true
+    # Remove the guest user from wireshark group (cleanup)
+    if id "$FLUX_USER" &>/dev/null; then
+        gpasswd -d "$FLUX_USER" wireshark 2>/dev/null || true
     fi
 
     echo "FluxLinux: Cybersecurity Environment Uninstalled."
@@ -67,7 +76,7 @@ handle_error() {
 }
 
 echo "FluxLinux: Setting up Cybersecurity Environment..."
-TARGET_USER="flux"
+TARGET_USER="$FLUX_USER"
 TARGET_GROUP="users"
 
 # 1. System Dependencies & Core Tools

@@ -4,6 +4,15 @@
 # Target: Debian 13 (Trixie) ARM64
 # Usage: setup_appdev_debian.sh [uninstall]
 
+# Guest login user: FLUX_GUEST_USER when it is a plain non-root name (the app exports
+# akane for Ubuntu), else flux. Same rule as flux_guest_common.sh.
+FLUX_USER="${FLUX_GUEST_USER:-flux}"
+case "$FLUX_USER" in
+    root|[!a-z_]*|*[!a-z0-9_-]*) FLUX_USER=flux ;;
+esac
+[ "${#FLUX_USER}" -le 32 ] || FLUX_USER=flux
+FLUX_HOME="/home/$FLUX_USER"
+
 # App-dev-specific apt packages. Shared tools (adb, fastboot, chromium, cmake,
 # ninja-build, clang, git, curl, wget) intentionally excluded — used by
 # other components (gengdev, webdev, etc.).
@@ -43,7 +52,7 @@ if [ "$1" = "uninstall" ]; then
     # Remove Flutter
     rm -rf /opt/flutter
     rm -f /usr/local/bin/flutter /usr/local/bin/dart
-    rm -rf /home/flux/.config/flutter 2>/dev/null || true
+    rm -rf $FLUX_HOME/.config/flutter 2>/dev/null || true
 
     # Remove Kotlin
     rm -rf /opt/kotlin /opt/kotlinc
@@ -54,7 +63,7 @@ if [ "$1" = "uninstall" ]; then
     rm -f /usr/bin/gradle /usr/local/bin/gradle
 
     # Revert .bashrc / .zshrc env vars added by this script
-    for shell_rc in /home/flux/.bashrc /home/flux/.zshrc; do
+    for shell_rc in $FLUX_HOME/.bashrc $FLUX_HOME/.zshrc; do
         if [ -f "$shell_rc" ]; then
             sed -i '/^export PATH="\/opt\/flutter\/bin:\$PATH"$/d' "$shell_rc" 2>/dev/null || true
             sed -i '/^export ANDROID_SDK_ROOT="\/opt\/android-sdk"$/d' "$shell_rc" 2>/dev/null || true
@@ -68,7 +77,7 @@ if [ "$1" = "uninstall" ]; then
     rm -f /etc/profile.d/android-sdk.sh
 
     # Remove Flutter user config (regen'd on next install)
-    rm -rf /home/flux/.flutter
+    rm -rf $FLUX_HOME/.flutter
 
     echo "FluxLinux: App Development Environment Uninstalled."
     exit 0
@@ -87,8 +96,8 @@ handle_error() {
 }
 
 echo "FluxLinux: Setting up App Development Environment (Android + Flutter + React Native)..."
-# Ensure we set ownership to the 'flux' user (since we verify using sudo/root)
-TARGET_USER="flux"
+# Ownership goes to the guest user (we run as root)
+TARGET_USER="$FLUX_USER"
 TARGET_GROUP="users"
 
 # CRITICAL: Remove broken Java packages FIRST (before any apt operations)
@@ -473,7 +482,7 @@ chmod 666 /dev/null 2>/dev/null || true
 # 2. Configure Android SDK (Single requested command)
 echo "FluxLinux: Setting Flutter Android SDK..."
 
-ACTUAL_USER="flux"
+ACTUAL_USER="$FLUX_USER"
 USER_GROUP="users"
 
 echo "FluxLinux: Flutter already installed."

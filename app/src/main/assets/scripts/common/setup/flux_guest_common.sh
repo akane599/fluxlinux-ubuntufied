@@ -117,7 +117,8 @@ _flux_ensure_user() {
         else
             adduser -D -s "$_flux_shell" "$_u" 2>/dev/null || true
         fi
-        echo "$_u:flux" | chpasswd 2>/dev/null || true
+        # New users only: default password is the user name (akane/akane, flux/flux).
+        echo "$_u:$_u" | chpasswd 2>/dev/null || true
     fi
     for g in wheel audio video netdev input users; do
         if command -v usermod >/dev/null 2>&1; then

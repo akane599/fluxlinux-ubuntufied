@@ -57,5 +57,39 @@ internal object ChrootSetupCommand {
             "failed SHA-256 verification; setup not run' >&2; exit 127; fi"
     }
 
+    /**
+     * [build] for a root terminal session that opens without any su call beforehand (the
+     * main thread must not block on su): the same root command first writes the setup
+     * script and its resolver into [ChrootPaths.ROOT_STAGE_DIR] from base64 (temp file,
+     * SHA-256 check, rename; [RootShell.installSnippet]), then [build] re-verifies both and
+     * runs the script. Any staging failure exits 127 before anything runs.
+     */
+    fun buildStagingSession(
+        profile: DistroInstallProfile,
+        scriptName: String,
+        scriptB64: String,
+        scriptSha256: String,
+        resolverB64: String,
+        resolverSha256: String,
+        resolvedBb: String?,
+        chrootPath: String,
+        rootfsHome: String,
+        packageName: String,
+    ): String {
+        require(scriptName.matches(Regex("[A-Za-z0-9._-]+"))) { "bad script name: $scriptName" }
+        require(B64.matches(scriptB64) && B64.matches(resolverB64)) { "payload is not base64" }
+        require(HEX64.matches(scriptSha256) && HEX64.matches(resolverSha256)) { "bad sha256" }
+        val stage = "${RootShell.SHA_FN}; { ${RootShell.stageDirSnippet()} && " +
+            RootShell.installSnippet(BusyBoxPaths.RESOLVER_ON_DEVICE, resolverSha256, b64 = resolverB64) +
+            " && " + RootShell.installSnippet(stagedPath(scriptName), scriptSha256, b64 = scriptB64) +
+            "; } || { echo '[FluxLinux] could not stage $scriptName as root (verify failed)' >&2; exit 127; }; "
+        return stage + build(
+            profile, scriptName, scriptSha256, resolverSha256, resolvedBb, chrootPath, rootfsHome, packageName,
+        )
+    }
+
+    private val B64 = Regex("[A-Za-z0-9+/=]+")
+    private val HEX64 = Regex("[0-9a-f]{64}")
+
     private fun q(v: String): String = "'" + v.replace("'", "'\\''") + "'"
 }

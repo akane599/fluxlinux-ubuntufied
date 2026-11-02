@@ -4,6 +4,15 @@
 # Target: Debian 13 (Trixie) ARM64
 # Usage: setup_gamedev_debian.sh [uninstall]
 
+# Guest login user: FLUX_GUEST_USER when it is a plain non-root name (the app exports
+# akane for Ubuntu), else flux. Same rule as flux_guest_common.sh.
+FLUX_USER="${FLUX_GUEST_USER:-flux}"
+case "$FLUX_USER" in
+    root|[!a-z_]*|*[!a-z0-9_-]*) FLUX_USER=flux ;;
+esac
+[ "${#FLUX_USER}" -le 32 ] || FLUX_USER=flux
+FLUX_HOME="/home/$FLUX_USER"
+
 # Game-dev-specific apt packages. Shared base tools (build-essential, git,
 # curl, wget, python3, python3-pip) intentionally excluded.
 PKGS=(
@@ -38,14 +47,14 @@ if [ "$1" = "uninstall" ]; then
     rm -f /usr/share/icons/hicolor/256x256/apps/godot.png
 
     # Remove Python venv with game libs
-    rm -rf /home/flux/gamedev_env
+    rm -rf $FLUX_HOME/gamedev_env
 
     # Revert .bashrc / .zshrc Godot PATH entries
-    if [ -f /home/flux/.bashrc ]; then
-        sed -i '/# Godot Engine/d; /\/opt\/godot/d' /home/flux/.bashrc 2>/dev/null || true
+    if [ -f $FLUX_HOME/.bashrc ]; then
+        sed -i '/# Godot Engine/d; /\/opt\/godot/d' $FLUX_HOME/.bashrc 2>/dev/null || true
     fi
-    if [ -f /home/flux/.zshrc ]; then
-        sed -i '/# Godot Engine/d; /\/opt\/godot/d' /home/flux/.zshrc 2>/dev/null || true
+    if [ -f $FLUX_HOME/.zshrc ]; then
+        sed -i '/# Godot Engine/d; /\/opt\/godot/d' $FLUX_HOME/.zshrc 2>/dev/null || true
     fi
 
     # If Raylib was built from source (no apt package), remove the installed files
@@ -95,7 +104,7 @@ update_shell_path() {
 }
 
 echo "FluxLinux: Setting up Game Development Environment..."
-TARGET_USER="flux"
+TARGET_USER="$FLUX_USER"
 TARGET_GROUP="users"
 
 # 1. Install System Dependencies & Build Tools

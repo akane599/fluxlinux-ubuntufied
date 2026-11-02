@@ -4,6 +4,15 @@
 # Target: Debian 13 (Trixie) ARM64
 # Usage: setup_gengdev_debian.sh [uninstall]
 
+# Guest login user: FLUX_GUEST_USER when it is a plain non-root name (the app exports
+# akane for Ubuntu), else flux. Same rule as flux_guest_common.sh.
+FLUX_USER="${FLUX_GUEST_USER:-flux}"
+case "$FLUX_USER" in
+    root|[!a-z_]*|*[!a-z0-9_-]*) FLUX_USER=flux ;;
+esac
+[ "${#FLUX_USER}" -le 32 ] || FLUX_USER=flux
+FLUX_HOME="/home/$FLUX_USER"
+
 # Gen-dev-specific apt packages. Shared base tools (build-essential, git,
 # curl, python3, python3-pip, python3-venv, nodejs) and /opt/nodejs
 # (shared with webdev) intentionally excluded.
@@ -36,7 +45,7 @@ if [ "$1" = "uninstall" ]; then
     apt update -y 2>/dev/null || true
 
     # Remove Rust (user-level)
-    rm -rf /home/flux/.cargo /home/flux/.rustup
+    rm -rf $FLUX_HOME/.cargo $FLUX_HOME/.rustup
     rm -f /usr/local/bin/cargo /usr/local/bin/rustup /usr/local/bin/rustc
 
     # Remove Go
@@ -53,19 +62,19 @@ if [ "$1" = "uninstall" ]; then
     rm -rf /usr/share/code
     rm -f /usr/bin/code
     rm -f /usr/share/applications/code.desktop
-    rm -rf /home/flux/.config/Code
+    rm -rf $FLUX_HOME/.config/Code
 
     # Remove LunarVim
-    rm -rf /home/flux/.local/share/lunarvim
-    rm -f /home/flux/.local/bin/lvim
+    rm -rf $FLUX_HOME/.local/share/lunarvim
+    rm -f $FLUX_HOME/.local/bin/lvim
     rm -f /usr/share/applications/lunarvim.desktop
-    rm -rf /home/flux/.lvim* 2>/dev/null || true
+    rm -rf "$FLUX_HOME"/.lvim* 2>/dev/null || true
 
     # Remove NPM global prefix
-    rm -rf /home/flux/.npm-global
+    rm -rf $FLUX_HOME/.npm-global
 
     # Revert .bashrc / .zshrc PATH and config entries
-    for shell_rc in /home/flux/.bashrc /home/flux/.zshrc /etc/profile; do
+    for shell_rc in $FLUX_HOME/.bashrc $FLUX_HOME/.zshrc /etc/profile; do
         if [ -f "$shell_rc" ]; then
             sed -i '/# Rust Cargo/d; /\$HOME\/.cargo\/bin/d' "$shell_rc" 2>/dev/null || true
             sed -i '/# Go Language/d; /Go Root Bin/d; /Go User Bin/d; /\/opt\/go\/bin/d; /GOPATH=\$HOME\/go/d' "$shell_rc" 2>/dev/null || true
@@ -116,8 +125,8 @@ update_shell_path() {
 }
 
 echo "FluxLinux: Setting up General Software Engineering Environment..."
-TARGET_USER="flux"
-TARGET_GROUP=$(id -gn $TARGET_USER 2>/dev/null || echo "flux")
+TARGET_USER="$FLUX_USER"
+TARGET_GROUP=$(id -gn $TARGET_USER 2>/dev/null || echo "$TARGET_USER")
 
 # 1. Install System Dependencies & C/C++ Stack
 echo "FluxLinux: Installing System Dependencies & C/C++ Tools..."

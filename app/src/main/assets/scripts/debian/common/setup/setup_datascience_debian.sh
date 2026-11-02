@@ -4,6 +4,15 @@
 # Target: Debian 13 (Trixie) ARM64
 # Usage: setup_datascience_debian.sh [uninstall]
 
+# Guest login user: FLUX_GUEST_USER when it is a plain non-root name (the app exports
+# akane for Ubuntu), else flux. Same rule as flux_guest_common.sh.
+FLUX_USER="${FLUX_GUEST_USER:-flux}"
+case "$FLUX_USER" in
+    root|[!a-z_]*|*[!a-z0-9_-]*) FLUX_USER=flux ;;
+esac
+[ "${#FLUX_USER}" -le 32 ] || FLUX_USER=flux
+FLUX_HOME="/home/$FLUX_USER"
+
 # Data-science-specific apt packages. Shared system tools
 # (python3, python3-pip, python3-venv, build-essential, git, curl, wget)
 # intentionally excluded.
@@ -28,14 +37,14 @@ if [ "$1" = "uninstall" ]; then
     apt autoremove -y 2>/dev/null || true
 
     # Remove Python venv with all data libs (could be many GB)
-    rm -rf /home/flux/data_env
+    rm -rf $FLUX_HOME/data_env
 
     # Revert .bashrc / .zshrc PATH entries added by this script
-    if [ -f /home/flux/.bashrc ]; then
-        sed -i '/# Data Science Environment/d; /\/data_env\/bin/d' /home/flux/.bashrc 2>/dev/null || true
+    if [ -f $FLUX_HOME/.bashrc ]; then
+        sed -i '/# Data Science Environment/d; /\/data_env\/bin/d' $FLUX_HOME/.bashrc 2>/dev/null || true
     fi
-    if [ -f /home/flux/.zshrc ]; then
-        sed -i '/# Data Science Environment/d; /\/data_env\/bin/d' /home/flux/.zshrc 2>/dev/null || true
+    if [ -f $FLUX_HOME/.zshrc ]; then
+        sed -i '/# Data Science Environment/d; /\/data_env\/bin/d' $FLUX_HOME/.zshrc 2>/dev/null || true
     fi
 
     # Remove Julia
@@ -87,7 +96,7 @@ update_shell_path() {
 }
 
 echo "FluxLinux: Setting up Data Science & AI Environment..."
-TARGET_USER="flux"
+TARGET_USER="$FLUX_USER"
 TARGET_GROUP="users"
 
 # 1. System Dependencies

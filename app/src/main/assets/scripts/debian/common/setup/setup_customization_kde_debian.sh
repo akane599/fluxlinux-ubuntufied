@@ -2,9 +2,15 @@
 # setup_customization_kde_debian.sh
 # Applies "FluxLinux" branding and customization to Debian KDE Plasma Desktop
 # Mirrors setup_customization_debian.sh structure exactly, adapted for KDE
-# Works for both Chroot and Proot environments (run as root, switches to user 'flux')
+# Works for both Chroot and Proot environments (run as root, switches to the guest user)
 
-CUSTOM_USER="flux"
+# Guest login user: FLUX_GUEST_USER when it is a plain non-root name (the app exports
+# akane for Ubuntu), else flux. Same rule as flux_guest_common.sh.
+CUSTOM_USER="${FLUX_GUEST_USER:-flux}"
+case "$CUSTOM_USER" in
+    root|[!a-z_]*|*[!a-z0-9_-]*) CUSTOM_USER=flux ;;
+esac
+[ "${#CUSTOM_USER}" -le 32 ] || CUSTOM_USER=flux
 CUSTOM_GROUP="users"
 USER_HOME="/home/$CUSTOM_USER"
 THEME_DIR="/usr/share/themes"
@@ -465,7 +471,7 @@ POKEMON_SHA="5802ff67520be2ff6117a0abc78a08501f6252ad"         # phoneybadger/po
 AGNOSTERZAK_SHA="312f93f00b199d6c2506221f8366a7f216023100"     # zakaziko99/agnosterzak-ohmyzsh-theme
 AGNOSTERZAK_SHA256="b03b3de1a172097b0cf2695d705c1018b772ff4543562e624c972a9e5070dee2"
 
-# Install Oh My Zsh for flux user: pinned shallow fetch (never the master
+# Install Oh My Zsh for the guest user: pinned shallow fetch (never the master
 # installer piped into sh). Ownership is fixed by the chown -R below.
 echo "FluxLinux: Installing Oh My Zsh..."
 if [ ! -f "$USER_HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
@@ -609,7 +615,7 @@ curl -fsSL https://raw.githubusercontent.com/abhay-byte/Linux_Setup/dev/config/t
 
 # Fastfetch and pokemon are already included in the optimized .zshrc above (backgrounded)
 
-# Set zsh as default shell for flux user
+# Set zsh as default shell for the guest user
 chsh -s /bin/zsh "$CUSTOM_USER" 2>/dev/null
 
 chown -R "$CUSTOM_USER:$CUSTOM_GROUP" "$USER_HOME/.oh-my-zsh" "$USER_HOME/.zshrc" "$USER_HOME/.local" 2>/dev/null

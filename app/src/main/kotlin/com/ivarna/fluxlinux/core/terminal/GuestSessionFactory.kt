@@ -153,9 +153,7 @@ object GuestSessionFactory {
             scriptContent.toByteArray(Charsets.UTF_8),
             android.util.Base64.NO_WRAP
         )
-        // The scripts' login user (akane on both Ubuntu installs) + FLUX_PROOT=0 on chroot.
-        // Caller-supplied values win.
-        val scriptEnv = GuestUsers.scriptEnv(distro.id, method) + extraEnv
+        val scriptEnv = componentEnv(distro.id, method, extraEnv)
         val guestPayload = componentPayload(b64, isUninstall, scriptEnv)
         if (!SessionRegistry.hasFreeTab()) return false
         // Root required: customization / feature setup scripts call apt & chown.
@@ -182,6 +180,13 @@ object GuestSessionFactory {
             )
         )
     }
+
+    /**
+     * Env exported for a component script: the scripts' login user (`FLUX_GUEST_USER=akane`
+     * on both Ubuntu installs) and `FLUX_PROOT=0` on chroot; caller-supplied values win.
+     */
+    internal fun componentEnv(distroId: String, method: String, extraEnv: Map<String, String>): Map<String, String> =
+        GuestUsers.scriptEnv(distroId, method) + extraEnv
 
     /**
      * Guest-side shell for [openComponentSession]. The script goes to a

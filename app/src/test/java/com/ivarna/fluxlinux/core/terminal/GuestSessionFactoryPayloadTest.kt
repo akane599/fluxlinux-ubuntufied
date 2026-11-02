@@ -88,4 +88,20 @@ class GuestSessionFactoryPayloadTest {
             SafeFiles.deleteTree(dir)
         }
     }
+
+    @Test
+    fun componentEnv_exportsUbuntuUserForBothRuntimes() {
+        val proot = GuestSessionFactory.componentEnv("ubuntu", "proot", mapOf("FLUX_THEME" to "x"))
+        assertEquals(mapOf("FLUX_GUEST_USER" to "akane", "FLUX_THEME" to "x"), proot)
+        val chroot = GuestSessionFactory.componentEnv("ubuntu_chroot", "chroot", emptyMap())
+        assertEquals(mapOf("FLUX_GUEST_USER" to "akane", "FLUX_PROOT" to "0"), chroot)
+        assertEquals(emptyMap<String, String>(), GuestSessionFactory.componentEnv("debian", "proot", emptyMap()))
+        // Caller value wins.
+        assertEquals(
+            "flux",
+            GuestSessionFactory.componentEnv("ubuntu", "proot", mapOf("FLUX_GUEST_USER" to "flux"))["FLUX_GUEST_USER"],
+        )
+        val payload = GuestSessionFactory.componentPayload("dHJ1ZQ==", false, proot)
+        assertTrue(payload, payload.contains("export FLUX_GUEST_USER='akane'; "))
+    }
 }

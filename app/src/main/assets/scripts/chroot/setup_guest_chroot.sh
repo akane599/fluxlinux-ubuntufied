@@ -305,7 +305,8 @@ configure_guest_chroot() {
             elif command -v adduser >/dev/null 2>&1; then
                 adduser -D -s /bin/sh $USERNAME 2>/dev/null || true
             fi
-            echo '$USERNAME:flux' | chpasswd 2>/dev/null || true
+            # New users only: default password is the user name (akane/akane, flux/flux).
+            echo '$USERNAME:$USERNAME' | chpasswd 2>/dev/null || true
         fi
         id $USERNAME >/dev/null 2>&1 || { echo 'user $USERNAME could not be created' >&2; exit 1; }
         for g in wheel sudo audio video users aid_inet aid_net_raw; do

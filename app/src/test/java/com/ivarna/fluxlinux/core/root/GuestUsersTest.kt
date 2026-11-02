@@ -160,4 +160,54 @@ class GuestUsersTest {
             ChrootSetupCommand.build(profile, "../x.sh", "a", "b", null, "/c", "/h", "p")
         }
     }
+
+    @Test
+    fun chrootStagingSession_stagesThenVerifiesThenRuns() {
+        val profile = DistroInstallProfile.require("ubuntu_chroot")
+        val script = "echo RAN\n".toByteArray()
+        val resolver = "true\n".toByteArray()
+        val enc = java.util.Base64.getEncoder()
+        val cmd = ChrootSetupCommand.buildStagingSession(
+            profile, "setup_guest_chroot.sh",
+            enc.encodeToString(script), RootShell.sha256Hex(script),
+            enc.encodeToString(resolver), RootShell.sha256Hex(resolver),
+            null, ChrootPaths.UBUNTU_CHROOT_PATH, "/h", "com.ivarna.fluxlinux",
+        )
+        val dest = ChrootSetupCommand.stagedPath("setup_guest_chroot.sh")
+        val stageDir = cmd.indexOf(RootShell.stageDirSnippet())
+        val install = cmd.indexOf("_T='$dest.stage.'")
+        val verify = cmd.indexOf(RootShell.shaMatches(dest, RootShell.sha256Hex(script)))
+        val run = cmd.indexOf("sh '$dest'")
+        assertTrue(cmd, stageDir in 0 until install)
+        assertTrue(cmd.contains("_T='${BusyBoxPaths.RESOLVER_ON_DEVICE}.stage.'"))
+        assertTrue(install < verify && verify < run)
+        assertTrue(cmd.contains("export FLUX_GUEST_USER='akane'; "))
+        assertFalse("never runs from app-writable staging", cmd.contains("staged_scripts"))
+        assertThrows(IllegalArgumentException::class.java) {
+            ChrootSetupCommand.buildStagingSession(
+                profile, "x.sh", "bad'b64", "a".repeat(64), "QQ==", "b".repeat(64),
+                null, "/c", "/h", "p",
+            )
+        }
+    }
+
+    /** Not root: the stage dir cannot be chowned, so nothing is staged or run (exit 127). */
+    @Test
+    fun chrootStagingSession_nonRoot_neverRuns() {
+        org.junit.Assume.assumeTrue(java.io.File("/bin/sh").canExecute())
+        org.junit.Assume.assumeTrue(System.getProperty("user.name") != "root")
+        org.junit.Assume.assumeFalse(java.io.File(ChrootPaths.ROOT_STAGE_DIR).exists())
+        val script = "echo RAN\n".toByteArray()
+        val enc = java.util.Base64.getEncoder()
+        val cmd = ChrootSetupCommand.buildStagingSession(
+            DistroInstallProfile.require("ubuntu_chroot"), "setup_guest_chroot.sh",
+            enc.encodeToString(script), RootShell.sha256Hex(script),
+            enc.encodeToString(script), RootShell.sha256Hex(script),
+            null, ChrootPaths.UBUNTU_CHROOT_PATH, "/h", "p",
+        )
+        val p = ProcessBuilder("/bin/sh", "-c", cmd).redirectErrorStream(true).start()
+        val out = String(p.inputStream.readBytes())
+        assertEquals(out, 127, p.waitFor())
+        assertFalse(out, out.contains("RAN"))
+    }
 }
