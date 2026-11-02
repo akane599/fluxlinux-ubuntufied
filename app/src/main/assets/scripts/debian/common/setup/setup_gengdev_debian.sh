@@ -11,6 +11,12 @@ case "$FLUX_USER" in
     root|[!a-z_]*|*[!a-z0-9_-]*) FLUX_USER=flux ;;
 esac
 [ "${#FLUX_USER}" -le 32 ] || FLUX_USER=flux
+# A guest still set up as flux (its rename to akane has not run yet): keep flux instead of
+# writing into a home that no account owns.
+if [ "$FLUX_USER" != flux ] && ! grep -q "^$FLUX_USER:" /etc/passwd 2>/dev/null \
+    && grep -q '^flux:' /etc/passwd 2>/dev/null; then
+    FLUX_USER=flux
+fi
 FLUX_HOME="/home/$FLUX_USER"
 
 # Gen-dev-specific apt packages. Shared base tools (build-essential, git,

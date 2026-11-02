@@ -107,12 +107,19 @@ object GuestUsers {
     /**
      * Env for guest scripts (family, customization, hw-accel, components) of [distroId]:
      * chroot guests get [ENV_GUEST_USER] and `FLUX_PROOT=0`; the Ubuntu PRoot gets
-     * [ENV_GUEST_USER] (`akane`); other PRoot distros get nothing (their callers set
-     * `FLUX_PROOT=1`, and the scripts default the user to `flux`).
+     * [ENV_GUEST_USER] for the user it logs in as ([prootLoginUser] on [prootRootfs]: `akane`,
+     * or `flux` while its passwd still has only flux, so a re-run never adds an empty second
+     * account); other PRoot distros get nothing (their callers set `FLUX_PROOT=1`, and the
+     * scripts default the user to `flux`).
+     *
+     * The app cannot read a chroot rootfs, so chroot guests always get `akane`; the scripts
+     * themselves fall back to `flux` when the guest passwd has flux but not the requested user
+     * (same rule as `fluxlinux_chroot.sh` `resolve_guest_user`).
      */
-    fun scriptEnv(distroId: String?, method: String?): Map<String, String> = when {
+    fun scriptEnv(distroId: String?, method: String?, prootRootfs: File?): Map<String, String> = when {
         method == "chroot" -> linkedMapOf(ENV_GUEST_USER to userFor(distroId), "FLUX_PROOT" to "0")
-        UbuntuRuntime.isUbuntuId(distroId) -> linkedMapOf(ENV_GUEST_USER to userFor(distroId))
+        UbuntuRuntime.isUbuntuId(distroId) ->
+            linkedMapOf(ENV_GUEST_USER to prootLoginUser(userFor(distroId), prootRootfs))
         else -> emptyMap()
     }
 }

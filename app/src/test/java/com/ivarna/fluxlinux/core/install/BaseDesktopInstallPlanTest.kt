@@ -34,13 +34,29 @@ class BaseDesktopInstallPlanTest {
     fun guestEnvExports_chrootGetsUserAndProotFlag() {
         assertEquals(
             "export FLUX_GUEST_USER='akane'\nexport FLUX_PROOT='0'\n",
-            BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("ubuntu_chroot")),
+            BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("ubuntu_chroot"), null),
         )
         assertEquals(
             "export FLUX_GUEST_USER='akane'\n",
-            BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("ubuntu")),
+            BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("ubuntu"), null),
         )
-        assertEquals("", BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("debian")))
+        assertEquals("", BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("debian"), null))
+    }
+
+    /** P3: family/customization/hw-accel payloads on a flux-only PRoot Ubuntu export flux. */
+    @Test
+    fun guestEnvExports_fluxOnlyProotRootfs_exportsFlux() {
+        val rootfs = java.nio.file.Files.createTempDirectory("flux-env-exports").toFile()
+        try {
+            java.io.File(rootfs, "etc").mkdirs()
+            java.io.File(rootfs, "etc/passwd").writeText("root:x:0:0::/root:/bin/sh\nflux:x:1000:1000::/home/flux:/bin/bash\n")
+            assertEquals(
+                "export FLUX_GUEST_USER='flux'\n",
+                BaseDesktopInstallPlan.guestEnvExports(DistroInstallProfile.require("ubuntu"), rootfs),
+            )
+        } finally {
+            com.ivarna.fluxlinux.core.system.SafeFiles.deleteTree(rootfs)
+        }
     }
 
     @Test

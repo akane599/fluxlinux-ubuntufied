@@ -64,11 +64,34 @@ class GuestUsersTest {
     fun scriptEnv_chrootOnly() {
         assertEquals(
             mapOf("FLUX_GUEST_USER" to "akane", "FLUX_PROOT" to "0"),
-            GuestUsers.scriptEnv("ubuntu_chroot", "chroot"),
+            GuestUsers.scriptEnv("ubuntu_chroot", "chroot", null),
         )
-        assertEquals("flux", GuestUsers.scriptEnv("debian_chroot", "chroot")["FLUX_GUEST_USER"])
-        assertEquals(mapOf("FLUX_GUEST_USER" to "akane"), GuestUsers.scriptEnv("ubuntu", "proot"))
-        assertTrue(GuestUsers.scriptEnv("debian", "proot").isEmpty())
+        assertEquals("flux", GuestUsers.scriptEnv("debian_chroot", "chroot", null)["FLUX_GUEST_USER"])
+        assertEquals(mapOf("FLUX_GUEST_USER" to "akane"), GuestUsers.scriptEnv("ubuntu", "proot", null))
+        assertTrue(GuestUsers.scriptEnv("debian", "proot", null).isEmpty())
+    }
+
+    /** P3: a PRoot Ubuntu still set up as flux (rename failed/conflict) never gets akane. */
+    @Test
+    fun scriptEnv_prootUbuntuFollowsLoginUser() {
+        val rootfs = java.nio.file.Files.createTempDirectory("flux-script-env").toFile()
+        try {
+            val passwd = java.io.File(rootfs, "etc/passwd").apply { parentFile?.mkdirs() }
+            // Fresh rootfs (no passwd yet, no homes): akane.
+            assertEquals("akane", GuestUsers.scriptEnv("ubuntu", "proot", rootfs)["FLUX_GUEST_USER"])
+            passwd.writeText("root:x:0:0::/root:/bin/sh\nflux:x:1000:1000::/home/flux:/bin/bash\n")
+            assertEquals(mapOf("FLUX_GUEST_USER" to "flux"), GuestUsers.scriptEnv("ubuntu", "proot", rootfs))
+            passwd.writeText("root:x:0:0::/root:/bin/sh\nakane:x:1000:1000::/home/akane:/bin/bash\n")
+            assertEquals(mapOf("FLUX_GUEST_USER" to "akane"), GuestUsers.scriptEnv("ubuntu", "proot", rootfs))
+            passwd.writeText("root:x:0:0::/root:/bin/sh\n")
+            assertEquals(mapOf("FLUX_GUEST_USER" to "akane"), GuestUsers.scriptEnv("ubuntu", "proot", rootfs))
+            // Chroot: the app cannot read its rootfs; the scripts fall back themselves.
+            passwd.writeText("flux:x:1000:1000::/home/flux:/bin/bash\n")
+            assertEquals("akane", GuestUsers.scriptEnv("ubuntu_chroot", "chroot", rootfs)["FLUX_GUEST_USER"])
+            assertTrue(GuestUsers.scriptEnv("debian", "proot", rootfs).isEmpty())
+        } finally {
+            com.ivarna.fluxlinux.core.system.SafeFiles.deleteTree(rootfs)
+        }
     }
 
     @Test

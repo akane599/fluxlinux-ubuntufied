@@ -640,10 +640,14 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         dest.setExecutable(true)
     }
 
-    /** `FLUX_GUEST_USER=akane ` for the Ubuntu PRoot, else empty (scripts default to flux). */
+    /**
+     * `FLUX_GUEST_USER=<user> ` for the Ubuntu PRoot (the user it logs in as: akane, or flux
+     * while its passwd still has only flux), else empty (scripts default to flux).
+     */
     private fun prootGuestUserEnv(profile: DistroInstallProfile): String =
-        GuestUsers.scriptEnv(profile.distroId, profile.method).entries
-            .joinToString("") { (k, v) -> "$k=$v " }
+        GuestUsers.scriptEnv(
+            profile.distroId, profile.method, BaseDesktopInstallPlan.prootScriptRootfs(appCtx, profile),
+        ).entries.joinToString("") { (k, v) -> "$k=$v " }
 
     private fun runProotGuestScript(
         phases: List<BaseDesktopInstallPlan.Phase>,

@@ -91,17 +91,32 @@ class GuestSessionFactoryPayloadTest {
 
     @Test
     fun componentEnv_exportsUbuntuUserForBothRuntimes() {
-        val proot = GuestSessionFactory.componentEnv("ubuntu", "proot", mapOf("FLUX_THEME" to "x"))
+        val proot = GuestSessionFactory.componentEnv("ubuntu", "proot", mapOf("FLUX_THEME" to "x"), null)
         assertEquals(mapOf("FLUX_GUEST_USER" to "akane", "FLUX_THEME" to "x"), proot)
-        val chroot = GuestSessionFactory.componentEnv("ubuntu_chroot", "chroot", emptyMap())
+        val chroot = GuestSessionFactory.componentEnv("ubuntu_chroot", "chroot", emptyMap(), null)
         assertEquals(mapOf("FLUX_GUEST_USER" to "akane", "FLUX_PROOT" to "0"), chroot)
-        assertEquals(emptyMap<String, String>(), GuestSessionFactory.componentEnv("debian", "proot", emptyMap()))
+        assertEquals(emptyMap<String, String>(), GuestSessionFactory.componentEnv("debian", "proot", emptyMap(), null))
         // Caller value wins.
         assertEquals(
             "flux",
-            GuestSessionFactory.componentEnv("ubuntu", "proot", mapOf("FLUX_GUEST_USER" to "flux"))["FLUX_GUEST_USER"],
+            GuestSessionFactory.componentEnv("ubuntu", "proot", mapOf("FLUX_GUEST_USER" to "flux"), null)["FLUX_GUEST_USER"],
         )
         val payload = GuestSessionFactory.componentPayload("dHJ1ZQ==", false, proot)
         assertTrue(payload, payload.contains("export FLUX_GUEST_USER='akane'; "))
+    }
+
+    /** P3: a component re-run on a PRoot Ubuntu still set up as flux runs for flux. */
+    @Test
+    fun componentEnv_fluxOnlyProotRootfs_keepsFlux() {
+        val rootfs = java.nio.file.Files.createTempDirectory("flux-component-env").toFile()
+        try {
+            java.io.File(rootfs, "etc").mkdirs()
+            java.io.File(rootfs, "etc/passwd").writeText("flux:x:1000:1000::/home/flux:/bin/bash\n")
+            val env = GuestSessionFactory.componentEnv("ubuntu", "proot", emptyMap(), rootfs)
+            assertEquals(mapOf("FLUX_GUEST_USER" to "flux"), env)
+            assertTrue(GuestSessionFactory.componentPayload("dHJ1ZQ==", false, env).contains("FLUX_GUEST_USER='flux'"))
+        } finally {
+            SafeFiles.deleteTree(rootfs)
+        }
     }
 }

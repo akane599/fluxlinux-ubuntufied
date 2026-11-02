@@ -67,7 +67,33 @@ class ComponentScriptGuestUserTest {
             listOf("root", "a b", "x;id", "../x", "Akane", "a".repeat(33)).forEach {
                 assertEquals("$name <$it>", "flux /home/flux", run(it))
             }
+            // Guest passwd with flux only (rename not done yet): flux, never an ownerless akane home.
+            assertTrue("$name: passwd fallback", header.contains("grep -q '^flux:' /etc/passwd"))
+            val fake = File.createTempFile("passwd", null).apply { deleteOnExit() }
+            fun runWith(passwd: String): String {
+                fake.writeText(passwd)
+                val h = header.replace("/etc/passwd", fake.absolutePath)
+                val pb = ProcessBuilder("/bin/sh", "-c", h + "echo \"\$FLUX_USER \$FLUX_HOME\"")
+                pb.environment()["FLUX_GUEST_USER"] = "akane"
+                val p = pb.redirectErrorStream(true).start()
+                val out = String(p.inputStream.readBytes()).trim()
+                assertEquals(0, p.waitFor())
+                return out
+            }
+            assertEquals(name, "flux /home/flux", runWith("root:x:0:0::/root:/bin/sh\nflux:x:1000:1000::/home/flux:/bin/bash\n"))
+            assertEquals(name, "akane /home/akane", runWith("flux:x:1000:1000::/home/flux:/bin/bash\nakane:x:1001:1001::/home/akane:/bin/bash\n"))
+            assertEquals(name, "akane /home/akane", runWith("root:x:0:0::/root:/bin/sh\n"))
         }
+    }
+
+    @Test
+    fun sharedSetupScripts_keepFluxWhenPasswdHasOnlyFlux() {
+        val common = repoFile("src/main/assets/scripts/common/setup/flux_guest_common.sh").readText()
+        assertTrue(common.contains("grep -q '^flux:' /etc/passwd"))
+        val kde = component("setup_customization_kde_debian.sh")
+        assertTrue(kde.indexOf("grep -q '^flux:' /etc/passwd") in 1 until kde.indexOf("USER_HOME=\"/home/\$CUSTOM_USER\""))
+        val xfce = repoFile("src/main/assets/scripts/common/setup/setup_customization_xfce.sh").readText()
+        assertTrue(xfce.indexOf("grep -q '^flux:' /etc/passwd") in 1 until xfce.indexOf("USER_HOME=\"/home/\$CUSTOM_USER\""))
     }
 
     @Test

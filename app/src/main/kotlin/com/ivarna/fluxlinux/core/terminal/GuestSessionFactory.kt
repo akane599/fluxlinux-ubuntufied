@@ -6,10 +6,13 @@ import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.data.terminalComponentFor
+import com.ivarna.fluxlinux.core.install.BaseDesktopInstallPlan
+import com.ivarna.fluxlinux.core.install.DistroInstallProfile
 import com.ivarna.fluxlinux.core.root.GuestUsers
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.utils.TerminalPreferences
 import com.termux.terminal.TerminalSession
+import java.io.File
 
 /**
  * Builds interactive guest sessions (shell / shell-root / component payloads).
@@ -153,7 +156,14 @@ object GuestSessionFactory {
             scriptContent.toByteArray(Charsets.UTF_8),
             android.util.Base64.NO_WRAP
         )
-        val scriptEnv = componentEnv(distro.id, method, extraEnv)
+        // Ubuntu PRoot whose rename did not happen (failed/conflict): the scripts' user stays
+        // flux, never an empty second akane account.
+        val prootRootfs = if (method == "chroot") {
+            null
+        } else {
+            DistroInstallProfile.forId(distro.id)?.let { BaseDesktopInstallPlan.prootScriptRootfs(ctx, it) }
+        }
+        val scriptEnv = componentEnv(distro.id, method, extraEnv, prootRootfs)
         val guestPayload = componentPayload(b64, isUninstall, scriptEnv)
         if (!SessionRegistry.hasFreeTab()) return false
         // Root required: customization / feature setup scripts call apt & chown.
@@ -183,10 +193,15 @@ object GuestSessionFactory {
 
     /**
      * Env exported for a component script: the scripts' login user (`FLUX_GUEST_USER=akane`
-     * on both Ubuntu installs) and `FLUX_PROOT=0` on chroot; caller-supplied values win.
+     * on both Ubuntu installs, `flux` on a PRoot [prootRootfs] whose passwd still has only
+     * flux) and `FLUX_PROOT=0` on chroot; caller-supplied values win.
      */
-    internal fun componentEnv(distroId: String, method: String, extraEnv: Map<String, String>): Map<String, String> =
-        GuestUsers.scriptEnv(distroId, method) + extraEnv
+    internal fun componentEnv(
+        distroId: String,
+        method: String,
+        extraEnv: Map<String, String>,
+        prootRootfs: File?,
+    ): Map<String, String> = GuestUsers.scriptEnv(distroId, method, prootRootfs) + extraEnv
 
     /**
      * Guest-side shell for [openComponentSession]. The script goes to a
