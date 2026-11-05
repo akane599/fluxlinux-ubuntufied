@@ -11,6 +11,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.widget.Toast
 import com.ivarna.fluxlinux.R
+import com.termux.terminal.TerminalBuffer
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 
@@ -92,15 +93,21 @@ object TerminalClipboard {
         return TerminalLinks.findAll(text).asReversed()
     }
 
-    /**
-     * The link under a tap, if any. Uses the word at the tapped cell, which already spans
-     * soft-wrapped lines, so a long URL broken across rows still opens whole.
-     */
+    /** The link under a tap, if any (see the [linkAt] overload for the cell rules). */
     fun linkAt(view: TerminalView, event: MotionEvent): String? = runCatching {
-        val emulator = view.currentSession?.emulator ?: return null
+        val screen = view.currentSession?.emulator?.screen ?: return null
         val (column, row) = view.getColumnAndRow(event, true).let { it[0] to it[1] }
-        TerminalLinks.urlIn(emulator.screen.getWordAtLocation(column, row))
+        linkAt(screen, column, row)
     }.getOrNull()
+
+    /**
+     * The link in the word at [column], [row] of [screen]; [row] is relative to the scroll, as
+     * TerminalView reports it (negative in the scrollback). The word spans every row of a
+     * soft-wrapped line, also rows that have scrolled into the scrollback, so a long URL broken
+     * across rows opens whole whichever of its rows is tapped.
+     */
+    internal fun linkAt(screen: TerminalBuffer, column: Int, row: Int): String? =
+        TerminalLinks.urlIn(screen.getWordAtLocation(column, row))
 
     /** Opens [url] in the default browser; false (with a message) when nothing can open it. */
     fun openLink(ctx: Context, url: String): Boolean {

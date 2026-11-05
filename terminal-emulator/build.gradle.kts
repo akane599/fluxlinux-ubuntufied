@@ -1,7 +1,8 @@
 // termux-app terminal-emulator v0.118.0 (GPLv3), vendored from
 // https://github.com/termux/termux-app/tree/v0.118.0/terminal-emulator.
 // Carries local fixes: TerminalSession.java (M6, never SIGKILL pid 0),
-// TerminalEmulator.java (CSI < / CSI = consumed, not printed) and
+// TerminalEmulator.java (CSI < / CSI = consumed, not printed),
+// TerminalBuffer.java (the word at a tap spans wrapped rows in the transcript) and
 // src/main/jni/termux.c (L33, close ptm on errors, retry waitpid on EINTR).
 // Built here so libtermux.so is compiled from source with 16 KB page alignment
 // (jitpack's prebuilt ships 4 KB LOAD alignment).
