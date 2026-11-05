@@ -79,6 +79,13 @@ public final class TerminalEmulator {
     private static final int ESC_CSI_SINGLE_QUOTE = 18;
     /** Escape processing: CSI ! */
     private static final int ESC_CSI_EXCLAMATION = 19;
+    /**
+     * Escape processing: {@code CSI <} or {@code CSI =} (FluxLinux). The kitty keyboard protocol's
+     * pop and set ({@code CSI < Ps u}, {@code CSI = Ps ; Ps u}) and DA3 ({@code CSI = c}) are not
+     * supported; their parameters are consumed up to the final byte instead of being printed
+     * (codex left "1uu" on exit).
+     */
+    private static final int ESC_CSI_UNSUPPORTED_PREFIX = 20;
 
     /** The number of parameter arguments. This name comes from the ANSI standard for terminal escape codes. */
     private static final int MAX_ESCAPE_PARAMETERS = 16;
@@ -630,6 +637,11 @@ public final class TerminalEmulator {
                         break;
                     case ESC_CSI:
                         doCsi(b);
+                        break;
+                    case ESC_CSI_UNSUPPORTED_PREFIX:
+                        // Parameter (0x30-0x3F) and intermediate (0x20-0x2F) bytes continue; the
+                        // final byte ends the sequence without effect.
+                        if (b >= 0x20 && b <= 0x3F) continueSequence(mEscapeState);
                         break;
                     case ESC_CSI_EXCLAMATION:
                         if (b == 'p') { // Soft terminal reset (DECSTR, http://vt100.net/docs/vt510-rm/DECSTR).
@@ -1600,6 +1612,10 @@ public final class TerminalEmulator {
                 break;
             case '>': // "Esc [ >" --
                 continueSequence(ESC_CSI_BIGGERTHAN);
+                break;
+            case '<': // "Esc [ <": kitty keyboard pop (CSI < Ps u), unsupported.
+            case '=': // "Esc [ =": kitty keyboard set flags (CSI = Ps ; Ps u) and DA3 (CSI = c), unsupported.
+                continueSequence(ESC_CSI_UNSUPPORTED_PREFIX);
                 break;
             case '`': // Horizontal position absolute (HPA - http://www.vt100.net/docs/vt510-rm/HPA).
                 setCursorColRespectingOriginMode(getArg0(1) - 1);
