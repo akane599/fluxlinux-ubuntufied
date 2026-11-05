@@ -71,6 +71,7 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 - 2026-11-05: notification Exit closes the terminals and the desktop (user's choice of scope), then releases the wakelock and finishes the task; each step is independent so one failure doesn't block the rest (`AppExit`).
 - 2026-11-05: the whole UI moves to a risograph two-ink world (user's pick from the impeccable direction round; supersedes the dark + cream refresh line): blue-black stock, Federal Blue shell field, Bright Red primary, plum overprint for selection, Yellow held, Green running, Pink failed; Archivo by width/weight plus JetBrains Mono for code; selected and primary plates rest 2dp out of register and register on press with a spring. State is carried by mark form (StatusMark), not hue alone. Dark only, as before.
 - 2026-11-05: screenshot previews load the fonts from `src/main/res/font` on disk in inspection mode (`usePreviewFontFiles`), because layoutlib in screenshot plugin alpha10 throws `Resources$NotFoundException` for font resources and renders blank text.
+- 2026-11-05: the terminal's own background is pure black #000000 (user's request after the first phone build: the blue-black stock read as blue/green behind the shell). Only the terminal and the status bar above a live session change; the chrome, drawer and extra-keys field keep the riso inks, and the red tones stay.
 
 ## Audit status
 | Area | Last run | Result | How |

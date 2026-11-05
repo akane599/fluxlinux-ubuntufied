@@ -53,8 +53,11 @@ object Riso {
     val InkText = Color(0xFF14193A)
 }
 
-/** The terminal's own background: the dark stock, so chrome and terminal read as one sheet. */
-val TerminalBackground = Riso.Stock
+/**
+ * The terminal's own background: pure black (the user's choice), so the shell reads as a
+ * screen on OLED rather than as tinted stock. The chrome around it keeps the stock.
+ */
+val TerminalBackground = Color(0xFF000000)
 
 // ─── Legacy names ─────────────────────────────────────────────────────────────
 // Older screens still import these; they now resolve to the riso inks so nothing drifts

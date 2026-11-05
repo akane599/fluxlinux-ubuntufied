@@ -57,9 +57,9 @@ public final class TerminalColorScheme {
         0xff808080, 0xff8a8a8a, 0xff949494, 0xff9e9e9e, 0xffa8a8a8, 0xffb2b2b2, 0xffbcbcbc, 0xffc6c6c6, 0xffd0d0d0, 0xffdadada, 0xffe4e4e4, 0xffeeeeee,
 
         // COLOR_INDEX_DEFAULT_FOREGROUND, COLOR_INDEX_DEFAULT_BACKGROUND and COLOR_INDEX_DEFAULT_CURSOR.
-        // AkaTerminal: bone text on the app's dark stock with a red (aka) cursor, so the terminal and
-        // the app chrome read as one sheet (ui/theme/Color.kt Riso.Bone / Riso.Stock / Riso.Red).
-        0xffe9ecf2, 0xff0f1326, 0xfff15060};
+        // AkaTerminal: bone text on pure black with a red (aka) cursor (ui/theme/Color.kt Riso.Bone /
+        // TerminalBackground / Riso.Red). Keep the background equal to TerminalBackground.
+        0xffe9ecf2, 0xff000000, 0xfff15060};
 
     public final int[] mDefaultColors = new int[TextStyle.NUM_INDEXED_COLORS];
 

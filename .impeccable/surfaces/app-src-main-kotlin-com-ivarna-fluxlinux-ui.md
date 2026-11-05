@@ -23,7 +23,7 @@ OWN-WORLD: Riso spot inks on dark stock. Ground ink-black #0F1326 (blue-black st
 
 STORY: The visitor opens the app and is in a shell; the blue shell bar under it and the drawer read as one printed sheet. They understand which session is live, whether the wakelock is held, whether Ubuntu/desktop is installed or running, and act with one tap.
 
-FIRST VIEWPORT: Terminal full bleed on ink-black; Federal Blue extra-keys field at the bottom (☰ left, Paste right, two rows of 7–8 keys, 48dp targets at phone width, latched modifiers overprinted). Drawer open: Federal Blue sheet, grain-printed AkaTerminal wordmark (Archivo Expanded ExtraBold) at top, session rows with state marks, the active row as the plum overprint with red/blue fringes, New session in red ink, Hold wakelock switch, then Ubuntu page / Files / Settings rows.
+FIRST VIEWPORT: Terminal full bleed on pure black #000000 (user's call after the first phone build: the blue-black read as tinted behind the shell); Federal Blue extra-keys field at the bottom (☰ left, Paste right, two rows of 7–8 keys, 48dp targets at phone width, latched modifiers overprinted). Drawer open: Federal Blue sheet, grain-printed AkaTerminal wordmark (Archivo Expanded ExtraBold) at top, session rows with state marks, the active row as the plum overprint with red/blue fringes, New session in red ink, Hold wakelock switch, then Ubuntu page / Files / Settings rows.
 
 FORM: Risograph two-ink zine (candidate 7 of 7 grounded list; assigned by the roll). Signature move: misregistration that registers: selected/primary elements rest with their second plate offset 2dp; press or selection settles the plates into register with one damped overshoot (spring); reduced motion cuts instantly. seed:9812609be7a0d39d
 

@@ -216,7 +216,7 @@ components:
 
 **Creative North Star: "The Two-Ink Zine"**
 
-AkaTerminal is printed, not rendered. Every colour on screen is a risograph spot ink or the stock it is printed on: a blue-black dark stock, a Federal Blue field for the shell, Bright Red (aka) for the one primary action, and the plum overprint where red lands on blue to mark what is selected. Hierarchy comes from tone and ink, not from light and shadow. The terminal sits full bleed on the stock, so the terminal and the chrome read as one sheet.
+AkaTerminal is printed, not rendered. Every colour on screen is a risograph spot ink or the stock it is printed on: a blue-black dark stock, a Federal Blue field for the shell, Bright Red (aka) for the one primary action, and the plum overprint where red lands on blue to mark what is selected. Hierarchy comes from tone and ink, not from light and shadow. The terminal sits full bleed on pure black (the user's choice: on OLED the shell should read as a screen, not tinted paper); the chrome around it stays on the stock.
 
 The density is that of a tool used one-handed at night for long sessions. Rows are full width on the stock and grouped by small labels, not boxed in cards. Large printed fields (the drawer header, the Ubuntu status sheet, onboarding plates) carry a faint fixed-seed grain; nothing else does. The one signature motion is misregistration that registers: primary and selected elements rest with their second plate 2dp out of register, and a press settles the plates together with one damped overshoot. Reduced motion cuts instantly.
 
@@ -252,7 +252,7 @@ A two-ink riso sheet: blue-black stock, Federal Blue fields, Bright Red for acti
 - **Fluorescent Pink** (`pink`): failed. Error text, the struck-ring mark and the destructive button fill. Never alone: a mark or words always carry the meaning too.
 
 ### Neutral
-- **Dark Stock** (`stock`): the ground of every screen and the terminal's own background.
+- **Dark Stock** (`stock`): the ground of every screen except the terminal itself, which is pure black (`TerminalBackground`).
 - **Deep Stock** (`stock-deep`): one step under the stock: the terminal well, scrims, lowest container.
 - **Printed blue-black tints** (`surface-container-low` through `surface-bright`): surfaces stepping up in tone for dialogs, menus and sheets.
 - **Outline Variant** (`outline-variant`): quiet dividers on stock.
@@ -299,7 +299,7 @@ Sizes are in sp (the frontmatter writes them as px, 1px = 1sp). The ramp steps a
 
 Single column, full width, phone first. Screens pad from the edge at 16 (`lg`), with 24 (`xl`) on drawer and sheet headers. Content is grouped by section labels (24 above, 8 below) and full-width rows of 56 minimum height, not by cards. The spacing scale is `FluxSpacing` (2, 4, 8, 12, 16, 24, 32); 8, 16 and 12 carry most of the rhythm. Every touch target is 48 or more (`touch`), including key caps at phone width.
 
-The terminal is full bleed on stock; the extra-keys field sits under it at the bottom, two scrolling rows with fixed utility columns (drawer at the left, Paste at the right). The drawer is a left Federal sheet. Layouts must hold at font scale 1.3 without clipping.
+The terminal is full bleed on black; the extra-keys field sits under it at the bottom, two scrolling rows with fixed utility columns (drawer at the left, Paste at the right). The drawer is a left Federal sheet. Layouts must hold at font scale 1.3 without clipping.
 
 ## Elevation & Depth
 
