@@ -10,7 +10,16 @@ AkaTerminal works entirely on your device. There is no backend server, no accoun
 
 ## 2. Network use
 
-After you agree in setup, the app downloads the Ubuntu rootfs (and, if you choose them, desktop theme assets or GPU driver archives) from GitHub Releases. Programs you run inside Ubuntu (apt, git, curl, …) use the network as you tell them to.
+Nothing is downloaded until you agree in setup. Setup then contacts these servers:
+
+- **GitHub Releases** (`github.com` and GitHub's download servers): the Ubuntu rootfs; with the desktop, its theme assets, the JetBrains Mono Nerd Font and GPU driver archives for your phone's GPU; and, only to repair a broken install, the app's own host tools.
+- **`api.github.com`**: to find the current GPU driver release, only when the desktop is installed.
+- **`ports.ubuntu.com`**: Ubuntu's package archive, for the packages apt installs.
+- **`github.com`**: Oh My Zsh and its zsh plugins (cloned with git).
+- **`raw.githubusercontent.com`**: the agnosterzak zsh theme (one file).
+- **`gitlab.com`**: pokemon-colorscripts (the greeting in a new terminal).
+
+Every download is a plain request for a public file: no account, no identifier from the app. The servers see your IP address, as with any download. Optional software you add later from the Ubuntu page, and programs you run inside Ubuntu (apt, git, curl, …), use the network as you tell them to.
 
 ## 3. Permissions
 

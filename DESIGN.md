@@ -29,37 +29,37 @@ typography:
   display-large:
     fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "44px"
-    fontWeight: 600
+    fontWeight: 650
     lineHeight: "48px"
     letterSpacing: "-1px"
   display-small:
     fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "30px"
-    fontWeight: 600
+    fontWeight: 650
     lineHeight: "36px"
     letterSpacing: "-0.5px"
   headline-medium:
     fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "23px"
-    fontWeight: 600
+    fontWeight: 650
     lineHeight: "29px"
     letterSpacing: "-0.3px"
   headline-small:
     fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "20px"
-    fontWeight: 600
+    fontWeight: 650
     lineHeight: "26px"
     letterSpacing: "-0.2px"
   title-large:
     fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "20px"
-    fontWeight: 600
+    fontWeight: 650
     lineHeight: "26px"
     letterSpacing: "-0.1px"
   title-medium:
     fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "16px"
-    fontWeight: 600
+    fontWeight: 650
     lineHeight: "22px"
     letterSpacing: "0px"
   title-small:
@@ -220,7 +220,7 @@ Material 3 is underneath (drawer, dialogs, radio buttons, progress, snackbars, s
 - Traditional colours only: sumi ground, indigo dyes for surfaces, akane the one accent, three state colours that travel with a mark.
 - Every control in a container; one akane primary per region.
 - The horizon under the one current thing, and nowhere else.
-- One family, Archivo: semi-expanded SemiBold for display and titles, normal width for reading; JetBrains Mono for code and keys.
+- One family, Archivo: a semi-expanded cut at wght 650 for display and titles, normal width for reading; JetBrains Mono for code and keys.
 - Soft corners (6 to 24), one 1dp edge weight, no shadows.
 - Sharp Material icons.
 
@@ -266,18 +266,18 @@ Night indigo stepped by dye, one madder accent, and state colours that never app
 
 ## Typography
 
-**Display Font:** Archivo SemiExpanded SemiBold (with Archivo, sans-serif)
+**Display Font:** Archivo SemiExpanded at wght 650, wdth 112 (one static instance, declared `FontWeight.SemiBold` in `Type.kt` because it is the only weight in its family; with Archivo, sans-serif)
 **Body Font:** Archivo Regular, Medium, SemiBold (normal width)
 **Label/Mono Font:** JetBrains Mono Regular and SemiBold
 
-**Character:** one grotesque, calm rather than shouted at night: the semi-expanded SemiBold cut carries the wordmark, heads and titles; the normal width does the reading and the labels. The mono face is reserved for what the shell owns.
+**Character:** one grotesque, calm rather than shouted at night: the semi-expanded 650 cut carries the wordmark, heads and titles; the normal width does the reading and the labels. The mono face is reserved for what the shell owns.
 
-Sizes are sp (written as px, 1px = 1sp). The ramp steps at about 1.2; display tracking tightens as size grows. Display medium (36/42, -0.7) and headline large (27/33, -0.4) exist in `Type.kt` between the steps listed.
+Sizes are sp (written as px, 1px = 1sp). The ramp steps run about 1.1 to 1.25 (44, 36, 30, 27, 23, 20, 16, 14, 12, 11); display tracking tightens as size grows. Display medium (36/42, -0.7) and headline large (27/33, -0.4) exist in `Type.kt` between the steps listed.
 
 ### Hierarchy
-- **Display** (SemiExpanded 600, 30 to 44, line 36 to 48): the wordmark on onboarding.
-- **Headline** (SemiExpanded 600, 20 to 27): page heads and card heads ("Ubuntu 26.04"); headline-medium is the drawer wordmark.
-- **Title** (SemiExpanded 600 at 16 to 20; normal width 600 at 14): top bars and dialog titles; title-small is every row title and the selected session.
+- **Display** (SemiExpanded 650, 30 to 44, line 36 to 48): the wordmark on onboarding.
+- **Headline** (SemiExpanded 650, 20 to 27): page heads and card heads ("Ubuntu 26.04"); headline-medium is the drawer wordmark.
+- **Title** (SemiExpanded 650 at 16 to 20; normal width 600 at 14): top bars and dialog titles; title-small is every row title and the selected session.
 - **Body** (400, 12 to 16): explanations and supporting text (body-small is the most used role).
 - **Label** (600 at 12 to 14, 500 at 11; sentence case): buttons, section labels, drawer actions.
 - **Code** (JetBrains Mono 400, 13, line 19): commands, paths, versions. Key caps use the mono face too (title-medium for single glyphs, label sizes for words).
@@ -315,7 +315,7 @@ Soft, not pillowed: folded washi rather than cut card. Radius encodes hierarchy:
 - **Shape:** soft corners (10, `small`), 48 minimum height, 64 minimum width, 12 by 24 padding, optional 18 leading Sharp icon with an 8 gap, label-large.
 - **Primary:** akane fill, white label, no edge; kokiake while pressed (120ms, standard easing). One per region.
 - **Secondary:** kon fill with the 1 ai edge and shironeri label; konjō while pressed. Always reads as a button, never as text.
-- **Disabled:** keeps its container (kon, hanada edge) and dims the label to ginnezumi at 60%, so the action's shape stays visible.
+- **Disabled:** sinks below a resting button: the container drops to the kachi chrome fill with the quiet hanada edge, and the label dims to ginnezumi at 60%, so the action's shape stays visible without reading as available.
 - **Destructive:** a Material Button in tsutsuji with Ink Text, 10 corners, 48 minimum, for explicit destructive actions in Settings.
 
 ### Tiles and selection (akaTile, akaSelection)
@@ -345,7 +345,7 @@ Key caps on the black bar: each a kon tile at 6 corners with the hanada edge and
 The session drawer: a kachi sheet; the header is the headline-medium wordmark over its static horizon, a "Sessions" title-small in ginnezumi below it, closed by a hanada divider. Sessions are 52 tiles with a 10 mark in the 24 icon column; the current one is the selection (title-small, shironeri) whose horizon rises as the drawer opens, the rest body-medium in ginnezumi. Then New session as the sheet's one akane button (with a ▾ shell menu), the Extra keys and Hold wakelock switch tiles (the held wakelock swaps its icon for the half disc), then Ubuntu page, Files and Settings tiles. Top bars are flat on sumi with Sharp icons.
 
 ### Wordmark and mark
-**AkaWordmark** sets "Aka" in akane and "Terminal" in shironeri over the horizon, 8 below the text. On first launch the horizon rises over 720ms (`RISE`, decelerate easing); elsewhere it is shown risen. The app mark and launcher icon are a shell prompt with the akane sun on the horizon where the cursor would be, over a sumi-to-konjō twilight sky with akane light; the shu-to-akane sun gradient and the horizon line are the only gradients in the icon. Monochrome and status-bar icons are single white shapes. Geometry is shared with `scripts/render_launcher_icon.py`.
+**AkaWordmark** sets "Aka" in akane and "Terminal" in shironeri over the horizon, 8 below the text. On first launch the horizon rises over 720ms (`RISE`, decelerate easing); elsewhere it is shown risen. The app mark and launcher icon are a shell prompt with the akane sun on the horizon where the cursor would be, over a sumi-to-konjō twilight sky with akane light. The icon's gradients are the sky (a vertical sumi, konjō, kachi blend), the akane light (a radial glow around the sun, on the launcher background only), the shu-to-akane sun and the horizon line; they stay inside the icon and the in-app mark (`ic_aka_mark`, the same sky, sun and horizon without the glow). Monochrome and status-bar icons are single white shapes. Geometry is shared with `scripts/render_launcher_icon.py`.
 
 ### Motion
 Durations: 120 quick, 220 standard, 360 emphasized, 720 rise. Easing: standard `cubic-bezier(0.2, 0, 0, 1)`, decelerate `cubic-bezier(0.05, 0.7, 0.1, 1)`. Springs: `rise` (no bounce, stiffness 180, about 400ms) for the horizon, `settle` (no bounce, stiffness 520) for thumbs and sheets. Nothing overshoots.

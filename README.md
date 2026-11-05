@@ -18,7 +18,8 @@ By [akane599](https://github.com/akane599) · GPLv3 · Android 8.0+ (arm64-v8a)
   a full system and is noticeably faster. You can switch between them in Settings.
 - **Optional desktop.** XFCE over the bundled X11 display and PulseAudio audio. Install it
   during setup or add it later from the Ubuntu page. GPU acceleration uses Turnip + Zink on
-  Adreno and VirGL elsewhere.
+  Adreno, PanVK + Zink on MediaTek phones with a recent Mali GPU (Valhall v10 or newer) and
+  VirGL elsewhere.
 - **Your files, both ways:**
   - Ubuntu's home and its whole filesystem show up as roots in the Android Files app and any
     file picker.
@@ -43,12 +44,13 @@ By [akane599](https://github.com/akane599) · GPLv3 · Android 8.0+ (arm64-v8a)
 ## Install
 
 Download the APK from [GitHub Releases](https://github.com/akane599/fluxlinux-ubuntufied/releases).
-Open it, finish the short setup (runtime, optional desktop, storage access) and the terminal
-opens when Ubuntu is ready.
+Open it, finish the short setup (optional desktop, storage access, and PRoot or chroot when
+the phone is rooted) and the terminal opens when Ubuntu is ready.
 
 Releases are signed with this project's own key, and the package name is
-`com.ivarna.fluxlinux`. If you have an F-Droid or Play build of upstream FluxLinux installed,
-uninstall it first. **Uninstalling deletes its data.**
+`com.ivarna.fluxlinux`. If you have upstream FluxLinux from F-Droid or its GitHub releases
+installed, it uses the same package name, so uninstall it first. **Uninstalling deletes its
+data.** Upstream's Play build (`com.zenithblue.fluxlinux`) can stay installed alongside.
 
 ## Build
 
