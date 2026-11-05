@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -75,6 +76,14 @@ class TerminalWakeLockTest {
         TerminalWakeLock.release()
         assertEquals(1, fake.releases)
         assertFalse(TerminalWakeLock.held.value)
+    }
+
+    @Test
+    fun resetForTest_uninstallsTheFakeFactory() {
+        // Later tests in the same JVM must get the platform lock again, not this test's fake.
+        val fakeFactory = TerminalWakeLock.lockFactory
+        TerminalWakeLock.resetForTest()
+        assertNotSame(fakeFactory, TerminalWakeLock.lockFactory)
     }
 
     @Test

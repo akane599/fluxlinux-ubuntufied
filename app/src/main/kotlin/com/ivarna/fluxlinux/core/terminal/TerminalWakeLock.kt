@@ -31,8 +31,10 @@ object TerminalWakeLock {
 
     private var lock: Lock? = null
 
+    private val platformLockFactory: (Context) -> Lock = ::platformLock
+
     @VisibleForTesting
-    internal var lockFactory: (Context) -> Lock = ::platformLock
+    internal var lockFactory: (Context) -> Lock = platformLockFactory
 
     @Synchronized
     fun acquire(ctx: Context) {
@@ -51,10 +53,12 @@ object TerminalWakeLock {
         if (_held.value) release() else acquire(ctx)
     }
 
+    /** Drops the lock and puts the platform factory back, so a test's fake never leaks to the next. */
     @VisibleForTesting
     @Synchronized
     internal fun resetForTest() {
         lock = null
+        lockFactory = platformLockFactory
         _held.value = false
     }
 
