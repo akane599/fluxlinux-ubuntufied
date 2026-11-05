@@ -110,13 +110,16 @@ public final class TerminalBuffer {
         // it is negative in the transcript. Walk up to the transcript's first row, not screen
         // row 0 (upstream), or a wrapped line that starts in the transcript yields only its tail;
         // walk down to the screen's last row (upstream reached mScreenRows, one past it, which
-        // only worked because getSelectedText clamps).
+        // only worked because getSelectedText clamps). Each step looks only at the break between
+        // two neighbouring rows (whether row r ends the line depends on row r alone): upstream
+        // rebuilt the whole span on every step, which is quadratic once the walk can cross the
+        // whole transcript, and a tap runs on the main thread.
         int y1 = y;
         int y2 = y;
-        while (y1 > -getActiveTranscriptRows() && !getSelectedText(0, y1 - 1, mColumns, y, true, true).contains("\n")) {
+        while (y1 > -getActiveTranscriptRows() && !getSelectedText(0, y1 - 1, mColumns, y1, true, true).contains("\n")) {
             y1--;
         }
-        while (y2 < mScreenRows - 1 && !getSelectedText(0, y, mColumns, y2 + 1, true, true).contains("\n")) {
+        while (y2 < mScreenRows - 1 && !getSelectedText(0, y2, mColumns, y2 + 1, true, true).contains("\n")) {
             y2++;
         }
 

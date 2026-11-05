@@ -6,6 +6,7 @@ import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -97,6 +98,31 @@ class TerminalLinkAtTest {
         assertEquals(URL, linkAt(10, 0))
         assertEquals(URL, linkAt(3, 1))
         assertNull(linkAt(2, 0))
+    }
+
+    /**
+     * A tap runs on the main thread. Minified JSON or `cat` of a one-line file wraps across the
+     * whole scrollback; rebuilding the span from the walk's row to the tap on every step made one
+     * tap quadratic in the rows walked (seconds for a long scrollback, an ANR on a phone).
+     */
+    @Test
+    fun tapOnALineWrappedAcrossTheWholeScrollback_staysFast() {
+        val columns = 50
+        val rows = 24
+        val transcript = 20_000
+        val big = TerminalEmulator(Output(), columns, rows, transcript, Client)
+        // Exactly fills the buffer (its row count includes the screen): one wrapped line, no spaces.
+        val chars = columns * transcript
+        val line = "x".repeat(chars).toByteArray(Charsets.UTF_8)
+        big.append(line, line.size)
+        assertEquals(transcript - rows, big.screen.activeTranscriptRows)
+
+        val started = System.nanoTime()
+        val word = big.screen.getWordAtLocation(0, rows / 2)
+        val tookMs = (System.nanoTime() - started) / 1_000_000
+
+        assertEquals(chars, word.length)
+        assertTrue("one tap took $tookMs ms", tookMs < 1_000)
     }
 
     private companion object {

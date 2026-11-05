@@ -2,7 +2,8 @@
 // https://github.com/termux/termux-app/tree/v0.118.0/terminal-emulator.
 // Carries local fixes: TerminalSession.java (M6, never SIGKILL pid 0),
 // TerminalEmulator.java (CSI < / CSI = consumed, not printed),
-// TerminalBuffer.java (the word at a tap spans wrapped rows in the transcript),
+// TerminalBuffer.java (the word at a tap spans wrapped rows in the transcript, in
+// linear time),
 // TerminalColorScheme.java (default text, background and cursor are the app's
 // tokens) and src/main/jni/termux.c (L33, close ptm on errors, retry waitpid on EINTR).
 // Built here so libtermux.so is compiled from source with 16 KB page alignment
