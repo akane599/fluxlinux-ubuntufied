@@ -1,5 +1,6 @@
 package com.ivarna.fluxlinux.ui.screens
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Typeface
 import android.system.Os
@@ -486,6 +487,7 @@ fun TerminalScreen(
                     AndroidView(
                         factory = { ctx ->
                             TerminalView(ctx, null).apply {
+                                claimGesturesFromParents(this)
                                 setTextSize(fontSize)
                                 try {
                                     val tf = Typeface.createFromAsset(ctx.assets, "fonts/font.ttf")
@@ -641,6 +643,25 @@ fun TerminalScreen(
     }
 }
 
+/**
+ * The terminal keeps every gesture that starts on it. Compose hands an `AndroidView`'s moves to
+ * its ancestors first (Android's intercept model), and TerminalView never opts out, so the
+ * drawer's horizontal drag took over a scroll as soon as the finger drifted sideways past the
+ * touch slop: the scroll stopped (ACTION_CANCEL) and the drawer opened or sprang back. Claiming
+ * the gesture on ACTION_DOWN keeps scrolls (and selection, pinch zoom, mouse drags) in the
+ * terminal; the drawer still opens from [DrawerEdgeZone] and ☰. Compose clears the flag when the
+ * gesture ends.
+ */
+@SuppressLint("ClickableViewAccessibility") // Never consumes; TerminalView handles the event.
+private fun claimGesturesFromParents(view: TerminalView) {
+    view.setOnTouchListener { v, event ->
+        if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+            v.parent?.requestDisallowInterceptTouchEvent(true)
+        }
+        false
+    }
+}
+
 /** T3: tap → focus + IME (SHOW_FORCED fallback for OEMs). */
 private fun showTerminalIme(view: TerminalView) {
     view.requestFocus()
@@ -652,8 +673,8 @@ private fun showTerminalIme(view: TerminalView) {
 
 /**
  * Thin strip on the terminal's left edge that makes the drawer's edge swipe work over the
- * [TerminalView]. The `AndroidView` consumes every touch, so the drawer's own drag (on its
- * container, an ancestor) never starts there. This strip is hit before the terminal and consumes
+ * [TerminalView]. The terminal claims its gestures ([claimGesturesFromParents]), so the drawer's
+ * own drag (on its container, an ancestor) never starts there. This strip is hit before the terminal and consumes
  * nothing, so its touches reach that ancestor drag, which follows the finger. If a rightward swipe
  * still leaves the drawer unmoved, it opens the drawer itself; a plain tap is forwarded via [onTap]
  * so the strip doesn't leave a dead column. [systemGestureExclusion] keeps the swipe from becoming
