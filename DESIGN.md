@@ -348,7 +348,7 @@ The session drawer: a kachi sheet; the header is the headline-medium wordmark ov
 **AkaWordmark** sets "Aka" in akane and "Terminal" in shironeri over the horizon, 8 below the text. On first launch the horizon rises over 720ms (`RISE`, decelerate easing); elsewhere it is shown risen. The app mark and launcher icon are a shell prompt with the akane sun on the horizon where the cursor would be, over a sumi-to-konjō twilight sky with akane light. The icon's gradients are the sky (a vertical sumi, konjō, kachi blend), the akane light (a radial glow around the sun, on the launcher background only), the shu-to-akane sun and the horizon line; they stay inside the icon and the in-app mark (`ic_aka_mark`, the same sky, sun and horizon without the glow). Monochrome and status-bar icons are single white shapes. Geometry is shared with `scripts/render_launcher_icon.py`.
 
 ### Motion
-Durations: 120 quick, 220 standard, 360 emphasized, 720 rise. Easing: standard `cubic-bezier(0.2, 0, 0, 1)`, decelerate `cubic-bezier(0.05, 0.7, 0.1, 1)`. Springs: `rise` (no bounce, stiffness 180, about 400ms) for the horizon, `settle` (no bounce, stiffness 520) for thumbs and sheets. Nothing overshoots.
+Durations: 120 quick, 220 standard, 720 rise. Easing: standard `cubic-bezier(0.2, 0, 0, 1)`, decelerate `cubic-bezier(0.05, 0.7, 0.1, 1)`. Springs: `rise` (no bounce, stiffness 180, about 400ms) for the horizon, `settle` (no bounce, stiffness 520) for thumbs and sheets. Nothing overshoots.
 
 ## Do's and Don'ts
 

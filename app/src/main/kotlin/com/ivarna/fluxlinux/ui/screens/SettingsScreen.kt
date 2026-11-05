@@ -83,8 +83,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.PermissionState
 import com.ivarna.fluxlinux.BuildConfig
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.desktop.DesktopLauncher
@@ -92,7 +90,6 @@ import com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.utils.RuntimeSwitchDecision
-import com.ivarna.fluxlinux.core.utils.ThemeMode
 import com.ivarna.fluxlinux.core.utils.UbuntuInstallCheck
 import com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
@@ -125,13 +122,9 @@ private const val UPSTREAM_URL = "https://github.com/abhay-byte/fluxlinux"
  * Settings hub: rows in their own tiles, grouped by section labels; each row opens a
  * detail page. About sits at the end: the mark, the wordmark, links and credits.
  */
-@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    permissionState: PermissionState,
-    onStartService: (Intent) -> Unit,
-    onStartActivity: (Intent) -> Unit,
     onNavigateToOnboarding: (() -> Unit)? = null,
     onNavigateToTroubleshooting: (() -> Unit)? = null,
     onNavigateToTerminalSettings: (() -> Unit)? = null,
@@ -140,21 +133,7 @@ fun SettingsScreen(
     onNavigateToChrootSettings: (() -> Unit)? = null,
     onNavigateToProotSettings: (() -> Unit)? = null,
     onNavigateToLegacyTermuxSettings: (() -> Unit)? = null,
-    onThemeChanged: ((ThemeMode) -> Unit)? = null,
-    currentTheme: ThemeMode = ThemeMode.SYSTEM
 ) {
-    // Keep unused params so call sites stay stable (permission / theme hooks).
-    @Suppress("UNUSED_PARAMETER")
-    val _permissionState = permissionState
-    @Suppress("UNUSED_PARAMETER")
-    val _onStartService = onStartService
-    @Suppress("UNUSED_PARAMETER")
-    val _onStartActivity = onStartActivity
-    @Suppress("UNUSED_PARAMETER")
-    val _onThemeChanged = onThemeChanged
-    @Suppress("UNUSED_PARAMETER")
-    val _currentTheme = currentTheme
-
     val context = LocalContext.current
 
     SettingsPageScaffold(title = "Settings", onBack = onBack) {

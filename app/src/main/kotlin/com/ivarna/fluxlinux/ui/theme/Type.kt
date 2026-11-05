@@ -62,12 +62,6 @@ internal fun usePreviewFontFiles() {
     if (!previewFiles && File(PREVIEW_FONT_DIR, "archivo_regular.ttf").isFile) previewFiles = true
 }
 
-val ArchivoWide: FontFamily get() = families.wide
-
-val Archivo: FontFamily get() = families.text
-
-val AkaMono: FontFamily get() = families.mono
-
 private fun display(f: AkaFamilies, size: Int, line: Int, tracking: Double) = TextStyle(
     fontFamily = f.wide,
     fontWeight = FontWeight.SemiBold,

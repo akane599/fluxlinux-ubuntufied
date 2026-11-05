@@ -71,7 +71,6 @@ import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
 import com.ivarna.fluxlinux.ui.theme.AkaMotion
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
-import dev.chrisbanes.haze.HazeState
 
 /**
  * Manage one installed distro: a header with its state, its components as rows (expand for
@@ -85,12 +84,7 @@ fun DistroSettingsScreen(
     onUninstallComponent: (DistroComponent) -> Unit = {},
     onUninstallDistro: () -> Unit,
     onReinstallDistro: () -> Unit,
-    onStartActivity: (android.content.Intent) -> Unit,
-    hazeState: HazeState
 ) {
-    // Kept so the call site stays stable; the page no longer blurs anything.
-    @Suppress("UNUSED_VARIABLE")
-    val unusedHaze = hazeState
     val context = LocalContext.current
     val installState by InstallationQueueManager.installState.collectAsState()
     var showUninstallDialog by remember { mutableStateOf(false) }

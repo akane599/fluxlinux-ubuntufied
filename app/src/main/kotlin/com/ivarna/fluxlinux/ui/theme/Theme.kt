@@ -136,8 +136,6 @@ data class AkaInks(
     val running: Color,
     val held: Color,
     val failed: Color,
-    val idle: Color,
-    val isDark: Boolean,
 )
 
 private val DarkInks = AkaInks(
@@ -156,8 +154,6 @@ private val DarkInks = AkaInks(
     running = Iro.Wakatake,
     held = Iro.Yamabuki,
     failed = Iro.Tsutsuji,
-    idle = Iro.Ginnezumi,
-    isDark = true,
 )
 
 private val LightInks = AkaInks(
@@ -176,8 +172,6 @@ private val LightInks = AkaInks(
     running = Color(0xFF007A45),
     held = Color(0xFF8A6A00),
     failed = Iro.TsutsujiDeep,
-    idle = Color(0xFF424A63),
-    isDark = false,
 )
 
 val LocalAkaInks = staticCompositionLocalOf { DarkInks }

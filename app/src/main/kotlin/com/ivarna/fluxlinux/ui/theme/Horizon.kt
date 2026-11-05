@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 object AkaMotion {
     const val QUICK = 120
     const val STANDARD = 220
-    const val EMPHASIZED = 360
     /** The wordmark's horizon on first launch: long enough to read as a sunrise, never a wait. */
     const val RISE = 720
 

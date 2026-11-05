@@ -23,15 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
-import com.google.accompanist.permissions.isGranted
 import com.ivarna.fluxlinux.ui.components.BottomTab
 import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
 import com.ivarna.fluxlinux.core.utils.StateManager
-import com.ivarna.fluxlinux.core.utils.ThemePreferences
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import dev.chrisbanes.haze.HazeState
 
 // Screen navigation enum
 enum class Screen {
@@ -637,14 +634,6 @@ class MainActivity : ComponentActivity() {
                     onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
                 
-                // Helpers for service/activity
-                val onStartServiceStub: (android.content.Intent) -> Unit = { intent ->
-                    try { startService(intent) } catch (e: Exception) { android.util.Log.e("FluxLinux", "StartService failed", e) }
-                }
-                val onStartActivityStub: (android.content.Intent) -> Unit = { intent ->
-                    try { startActivity(intent) } catch (e: Exception) { android.util.Log.e("FluxLinux", "StartActivity failed", e) }
-                }
-                
                 // Navigation Callbacks
                 val onNavigateToInstall: (com.ivarna.fluxlinux.core.data.Distro) -> Unit = { distro ->
                     selectedDistro = distro
@@ -745,9 +734,6 @@ class MainActivity : ComponentActivity() {
                     Screen.SETTINGS -> {
                         com.ivarna.fluxlinux.ui.screens.SettingsScreen(
                             onBack = leaveSettings,
-                            permissionState = permissionState,
-                            onStartService = onStartServiceStub,
-                            onStartActivity = onStartActivityStub,
                             onNavigateToOnboarding = {
                                 StateManager.setOnboardingComplete(this@MainActivity, false)
                                 currentScreen = Screen.ONBOARDING
@@ -899,12 +885,10 @@ class MainActivity : ComponentActivity() {
                          }
                     }
                     Screen.DISTRO_SETTINGS -> {
-                         val hazeState = remember { HazeState() }
                          if (selectedDistro != null) {
                               com.ivarna.fluxlinux.ui.screens.DistroSettingsScreen(
                                   distro = selectedDistro!!,
                                   onBack = { currentScreen = Screen.HOME },
-                                  hazeState = hazeState,
                                    onInstallComponent = { component, extraEnv ->
                                        // Embedded: run component script inside the guest via
                                        // the same terminal component as the parent distro.
@@ -967,7 +951,6 @@ class MainActivity : ComponentActivity() {
                                          }
                                      )
                                  },
-                                  onStartActivity = onStartActivityStub,
                               )
 
                          } else {

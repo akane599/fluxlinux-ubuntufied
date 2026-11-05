@@ -2,7 +2,6 @@ package com.ivarna.fluxlinux.core.data
 
 import com.ivarna.fluxlinux.core.model.SupportedDistro
 import com.ivarna.fluxlinux.ui.theme.FluxAccentMagenta
-import com.ivarna.fluxlinux.ui.theme.FluxAccentCyan
 import androidx.compose.ui.graphics.Color
 import com.ivarna.fluxlinux.R
 import java.util.Locale

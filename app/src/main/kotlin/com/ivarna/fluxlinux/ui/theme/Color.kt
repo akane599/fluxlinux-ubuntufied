@@ -70,11 +70,10 @@ object Iro {
  */
 val TerminalBackground = Color(0xFF000000)
 
-// ─── Legacy names ─────────────────────────────────────────────────────────────
-// Older code still imports these; they resolve to the traditional colours so nothing drifts
-// back to an older look. New code reads MaterialTheme.colorScheme / AkaTheme.inks.
+// ─── Legacy name ──────────────────────────────────────────────────────────────
+// Older code (DistroRepository) still imports this; it resolves to a traditional colour so
+// nothing drifts back to an older look. New code reads MaterialTheme.colorScheme / AkaTheme.inks.
 
-val FluxAccentCyan = Iro.ShiroAi
 val FluxAccentMagenta = Iro.Tsutsuji
 
 /** Swatches previewing the XFCE desktop themes in setup: content, not app chrome. */
