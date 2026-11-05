@@ -1,6 +1,5 @@
 package com.ivarna.fluxlinux.ui.screens
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Typeface
 import android.system.Os
@@ -90,6 +89,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -100,6 +100,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ivarna.fluxlinux.R
@@ -126,6 +127,7 @@ import com.ivarna.fluxlinux.ui.terminal.TerminalModifierState
 import com.ivarna.fluxlinux.ui.terminal.TerminalSessionChoices
 import com.ivarna.fluxlinux.ui.terminal.TerminalSessionDefaults
 import com.ivarna.fluxlinux.ui.terminal.hideIme
+import com.ivarna.fluxlinux.ui.terminal.keepTerminalGestures
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 import com.ivarna.fluxlinux.ui.theme.TerminalBackground
 import com.termux.view.TerminalView
@@ -157,8 +159,8 @@ private val EDGE_OPEN_DISTANCE = 48.dp
  * In-app terminal with multi-session support + full ExtraKeys toolbar (injectKey / ModifierState lock).
  *
  * The app's home screen. No top bar: sessions, new shells, the extra-keys toggle and the way to
- * the Ubuntu overview, Files and Settings live in a Termux-style drawer opened by a left-edge
- * swipe or the extra keys' ☰ key.
+ * the Ubuntu overview, Files and Settings live in a Termux-style drawer opened by a swipe
+ * towards it on the terminal ([keepTerminalGestures], [DrawerEdgeZone]) or the extra keys' ☰ key.
  *
  * Tapping a web link in the output opens it in the default browser ([TerminalClipboard.linkAt]);
  * other taps raise the keyboard. Paste: the extra keys' Paste key, Ctrl+Shift+V, or the menu
@@ -177,6 +179,7 @@ fun TerminalScreen(
     onOpenSettings: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val activeIndex by FluxTerminalSessionManager.activeIndex.collectAsState()
     val sessionRevision by FluxTerminalSessionManager.revision.collectAsState()
     val titles = remember(sessionRevision) { FluxTerminalSessionManager.titles() }
@@ -487,7 +490,6 @@ fun TerminalScreen(
                     AndroidView(
                         factory = { ctx ->
                             TerminalView(ctx, null).apply {
-                                claimGesturesFromParents(this)
                                 setTextSize(fontSize)
                                 try {
                                     val tf = Typeface.createFromAsset(ctx.assets, "fonts/font.ttf")
@@ -576,7 +578,9 @@ fun TerminalScreen(
                             // T5: resize + SIGWINCH only on real size/pid change.
                             forceTerminalResize(view)
                         },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .keepTerminalGestures(rtl) { terminalViewRef }
                     )
                     DrawerEdgeZone(
                         drawerState = drawerState,
@@ -643,25 +647,6 @@ fun TerminalScreen(
     }
 }
 
-/**
- * The terminal keeps every gesture that starts on it. Compose hands an `AndroidView`'s moves to
- * its ancestors first (Android's intercept model), and TerminalView never opts out, so the
- * drawer's horizontal drag took over a scroll as soon as the finger drifted sideways past the
- * touch slop: the scroll stopped (ACTION_CANCEL) and the drawer opened or sprang back. Claiming
- * the gesture on ACTION_DOWN keeps scrolls (and selection, pinch zoom, mouse drags) in the
- * terminal; the drawer still opens from [DrawerEdgeZone] and ☰. Compose clears the flag when the
- * gesture ends.
- */
-@SuppressLint("ClickableViewAccessibility") // Never consumes; TerminalView handles the event.
-private fun claimGesturesFromParents(view: TerminalView) {
-    view.setOnTouchListener { v, event ->
-        if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-            v.parent?.requestDisallowInterceptTouchEvent(true)
-        }
-        false
-    }
-}
-
 /** T3: tap → focus + IME (SHOW_FORCED fallback for OEMs). */
 private fun showTerminalIme(view: TerminalView) {
     view.requestFocus()
@@ -672,13 +657,13 @@ private fun showTerminalIme(view: TerminalView) {
 }
 
 /**
- * Thin strip on the terminal's left edge that makes the drawer's edge swipe work over the
- * [TerminalView]. The terminal claims its gestures ([claimGesturesFromParents]), so the drawer's
- * own drag (on its container, an ancestor) never starts there. This strip is hit before the terminal and consumes
- * nothing, so its touches reach that ancestor drag, which follows the finger. If a rightward swipe
- * still leaves the drawer unmoved, it opens the drawer itself; a plain tap is forwarded via [onTap]
- * so the strip doesn't leave a dead column. [systemGestureExclusion] keeps the swipe from becoming
- * the system Back gesture inside this bounded band.
+ * Thin strip on the terminal's left edge where an edge swipe opens the drawer instead of going
+ * Back: [systemGestureExclusion] keeps the system Back gesture out of this bounded band. Elsewhere
+ * on the terminal the drawer's own drag (on its container, an ancestor) takes swipes towards it
+ * ([keepTerminalGestures]). This strip is hit before the terminal and consumes nothing, so its
+ * touches reach that drag too, which follows the finger. If a rightward swipe still leaves the
+ * drawer unmoved, it opens the drawer itself; a plain tap is forwarded via [onTap] so the strip
+ * doesn't leave a dead column.
  */
 @Composable
 private fun DrawerEdgeZone(
