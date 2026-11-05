@@ -1,0 +1,6 @@
+- FluxLinux Ubuntu edition is now AkaTerminal: the app opens on its terminal
+- XFCE desktop is optional: add it in setup or later from the Ubuntu page
+- Chroot runtime on rooted phones, next to PRoot
+- Tap links to open them; Paste and TAB keys; Exit and Hold wakelock in the notification
+- New dark design and launcher icon
+- New signing key: uninstall v2.1.x first (this deletes its data)

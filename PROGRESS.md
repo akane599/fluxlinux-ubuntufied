@@ -10,7 +10,8 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
   - [ ] Ask the user before pushing to PR #2.
   - [ ] Device checks (signed release on the phone): the TAB key, a link tapped in the scrollback, terminal colours, the idle X11 mark, the warning notification and Desktop panel; customization exit 3 through `proot-distro login` and `captureInChroot`; plus the older list (Paste key and More… menu, Hold wakelock, an existing XFCE install's Start/Open/Stop, a PRoot flux → akane migration from v2.1.8, drawer horizon, key caps and launcher icon).
   - [ ] Secondary screens still use Material `OutlinedButton`/`TextButton` (stadium shape) in dialogs and some settings pages; move them to `AkaButton` if the user wants full consistency.
-  - [ ] Merge PR #1, then PR #2; release v2.2.0 (`.claude/rules/release.md`); store screenshots and featureGraphic still show the old look.
+  - [x] PR #1 merged; main carries the terminal-first work; v2.2.0 published as a pre-release.
+  - [ ] Promote v2.2.0 to a full release once the user has tried it; close PR #2 (its commits are on main); store screenshots and featureGraphic still show the old look.
 - **Open questions:** should the debug build also be signed with the user's key (so `run-as` diagnosis works on the phone without wiping data)? Not asked yet.
 
 ## Baseline
@@ -78,6 +79,7 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 - 2026-11-05: a run that finishes with a warning also posts a dismissible notification (id 4713, cleared by the next install start), because the keep-alive FGS notification is removed right after its last update and the warning flashed by in the background.
 - 2026-11-05: on the Ubuntu page an INSTALLED detection wins over a failed add-on run (a failed run that left `startxfce4` reads INCOMPLETE), so a later verified install from Distro Settings doesn't still show "Install failed".
 - 2026-11-06: the extra-keys Tab key is labelled TAB instead of Termux's ↹ (user asked for "a TAB button": the glyph came out small in the fallback font and didn't read as one); the other Termux glyphs (arrows, ―) stay.
+- 2026-11-06: v2.2.0 (23) is the first release as AkaTerminal (user request): the GitHub repo is renamed to `akane599/AkaTerminal` (old URLs redirect), releases are titled "AkaTerminal v<ver>" with `AkaTerminal-v<ver>[-debug].apk` assets, and it is published as a pre-release until the user has tried it on the phone (the release rule's device check). It's the first release signed with the user's key, so v2.1.x installs must uninstall first (the notes and README say so).
 
 ## Audit status
 | Area | Last run | Result | How |
