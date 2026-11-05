@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ubuntu page (AkaTerminal redesign): status plate words, the phantom process dialog and the
-     legacy distro card. Existing Ubuntu page copy stays in strings_home.xml. -->
+<!-- Ubuntu page (AkaTerminal redesign): status plate words and the phantom process dialog.
+     Existing Ubuntu page copy stays in strings_home.xml. -->
 <resources>
     <!-- Status plate: the desktop's run state, next to Ready / Root needed / Not installed. -->
     <string name="ubuntu_aka_status_running">Desktop running</string>
@@ -26,22 +26,4 @@
     <string name="ubuntu_aka_phantom_adb_copied">Commands copied to clipboard</string>
     <string name="ubuntu_aka_phantom_close">Close</string>
     <string name="ubuntu_aka_phantom_hide">Don\'t show again</string>
-
-    <!-- Legacy distro card (other distros; not in the main UI). Sentence case. -->
-    <string name="ubuntu_aka_distro_logo">%1$s logo</string>
-    <string name="ubuntu_aka_distro_settings">Settings</string>
-    <string name="ubuntu_aka_chip_proot">PRoot</string>
-    <string name="ubuntu_aka_chip_chroot">Chroot</string>
-    <string name="ubuntu_aka_chip_no_root">No root</string>
-    <string name="ubuntu_aka_chip_starting">Starting</string>
-    <string name="ubuntu_aka_chip_running">Running</string>
-    <string name="ubuntu_aka_chip_soon">Soon</string>
-    <string name="ubuntu_aka_card_progress">Progress</string>
-    <string name="ubuntu_aka_card_busy">Busy</string>
-    <string name="ubuntu_aka_card_install">Install</string>
-    <string name="ubuntu_aka_card_open">Open</string>
-    <string name="ubuntu_aka_card_stop">Stop</string>
-    <string name="ubuntu_aka_card_logs">Logs</string>
-    <string name="ubuntu_aka_card_need_root">Need root</string>
-    <string name="ubuntu_aka_card_start">Start</string>
 </resources>

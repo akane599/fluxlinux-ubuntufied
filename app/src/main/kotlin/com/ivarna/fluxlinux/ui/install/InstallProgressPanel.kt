@@ -49,7 +49,6 @@ import com.ivarna.fluxlinux.ui.components.aka.AkaButton
 import com.ivarna.fluxlinux.ui.components.aka.AkaButtonKind
 import com.ivarna.fluxlinux.ui.components.aka.StatusMark
 import com.ivarna.fluxlinux.ui.components.aka.markColor
-import com.ivarna.fluxlinux.ui.components.aka.selectionInks
 import com.ivarna.fluxlinux.ui.components.aka.akaSelection
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
@@ -302,9 +301,8 @@ fun InstallThemePickRow(
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val ink = selectionInks()
-    val titleColor = if (selected) ink.onFill else colors.onSurface
-    val mutedColor = if (selected) ink.onFill.copy(alpha = 0.82f) else colors.onSurfaceVariant
+    val titleColor = colors.onSurface
+    val mutedColor = if (selected) colors.onSurface.copy(alpha = 0.82f) else colors.onSurfaceVariant
 
     Row(
         modifier = Modifier
@@ -325,7 +323,7 @@ fun InstallThemePickRow(
             selected = selected,
             onClick = null,
             colors = RadioButtonDefaults.colors(
-                selectedColor = ink.onFill,
+                selectedColor = colors.onSurface,
                 unselectedColor = colors.onSurfaceVariant
             ),
             modifier = Modifier.padding(FluxSpacing.sm)

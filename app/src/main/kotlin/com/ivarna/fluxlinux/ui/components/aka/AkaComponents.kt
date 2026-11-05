@@ -98,15 +98,10 @@ fun Modifier.akaTile(
         .border(1.dp, edge, shape)
 }
 
-/** Content on a selected container: the night's text, the container itself says "selected". */
-data class SelectionInks(val fill: Color, val onFill: Color)
-
-@Composable
-fun selectionInks(): SelectionInks = SelectionInks(AkaTheme.inks.tilePressed, MaterialTheme.colorScheme.onSurface)
-
 /**
  * A choice among siblings (a segment, an option, the current session): a tile, and when
  * [selected] the konjō container with the ai edge and the horizon rising along its bottom.
+ * Content on it keeps the night's text (`colorScheme.onSurface`): the container says "selected".
  */
 @Composable
 fun Modifier.akaSelection(

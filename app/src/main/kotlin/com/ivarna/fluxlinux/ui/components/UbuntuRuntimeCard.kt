@@ -40,8 +40,8 @@ import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
 import com.ivarna.fluxlinux.ui.components.aka.StatusMark
-import com.ivarna.fluxlinux.ui.components.aka.selectionInks
 import com.ivarna.fluxlinux.ui.components.aka.akaSelection
+import com.ivarna.fluxlinux.ui.components.aka.akaTile
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 
 // Local sizes; spacing comes from FluxSpacing, radii from MaterialTheme.shapes.
@@ -72,83 +72,87 @@ fun UbuntuRuntimeCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    GlassSettingCard(modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(FluxSpacing.lg)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Sharp.Layers,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.size(IconSize)
+    // A settings block: one large tile (kon fill, hanada edge).
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .akaTile(MaterialTheme.shapes.large)
+            .padding(FluxSpacing.lg)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Sharp.Layers,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(IconSize)
+            )
+            Spacer(Modifier.width(FluxSpacing.lg))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.settings_runtime_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.onSurface
                 )
-                Spacer(Modifier.width(FluxSpacing.lg))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.settings_runtime_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colors.onSurface
-                    )
-                    Text(
-                        stringResource(
-                            if (state.selected == UbuntuRuntimeMode.CHROOT) R.string.settings_runtime_chroot_sub
-                            else R.string.settings_runtime_proot_sub
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceVariant
-                    )
-                }
+                Text(
+                    stringResource(
+                        if (state.selected == UbuntuRuntimeMode.CHROOT) R.string.settings_runtime_chroot_sub
+                        else R.string.settings_runtime_proot_sub
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
             }
+        }
 
+        Spacer(Modifier.height(FluxSpacing.md))
+        Row(
+            // The segments sit straight on the card: each is its own tile, no track around them.
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
+        ) {
+            RuntimeSegment(
+                label = stringResource(R.string.settings_runtime_proot),
+                selected = state.selected == UbuntuRuntimeMode.PROOT,
+                enabled = !state.checking,
+                onClick = { onSelect(UbuntuRuntimeMode.PROOT) },
+                modifier = Modifier.weight(1f)
+            )
+            RuntimeSegment(
+                label = stringResource(R.string.settings_runtime_chroot),
+                selected = state.selected == UbuntuRuntimeMode.CHROOT,
+                enabled = !state.checking,
+                onClick = { onSelect(UbuntuRuntimeMode.CHROOT) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        val status = if (state.checking) stringResource(R.string.settings_runtime_checking) else state.message
+        if (status != null) {
             Spacer(Modifier.height(FluxSpacing.md))
             Row(
-                // The segments sit straight on the card: each is its own tile, no track around them.
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             ) {
-                RuntimeSegment(
-                    label = stringResource(R.string.settings_runtime_proot),
-                    selected = state.selected == UbuntuRuntimeMode.PROOT,
-                    enabled = !state.checking,
-                    onClick = { onSelect(UbuntuRuntimeMode.PROOT) },
-                    modifier = Modifier.weight(1f)
-                )
-                RuntimeSegment(
-                    label = stringResource(R.string.settings_runtime_chroot),
-                    selected = state.selected == UbuntuRuntimeMode.CHROOT,
-                    enabled = !state.checking,
-                    onClick = { onSelect(UbuntuRuntimeMode.CHROOT) },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            val status = if (state.checking) stringResource(R.string.settings_runtime_checking) else state.message
-            if (status != null) {
-                Spacer(Modifier.height(FluxSpacing.md))
-                Row(
-                    verticalAlignment = Alignment.Top,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-                ) {
-                    val mark = when {
-                        state.checking -> MarkState.WORKING
-                        state.messageIsError -> MarkState.FAILED
-                        else -> null
-                    }
-                    if (mark != null) {
-                        StatusMark(
-                            state = mark,
-                            size = StatusMarkSize,
-                            modifier = Modifier.padding(top = FluxSpacing.xxs)
-                        )
-                        Spacer(Modifier.width(FluxSpacing.sm))
-                    }
-                    Text(
-                        status,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (state.messageIsError && !state.checking) colors.error else colors.onSurfaceVariant
-                    )
+                val mark = when {
+                    state.checking -> MarkState.WORKING
+                    state.messageIsError -> MarkState.FAILED
+                    else -> null
                 }
+                if (mark != null) {
+                    StatusMark(
+                        state = mark,
+                        size = StatusMarkSize,
+                        modifier = Modifier.padding(top = FluxSpacing.xxs)
+                    )
+                    Spacer(Modifier.width(FluxSpacing.sm))
+                }
+                Text(
+                    status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state.messageIsError && !state.checking) colors.error else colors.onSurfaceVariant
+                )
             }
         }
     }
@@ -166,7 +170,6 @@ private fun RuntimeSegment(
     val shape = MaterialTheme.shapes.extraSmall
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val ink = selectionInks()
     Row(
         modifier = modifier
             .heightIn(min = FluxSpacing.touch)
@@ -183,11 +186,8 @@ private fun RuntimeSegment(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val content = when {
-            selected -> ink.onFill
-            enabled -> colors.onSurface
-            else -> colors.onSurfaceVariant.copy(alpha = 0.6f)
-        }
+        // The selected segment keeps the night's text; its container says "selected".
+        val content = if (selected || enabled) colors.onSurface else colors.onSurfaceVariant.copy(alpha = 0.6f)
         if (selected) {
             Icon(
                 Icons.Sharp.Check,

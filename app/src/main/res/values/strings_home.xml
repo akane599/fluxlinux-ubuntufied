@@ -51,7 +51,6 @@
     <string name="home_desktop_cancel">Cancel</string>
     <string name="home_desktop_install_failed">The desktop install didn\'t finish.</string>
     <string name="home_desktop_retry">Try again</string>
-    <string name="home_desktop_install_busy">Another install is running. Try again when it finishes.</string>
     <string name="home_desktop_confirm_title">Install the XFCE desktop?</string>
     <string name="home_desktop_confirm_body">It downloads several hundred MB and takes a few minutes. Ubuntu stays usable meanwhile; avoid apt in the terminal until it finishes.</string>
     <string name="home_desktop_confirm_theme">Desktop theme</string>

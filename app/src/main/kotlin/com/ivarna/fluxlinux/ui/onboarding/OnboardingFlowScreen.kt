@@ -108,7 +108,6 @@ import com.ivarna.fluxlinux.ui.theme.TerminalBackground
 import com.ivarna.fluxlinux.ui.theme.horizon
 import com.ivarna.fluxlinux.ui.components.aka.StatusMark
 import com.ivarna.fluxlinux.ui.components.aka.markColor
-import com.ivarna.fluxlinux.ui.components.aka.selectionInks
 import com.ivarna.fluxlinux.ui.components.aka.akaSelection
 import com.ivarna.fluxlinux.ui.components.aka.akaTile
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
@@ -1469,10 +1468,9 @@ private fun OptionTile(
     val shape = MaterialTheme.shapes.medium
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val ink = selectionInks()
     val colors = MaterialTheme.colorScheme
-    val contentColor = if (selected) ink.onFill else colors.onSurface
-    val muted = if (selected) ink.onFill.copy(alpha = 0.82f) else colors.onSurfaceVariant
+    val contentColor = colors.onSurface
+    val muted = if (selected) colors.onSurface.copy(alpha = 0.82f) else colors.onSurfaceVariant
     Box(
         modifier = modifier
             .akaSelection(selected, pressed, shape)
