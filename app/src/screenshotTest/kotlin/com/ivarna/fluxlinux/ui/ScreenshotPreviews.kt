@@ -1,30 +1,28 @@
 package com.ivarna.fluxlinux.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.sharp.VolumeUp
+import androidx.compose.material.icons.sharp.DisplaySettings
+import androidx.compose.material.icons.sharp.Folder
+import androidx.compose.material.icons.sharp.SdStorage
+import androidx.compose.material.icons.sharp.Storage
+import androidx.compose.material.icons.sharp.Terminal
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.android.tools.screenshot.PreviewTest
 import com.ivarna.fluxlinux.core.utils.ThemeMode
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.components.DesktopAddOnUi
-import com.ivarna.fluxlinux.ui.components.FluxSwitch
-import com.ivarna.fluxlinux.ui.components.GlassSettingCard
 import com.ivarna.fluxlinux.ui.components.SharedStorageUi
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboard
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardActions
@@ -32,7 +30,13 @@ import com.ivarna.fluxlinux.ui.components.UbuntuDashboardState
 import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeCard
 import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeUi
 import com.ivarna.fluxlinux.ui.components.UbuntuStatus
+import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
+import com.ivarna.fluxlinux.ui.screens.SettingsAboutSection
+import com.ivarna.fluxlinux.ui.screens.SettingsPageNavRow
+import com.ivarna.fluxlinux.ui.screens.SettingsPageScaffold
+import com.ivarna.fluxlinux.ui.theme.AkaTheme
 import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 
 // Screenshot previews built from the stateless leaf composables the real screens
 // (HomeScreen, SettingsScreen) are made of. The screens themselves read device
@@ -198,7 +202,7 @@ fun SettingsRuntimePreview() {
                 state = UbuntuRuntimeUi(
                     selected = UbuntuRuntimeMode.PROOT,
                     message = "Root access was denied or isn't available. Ubuntu stays on PRoot. " +
-                        "Allow FluxLinux in your root manager (Magisk, KernelSU) and try again.",
+                        "Allow AkaTerminal in your root manager (Magisk, KernelSU) and try again.",
                     messageIsError = true
                 ),
                 onSelect = {}
@@ -211,56 +215,45 @@ fun SettingsRuntimePreview() {
     }
 }
 
+// The Settings hub, built from the same rows SettingsScreen uses (the screen itself probes
+// root, storage access and the phantom process killer, so the preview fakes those rows).
 @PreviewTest
-@Preview(name = "Settings", showBackground = true, widthDp = 360, heightDp = 220)
+@Preview(name = "Settings", showBackground = true, widthDp = 360, heightDp = 760)
 @Composable
 fun SettingsPreview() {
-    PreviewHost {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            SectionHeader("App")
-            SettingRow(title = "Terminal", subtitle = "Font, size and extra keys", checked = false)
-            SectionHeader("Advanced")
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.secondary
-    )
-}
-
-@Composable
-private fun SettingRow(title: String, subtitle: String, checked: Boolean) {
-    GlassSettingCard(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    subtitle,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+    FluxLinuxTheme(themeMode = ThemeMode.DARK, dynamicColor = false) {
+        SettingsPageScaffold(title = "Settings", onBack = {}) {
+            SectionLabel("App")
+            Box(Modifier.padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)) {
+                UbuntuRuntimeCard(state = UbuntuRuntimeUi(selected = UbuntuRuntimeMode.CHROOT), onSelect = {})
             }
-            Spacer(Modifier.width(14.dp))
-            FluxSwitch(checked = checked, onCheckedChange = null)
+            SettingsPageNavRow(
+                icon = Icons.Sharp.SdStorage,
+                title = "Shared storage",
+                subtitle = "Not allowed: guests cannot see /sdcard or USB drives. Tap, then enable All files access",
+                iconTint = AkaTheme.inks.held,
+                onClick = {},
+            )
+            SettingsPageNavRow(Icons.Sharp.Terminal, "Terminal", {}, subtitle = "Font zoom, extra keys, and guest shell")
+            SettingsPageNavRow(Icons.Sharp.DisplaySettings, "X11 display", {}, subtitle = "Scale, fullscreen, input for embedded X11")
+            SettingsPageNavRow(Icons.AutoMirrored.Sharp.VolumeUp, "Audio", {}, subtitle = "Host PulseAudio status, start, restart, logs")
+            SectionLabel("Advanced")
+            SettingsPageNavRow(Icons.Sharp.Storage, "Chroot", {}, subtitle = "Installed roots, size, kill orphan processes")
+            SettingsPageNavRow(Icons.Sharp.Folder, "PRoot", {}, subtitle = "Installed containers and app-storage size")
         }
     }
+}
+
+@PreviewTest
+@Preview(name = "SettingsAbout", showBackground = true, widthDp = 360, heightDp = 900)
+@Composable
+fun SettingsAboutPreview() {
+    PreviewHost { SettingsAboutSection(open = {}) }
+}
+
+@PreviewTest
+@Preview(name = "SettingsAboutLargeFont", showBackground = true, widthDp = 360, heightDp = 1100, fontScale = 1.3f)
+@Composable
+fun SettingsAboutLargeFontPreview() {
+    PreviewHost { SettingsAboutSection(open = {}) }
 }

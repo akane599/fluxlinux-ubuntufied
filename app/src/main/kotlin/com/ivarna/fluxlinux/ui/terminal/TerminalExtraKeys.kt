@@ -16,6 +16,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,11 +29,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.sharp.ContentPaste
+import androidx.compose.material.icons.sharp.Menu
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,11 +57,17 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
+import com.ivarna.fluxlinux.ui.components.aka.PlateKind
+import com.ivarna.fluxlinux.ui.components.aka.plateInks
+import com.ivarna.fluxlinux.ui.components.aka.plateOffset
+import com.ivarna.fluxlinux.ui.theme.AkaTheme
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
+import com.ivarna.fluxlinux.ui.theme.misregistered
 import com.termux.view.TerminalView
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -308,6 +315,10 @@ private val LOCK_INDICATOR_HEIGHT = 2.dp
  * Two fixed utility columns sit outside the scroll and mirror each other: ☰ ([onOpenDrawer])
  * at the left edge and Paste ([onPaste]; long-press: [onPasteLongPress], the clipboard menu)
  * at the right edge, so Paste is always one tap away whatever the keys are scrolled to.
+ *
+ * Printed as the Federal Blue shell field under the terminal: keys lie flat on the field with
+ * bone labels and take one tint up while pressed; a latched modifier (CTRL, ALT, SHFT, Fn)
+ * prints as the selection overprint, its plates out of register until pressed.
  */
 @Composable
 fun TerminalExtraKeys(
@@ -372,7 +383,7 @@ fun TerminalExtraKeys(
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .background(AkaTheme.inks.shellField)
         ) {
             val gridWidth = maxWidth - (KEY_GAP + UTILITY_KEY_WIDTH) * 2
             fun cellWidthFor(columns: Int): Dp = (gridWidth - KEY_GAP * (columns + 1)) / columns
@@ -388,7 +399,11 @@ fun TerminalExtraKeys(
 
             val utilityHeight = KEY_HEIGHT * rows.size + KEY_GAP * (rows.size - 1)
 
-            CompositionLocalProvider(LocalCompactLabels provides compactLabels) {
+            CompositionLocalProvider(
+                LocalCompactLabels provides compactLabels,
+                // Ripples and icons on the field take its bone ink.
+                LocalContentColor provides AkaTheme.inks.onShellField,
+            ) {
                 Row(modifier = Modifier.padding(vertical = KEY_GAP)) {
                     DrawerKey(
                         onClick = onOpenDrawer,
@@ -423,22 +438,42 @@ fun TerminalExtraKeys(
     }
 }
 
-/** Single glyphs (arrows, ↹, symbols) read larger, like Termux's keys; words stay compact. */
+/**
+ * Single glyphs (arrows, ↹, symbols) read larger, like Termux's keys, and are cut in the mono
+ * face of the terminal; word keys (ESC, HOME, CTRL) stay compact in the label roles.
+ */
 @Composable
 private fun labelStyle(label: String): TextStyle = when {
-    label.length == 1 -> MaterialTheme.typography.titleMedium
+    label.length == 1 -> MaterialTheme.typography.titleMedium.copy(fontFamily = CodeStyle.fontFamily)
     LocalCompactLabels.current -> MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)
     else -> MaterialTheme.typography.labelMedium
 }
 
-/** Key face: flat tonal fill on the bar; an active modifier or Fn takes the cream accent. */
+/**
+ * A key cap on the shell field: flat on the field at rest, one printed tint up while pressed.
+ * An [active] key (a latched modifier, Fn) is the selection overprint whose plates rest out of
+ * register and settle into register while pressed. Drawn before the clip, so the plates can
+ * spill into the [KEY_GAP] around the cap.
+ */
 @Composable
-private fun keyFill(active: Boolean): Color =
-    if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
+private fun keyCapModifier(active: Boolean, pressed: Boolean): Modifier {
+    val shape = MaterialTheme.shapes.extraSmall
+    val plates = plateInks(PlateKind.SELECTION)
+    val offset = plateOffset(registered = pressed)
+    return if (active) {
+        Modifier
+            .misregistered(shape, plates.fill, plates.plateA, plates.plateB) { offset }
+            .clip(shape)
+    } else {
+        Modifier
+            .clip(shape)
+            .background(if (pressed) AkaTheme.inks.shellFieldHigh else Color.Transparent)
+    }
+}
 
 @Composable
 private fun keyContent(active: Boolean): Color =
-    if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    if (active) plateInks(PlateKind.SELECTION).onFill else AkaTheme.inks.onShellField
 
 @Composable
 private fun ModifierKey(
@@ -450,28 +485,33 @@ private fun ModifierKey(
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .fillMaxHeight()
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(keyFill(active))
-            .combinedClickable(onClick = onPress, onLongClick = onLongPress)
+            .then(keyCapModifier(active, pressed))
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onPress,
+                onLongClick = onLongPress
+            )
     ) {
         KeyLabel(
             label = label,
             description = description,
-            color = keyContent(active),
-            fontWeight = FontWeight.SemiBold
+            color = keyContent(active)
         )
         // Locked (long-press) adds a bar under the label, so it reads apart from a one-shot press.
         if (locked) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 5.dp)
+                    .padding(bottom = FluxSpacing.xs)
                     .size(width = LOCK_INDICATOR_WIDTH, height = LOCK_INDICATOR_HEIGHT)
-                    .background(keyContent(true), CircleShape)
+                    .background(keyContent(true), MaterialTheme.shapes.extraSmall)
             )
         }
     }
@@ -487,12 +527,22 @@ private fun ModifierKey(
  * Accessibility services get the same single-key action through semantics.
  */
 @Composable
-private fun keyClickModifier(onClick: () -> Unit, onHoldEnd: (() -> Unit)?): Modifier {
-    if (onHoldEnd == null) return Modifier.combinedClickable(onClick = onClick)
+private fun keyClickModifier(
+    onClick: () -> Unit,
+    onHoldEnd: (() -> Unit)?,
+    // The key's own source, so its cap can show the pressed tint.
+    interactionSource: MutableInteractionSource,
+): Modifier {
+    if (onHoldEnd == null) {
+        return Modifier.combinedClickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            onClick = onClick
+        )
+    }
     val fire by rememberUpdatedState(onClick)
     val end by rememberUpdatedState(onHoldEnd)
     val accelerated by rememberUpdatedState(LocalKeyRepeatAccelerated.current)
-    val interactionSource = remember { MutableInteractionSource() }
     return Modifier
         .indication(interactionSource, LocalIndication.current)
         .semantics(mergeDescendants = true) {
@@ -554,19 +604,19 @@ private fun ToolbarKey(
     onHoldEnd: (() -> Unit)? = null,
     active: Boolean = false
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .fillMaxHeight()
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(keyFill(active))
-            .then(keyClickModifier(onClick, onHoldEnd))
+            .then(keyCapModifier(active, pressed))
+            .then(keyClickModifier(onClick, onHoldEnd, interactionSource))
     ) {
         KeyLabel(
             label = label,
             description = description,
-            color = keyContent(active),
-            fontWeight = FontWeight.Medium
+            color = keyContent(active)
         )
     }
 }
@@ -574,17 +624,23 @@ private fun ToolbarKey(
 /** ☰: opens the terminal's session drawer; never scrolls away with the key grid. */
 @Composable
 private fun DrawerKey(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(role = Role.Button, onClick = onClick)
+            .then(keyCapModifier(active = false, pressed = pressed))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClick = onClick
+            )
     ) {
         Icon(
-            imageVector = Icons.Default.Menu,
+            imageVector = Icons.Sharp.Menu,
             contentDescription = stringResource(R.string.terminal_open_drawer),
-            tint = MaterialTheme.colorScheme.onSurface,
+            tint = AkaTheme.inks.onShellField,
             modifier = Modifier.size(22.dp)
         )
     }
@@ -593,12 +649,15 @@ private fun DrawerKey(onClick: () -> Unit, modifier: Modifier = Modifier) {
 /** Paste from the clipboard (bracketed when the program asked for it); long-press: clipboard menu. */
 @Composable
 private fun PasteKey(onClick: () -> Unit, onLongClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .then(keyCapModifier(active = false, pressed = pressed))
             .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
                 role = Role.Button,
                 onClickLabel = stringResource(R.string.terminal_paste),
                 onLongClickLabel = onLongClick?.let { stringResource(R.string.terminal_paste_more) },
@@ -607,20 +666,19 @@ private fun PasteKey(onClick: () -> Unit, onLongClick: (() -> Unit)?, modifier: 
             )
     ) {
         Icon(
-            imageVector = Icons.Default.ContentPaste,
+            imageVector = Icons.Sharp.ContentPaste,
             contentDescription = stringResource(R.string.terminal_paste),
-            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            tint = AkaTheme.inks.onShellField,
             modifier = Modifier.size(22.dp)
         )
     }
 }
 
 @Composable
-private fun KeyLabel(label: String, description: String?, color: Color, fontWeight: FontWeight) {
+private fun KeyLabel(label: String, description: String?, color: Color) {
     Text(
         text = label,
         style = labelStyle(label),
-        fontWeight = fontWeight,
         color = color,
         maxLines = 1,
         // TalkBack reads the description instead of a glyph like "↹".

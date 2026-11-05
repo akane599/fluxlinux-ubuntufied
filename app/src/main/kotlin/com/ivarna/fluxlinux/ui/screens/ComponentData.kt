@@ -1,19 +1,19 @@
 package com.ivarna.fluxlinux.ui.screens
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Android
-import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Gamepad
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.MovieCreation
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.ShowChart
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.automirrored.sharp.ShowChart
+import androidx.compose.material.icons.sharp.Android
+import androidx.compose.material.icons.sharp.Brush
+import androidx.compose.material.icons.sharp.Code
+import androidx.compose.material.icons.sharp.Description
+import androidx.compose.material.icons.sharp.Gamepad
+import androidx.compose.material.icons.sharp.Language
+import androidx.compose.material.icons.sharp.MovieCreation
+import androidx.compose.material.icons.sharp.Palette
+import androidx.compose.material.icons.sharp.Security
+import androidx.compose.material.icons.sharp.Speed
+import androidx.compose.material.icons.sharp.SmartToy
+import androidx.compose.material.icons.sharp.SportsEsports
 import androidx.compose.ui.graphics.vector.ImageVector
 
 // --- Data Models for UI ---
@@ -26,7 +26,7 @@ data class ComponentDetail(
 // Map Component ID to Details
 val componentDetailsMap = mapOf(
     "xfce4_desktop" to ComponentDetail(
-        icon = Icons.Default.Brush,
+        icon = Icons.Sharp.Brush,
         packages = listOf(
             "XFCE4 Desktop Environment" to "150 MB",
             "XFCE4 Goodies" to "80 MB",
@@ -36,7 +36,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 0.3
     ),
     "hw_accel" to ComponentDetail(
-        icon = Icons.Default.Speed,
+        icon = Icons.Sharp.Speed,
         packages = listOf(
             "VirGL Renderer" to "15 MB",
             "Mesa Zink (Vulkan)" to "25 MB",
@@ -45,7 +45,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 0.05
     ),
     "customization" to ComponentDetail(
-        icon = Icons.Default.Palette,
+        icon = Icons.Sharp.Palette,
         packages = listOf(
             "Flux Theme Assets" to "120 MB",
             "Wallpapers (4K)" to "50 MB",
@@ -54,7 +54,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 0.2
     ),
     "kde_plasma" to ComponentDetail(
-        icon = Icons.Default.Palette,
+        icon = Icons.Sharp.Palette,
         packages = listOf(
             "KDE Plasma Desktop" to "250 MB",
             "Konsole Terminal" to "20 MB",
@@ -67,7 +67,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 0.75
     ),
     "kde_customization" to ComponentDetail(
-        icon = Icons.Default.Brush,
+        icon = Icons.Sharp.Brush,
         packages = listOf(
             "Flux Theme Assets" to "120 MB",
             "Papirus Icons (KDE)" to "50 MB",
@@ -78,7 +78,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 0.25
     ),
     "app_dev" to ComponentDetail(
-        icon = Icons.Default.Android,
+        icon = Icons.Sharp.Android,
         packages = listOf(
             "Android SDK (Cmdline Tools)" to "850 MB",
             "Flutter SDK (Stable)" to "1.1 GB",
@@ -90,7 +90,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 3.3
     ),
     "web_dev" to ComponentDetail(
-        icon = Icons.Default.Language,
+        icon = Icons.Sharp.Language,
         packages = listOf(
             "Node.js v23 (LTS)" to "60 MB",
             "Python 3.11 + Pip" to "50 MB",
@@ -101,7 +101,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 0.9
     ),
     "gen_dev" to ComponentDetail(
-        icon = Icons.Default.Code,
+        icon = Icons.Sharp.Code,
         packages = listOf(
             "GCC & Clang Toolchain" to "400 MB",
             "Rust (Cargo/Rustup)" to "600 MB",
@@ -112,7 +112,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 1.95
     ),
     "cybersec" to ComponentDetail(
-        icon = Icons.Default.Security,
+        icon = Icons.Sharp.Security,
         packages = listOf(
             "Metasploit Framework" to "1.2 GB",
             "Wireshark + TShark" to "150 MB",
@@ -124,7 +124,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 2.4 // Estimated
     ),
     "data_science" to ComponentDetail(
-        icon = Icons.Default.ShowChart,
+        icon = Icons.AutoMirrored.Sharp.ShowChart,
         packages = listOf(
             "Jupyter Lab & Notebook" to "150 MB",
             "Python Data Stack (Pandas/NumPy)" to "400 MB",
@@ -136,7 +136,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 3.2
     ),
     "gamedev" to ComponentDetail(
-        icon = Icons.Default.SportsEsports,
+        icon = Icons.Sharp.SportsEsports,
         packages = listOf(
             "Godot Engine 4 (ARM64)" to "150 MB",
             "Blender 3D" to "600 MB",
@@ -148,7 +148,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 1.3
     ),
     "video_editing" to ComponentDetail(
-        icon = Icons.Default.MovieCreation,
+        icon = Icons.Sharp.MovieCreation,
         packages = listOf(
             "Kdenlive (Video Editor)" to "400 MB",
             "FFmpeg Full Codecs" to "250 MB",
@@ -160,7 +160,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 1.3
     ),
     "graphic_design" to ComponentDetail(
-        icon = Icons.Default.Brush,
+        icon = Icons.Sharp.Brush,
         packages = listOf(
             "GIMP (Photo Editor)" to "350 MB",
             "Inkscape (Vector)" to "250 MB",
@@ -172,7 +172,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 1.85
     ),
     "office" to ComponentDetail(
-        icon = Icons.Default.Description,
+        icon = Icons.Sharp.Description,
         packages = listOf(
             "LibreOffice Suite" to "650 MB",
             "Thunderbird Email" to "120 MB",
@@ -182,7 +182,7 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 0.8
     ),
     "vulkan_llamacpp" to ComponentDetail(
-        icon = Icons.Default.SmartToy,
+        icon = Icons.Sharp.SmartToy,
         packages = listOf(
             "llama.cpp (Vulkan backend)" to "200 MB",
             "Build tools (cmake, g++)" to "150 MB",
@@ -192,21 +192,21 @@ val componentDetailsMap = mapOf(
         totalSizeValues = 0.5
     ),
     "qwen35_model" to ComponentDetail(
-        icon = Icons.Default.SmartToy,
+        icon = Icons.Sharp.SmartToy,
         packages = listOf(
             "Qwen3.5-0.8B Q4_0 GGUF" to "507 MB"
         ),
         totalSizeValues = 0.507
     ),
     "qwen25_model" to ComponentDetail(
-        icon = Icons.Default.SmartToy,
+        icon = Icons.Sharp.SmartToy,
         packages = listOf(
             "Qwen2.5-1.5B Q4_0 GGUF" to "938 MB"
         ),
         totalSizeValues = 0.935
     ),
     "emulation" to ComponentDetail(
-        icon = Icons.Default.Gamepad,
+        icon = Icons.Sharp.Gamepad,
         packages = listOf(
             "Box64 (x86_64 Emulator)" to "50 MB",
             "Wine / xow64 (Windows Compat)" to "800 MB",

@@ -1,15 +1,10 @@
 package com.ivarna.fluxlinux.ui.install
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,20 +13,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.sharp.Code
+import androidx.compose.material.icons.sharp.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -42,21 +33,34 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.ivarna.fluxlinux.ui.theme.FluxSuccess
-import com.ivarna.fluxlinux.ui.theme.TerminalBackground
+import com.ivarna.fluxlinux.R
+import com.ivarna.fluxlinux.ui.components.aka.MarkState
+import com.ivarna.fluxlinux.ui.components.aka.PlateKind
+import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.StatusMark
+import com.ivarna.fluxlinux.ui.components.aka.markColor
+import com.ivarna.fluxlinux.ui.components.aka.plateInks
+import com.ivarna.fluxlinux.ui.components.aka.plateOffset
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
+import com.ivarna.fluxlinux.ui.theme.misregistered
 
 /**
  * Shared install progress UI for onboarding + Distros [InstallConfigScreen].
+ *
+ * Honest state: the header's mark says working (dashed, turning), failed (struck) or done
+ * (filled) by form first and ink second; a failure keeps its ink until the user acts. The
+ * live log sits in the deepest well, set in the code face.
  */
 @Composable
 fun InstallProgressPanel(
@@ -82,205 +86,144 @@ fun InstallProgressPanel(
     }
 
     val colors = MaterialTheme.colorScheme
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseAlpha"
-    )
+    val mark = when {
+        failed -> MarkState.FAILED
+        isDone -> MarkState.RUNNING
+        else -> MarkState.WORKING
+    }
+    val ink = markColor(mark)
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(20.dp)
+            .padding(horizontal = FluxSpacing.xl, vertical = FluxSpacing.lg)
     ) {
-        // Header Section
+        // Header: the state in form (mark), ink and words.
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = when {
-                        failed -> "Setup failed"
-                        isDone -> "Install complete"
-                        else -> "Setting up Ubuntu"
-                    },
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.onBackground
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = when {
-                        failed -> "An error occurred during execution"
-                        isDone -> "Everything is installed"
-                        else -> "Downloading and configuring packages"
-                    },
-                    fontSize = 13.sp,
-                    color = colors.onBackground.copy(alpha = 0.65f)
-                )
-            }
-
-            // Status Indicator Badge
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            failed -> colors.error.copy(alpha = 0.15f)
-                            isDone -> FluxSuccess.copy(alpha = 0.15f)
-                            else -> colors.secondaryContainer
-                        }
-                    )
-                    .border(
-                        1.dp,
-                        when {
-                            failed -> colors.error.copy(alpha = 0.4f)
-                            isDone -> FluxSuccess.copy(alpha = 0.4f)
-                            else -> colors.outlineVariant
-                        },
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = when {
-                        failed -> Icons.Filled.ErrorOutline
-                        isDone -> Icons.Filled.CheckCircle
-                        else -> Icons.Filled.Refresh
-                    },
-                    contentDescription = null,
-                    tint = when {
-                        failed -> colors.error
-                        isDone -> FluxSuccess
-                        else -> colors.primary
-                    },
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        // Progress Glass Card
-        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(colors.surfaceContainer)
-                .padding(16.dp)
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Text(
-                        text = if (phaseLabel.isNotBlank()) phaseLabel else "Working…",
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.onSurface,
-                        fontSize = 15.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "$percent%",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = when {
-                            failed -> colors.error
-                            isDone -> FluxSuccess
-                            else -> colors.primary
-                        }
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                // Progress Bar with Gradient Look
-                LinearProgressIndicator(
-                    progress = { percent / 100f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    color = when {
-                        failed -> colors.error
-                        isDone -> FluxSuccess
-                        else -> colors.primary
-                    },
-                    trackColor = colors.surfaceContainerHighest
-                )
-
-                if (detail.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = detail,
-                        fontSize = 12.sp,
-                        color = colors.onSurface.copy(alpha = 0.7f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                if (failed && errorMessage != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = errorMessage,
-                        color = colors.error,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // Log Viewer Toggle Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Code,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(6.dp))
+            StatusMark(state = mark, size = FluxSpacing.lg)
+            Spacer(Modifier.width(FluxSpacing.md))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Output",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.onBackground.copy(alpha = 0.85f)
+                    text = stringResource(
+                        when {
+                            failed -> R.string.aka_install_title_failed
+                            isDone -> R.string.aka_install_title_done
+                            else -> R.string.aka_install_title_running
+                        }
+                    ),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = colors.onBackground
                 )
-            }
-
-            TextButton(
-                onClick = onToggleLog,
-            ) {
                 Text(
-                    if (showLog) "Hide log" else "Show log",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp
+                    text = stringResource(
+                        when {
+                            failed -> R.string.aka_install_sub_failed
+                            isDone -> R.string.aka_install_sub_done
+                            else -> R.string.aka_install_sub_running
+                        }
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant
                 )
             }
         }
 
-        // Live Log Terminal Window
+        Spacer(Modifier.height(FluxSpacing.xl))
+
+        // Progress, on the stock: phase, percent in the state's ink, the bar, the detail.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            Text(
+                text = phaseLabel.ifBlank { stringResource(R.string.aka_install_working) },
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(FluxSpacing.sm))
+            Text(
+                text = "$percent%",
+                style = MaterialTheme.typography.titleLarge,
+                color = ink
+            )
+        }
+
+        Spacer(Modifier.height(FluxSpacing.sm))
+
+        LinearProgressIndicator(
+            progress = { percent / 100f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.extraSmall),
+            color = ink,
+            trackColor = colors.surfaceContainerHighest
+        )
+
+        if (detail.isNotBlank()) {
+            Spacer(Modifier.height(FluxSpacing.sm))
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (failed && errorMessage != null) {
+            Spacer(Modifier.height(FluxSpacing.md))
+            Row(verticalAlignment = Alignment.Top) {
+                StatusMark(
+                    state = MarkState.FAILED,
+                    size = FluxSpacing.md,
+                    modifier = Modifier.padding(top = FluxSpacing.xs)
+                )
+                Spacer(Modifier.width(FluxSpacing.sm))
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.error
+                )
+            }
+        }
+
+        Spacer(Modifier.height(FluxSpacing.md))
+
+        // Log toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Sharp.Code,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(FluxSpacing.lg + FluxSpacing.xxs)
+            )
+            Spacer(Modifier.width(FluxSpacing.sm))
+            Text(
+                text = stringResource(R.string.aka_install_output),
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.onBackground,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onToggleLog, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
+                Text(
+                    stringResource(if (showLog) R.string.aka_install_hide_log else R.string.aka_install_show_log),
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+
+        // The live log, in the deepest well.
         AnimatedVisibility(
             visible = showLog,
             modifier = Modifier.weight(1f)
@@ -288,17 +231,20 @@ fun InstallProgressPanel(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(TerminalBackground)
-                    .padding(12.dp)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(colors.surfaceContainerLowest)
+                    .padding(FluxSpacing.md)
                     .verticalScroll(logScroll)
             ) {
+                // The code face at label size: long apt lines wrap less on a phone.
+                val logStyle = CodeStyle.copy(
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                    lineHeight = MaterialTheme.typography.labelSmall.lineHeight
+                )
                 Text(
-                    text = logText.ifBlank { "Initializing installation stream…" },
-                    color = if (logText.isBlank()) colors.onSurfaceVariant else colors.onSurface,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    lineHeight = 16.sp
+                    text = logText.ifBlank { stringResource(R.string.aka_install_log_waiting) },
+                    style = logStyle,
+                    color = if (logText.isBlank()) colors.onSurfaceVariant else colors.onSurface
                 )
             }
         }
@@ -307,101 +253,95 @@ fun InstallProgressPanel(
             Spacer(Modifier.weight(1f))
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(FluxSpacing.lg))
 
-        // Action Buttons
+        // Actions
         when {
             failed -> {
-                Button(
+                PlatedButton(
+                    text = stringResource(R.string.aka_install_retry),
+                    icon = Icons.Sharp.Refresh,
                     onClick = onRetry,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Retry", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 if (onBack != null) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(FluxSpacing.xs))
                     TextButton(
                         onClick = onBack,
-                        modifier = Modifier.fillMaxWidth(),
-                            ) {
-                        Text("Back to options", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = FluxSpacing.touch)
+                    ) {
+                        Text(stringResource(R.string.aka_install_back_to_options), style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
 
             isDone && onDone != null -> {
-                Button(
+                PlatedButton(
+                    text = stringResource(R.string.onboarding_continue),
                     onClick = onDone,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text("Continue", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
 }
 
-/** Shared dark/light theme selectable card for install wizards. */
+/**
+ * Shared dark/light theme option for install wizards. Selected: the plum overprint, its
+ * plates resting out of register and registering while pressed. Unselected: a row on the stock.
+ */
 @Composable
 fun InstallThemePickRow(
-    id: String,
+    @Suppress("UNUSED_PARAMETER") id: String,
     title: String,
     desc: String,
     selected: Boolean,
     onSelect: () -> Unit
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = MaterialTheme.shapes.medium
     val colors = MaterialTheme.colorScheme
-    val borderColor = if (selected) colors.primary else colors.outlineVariant
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val ink = plateInks(PlateKind.SELECTION)
+    val offset = plateOffset(registered = pressed)
+    val titleColor = if (selected) ink.onFill else colors.onSurface
+    val mutedColor = if (selected) ink.onFill.copy(alpha = 0.82f) else colors.onSurfaceVariant
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(
-                if (selected) colors.secondaryContainer
-                else colors.surfaceContainer
+            .then(
+                if (selected) Modifier.misregistered(shape, ink.fill, ink.plateA, ink.plateB) { offset }
+                else Modifier
             )
-            .border(if (selected) 1.5.dp else 1.dp, borderColor, shape)
-            .clickable(onClick = onSelect)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .clip(shape)
+            .selectable(
+                selected = selected,
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                role = Role.RadioButton,
+                onClick = onSelect
+            )
+            .heightIn(min = FluxSpacing.touch)
+            .padding(horizontal = FluxSpacing.sm, vertical = FluxSpacing.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(
             selected = selected,
-            onClick = onSelect,
+            onClick = null,
             colors = RadioButtonDefaults.colors(
-                selectedColor = colors.primary,
-                unselectedColor = colors.onSurface.copy(alpha = 0.4f)
-            )
+                selectedColor = ink.onFill,
+                unselectedColor = colors.onSurfaceVariant
+            ),
+            modifier = Modifier.padding(FluxSpacing.sm)
         )
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontWeight = FontWeight.Bold,
-                color = colors.onSurface,
-                fontSize = 15.sp
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = desc,
-                fontSize = 12.sp,
-                color = colors.onSurface.copy(alpha = 0.65f)
-            )
+        Spacer(Modifier.width(FluxSpacing.sm))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(FluxSpacing.xxs)) {
+            Text(text = title, style = MaterialTheme.typography.titleSmall, color = titleColor)
+            Text(text = desc, style = MaterialTheme.typography.bodySmall, color = mutedColor)
         }
     }
 }

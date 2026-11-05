@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings family (AkaTerminal redesign): About and other new copy. -->
+<resources>
+    <string name="settings_aka_about_header">About</string>
+    <string name="settings_aka_version">v%1$s</string>
+    <string name="settings_aka_tagline">Ubuntu terminal for Android</string>
+    <string name="settings_aka_source">Source code</string>
+    <string name="settings_aka_report">Report a problem</string>
+    <string name="settings_aka_author">Author</string>
+    <string name="settings_aka_author_name">akane599</string>
+    <string name="settings_aka_thanks_header">Thanks to</string>
+    <string name="settings_aka_thanks_termux">Termux</string>
+    <string name="settings_aka_thanks_proot_distro">PRoot Distro</string>
+    <string name="settings_aka_thanks_termux_x11">Termux:X11</string>
+    <string name="settings_aka_fonts">Fonts</string>
+    <string name="settings_aka_fonts_summary">Archivo and JetBrains Mono, SIL Open Font License</string>
+    <string name="settings_aka_forked">Forked from FluxLinux</string>
+    <string name="settings_aka_terminal_text">Text</string>
+    <string name="settings_aka_terminal_keyboard">Keyboard</string>
+    <string name="settings_aka_terminal_shell">Shell</string>
+</resources>

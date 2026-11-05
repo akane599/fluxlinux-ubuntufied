@@ -11,11 +11,14 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,24 +42,23 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Coffee
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SpaceDashboard
-import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.sharp.Add
+import androidx.compose.material.icons.sharp.AdminPanelSettings
+import androidx.compose.material.icons.sharp.ArrowDropDown
+import androidx.compose.material.icons.sharp.Close
+import androidx.compose.material.icons.sharp.Coffee
+import androidx.compose.material.icons.sharp.Folder
+import androidx.compose.material.icons.sharp.Keyboard
+import androidx.compose.material.icons.sharp.Link
+import androidx.compose.material.icons.sharp.Security
+import androidx.compose.material.icons.sharp.Settings
+import androidx.compose.material.icons.sharp.SpaceDashboard
+import androidx.compose.material.icons.sharp.Terminal
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
@@ -64,6 +66,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -71,6 +74,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -86,9 +90,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -97,9 +103,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -121,6 +126,14 @@ import com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
+import com.ivarna.fluxlinux.ui.components.aka.AkaWordmark
+import com.ivarna.fluxlinux.ui.components.aka.MarkState
+import com.ivarna.fluxlinux.ui.components.aka.PlateKind
+import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.StatusMark
+import com.ivarna.fluxlinux.ui.components.aka.markColor
+import com.ivarna.fluxlinux.ui.components.aka.plateInks
+import com.ivarna.fluxlinux.ui.components.aka.plateOffset
 import com.ivarna.fluxlinux.ui.terminal.TerminalClipboard
 import com.ivarna.fluxlinux.ui.terminal.TerminalExtraKeys
 import com.ivarna.fluxlinux.ui.terminal.TerminalModifierState
@@ -128,8 +141,13 @@ import com.ivarna.fluxlinux.ui.terminal.TerminalSessionChoices
 import com.ivarna.fluxlinux.ui.terminal.TerminalSessionDefaults
 import com.ivarna.fluxlinux.ui.terminal.hideIme
 import com.ivarna.fluxlinux.ui.terminal.keepTerminalGestures
+import com.ivarna.fluxlinux.ui.theme.AkaTheme
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
+import com.ivarna.fluxlinux.ui.theme.Riso
 import com.ivarna.fluxlinux.ui.theme.TerminalBackground
+import com.ivarna.fluxlinux.ui.theme.misregistered
+import com.ivarna.fluxlinux.ui.theme.risoGrain
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import kotlin.math.abs
@@ -137,15 +155,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** One terminal session as the drawer's session list draws it. */
+/**
+ * One terminal session as the drawer's session list draws it. [mark] is its process state as a
+ * mark form: [MarkState.RUNNING], [MarkState.IDLE] (exited cleanly) or [MarkState.FAILED].
+ */
 data class TerminalTabUi(
     val title: String,
     @DrawableRes val iconRes: Int,
+    val mark: MarkState = MarkState.RUNNING,
 )
 
 /** Drawer sheet width cap, so the scrim stays visible (and tappable) on a phone. */
 private val DRAWER_MAX_WIDTH = 300.dp
-private val DRAWER_ROW_HEIGHT = 56.dp
+private val DRAWER_ROW_HEIGHT = 52.dp
+private val DRAWER_ICON_SIZE = 24.dp
+private val STATUS_MARK_SIZE = 10.dp
+private val EMPTY_MARK_SIZE = 64.dp
+private val EMPTY_STATE_MAX_WIDTH = 480.dp
+private val LINK_ICON_SIZE = 18.dp
+/** The wordmark is a logo: it grows with font scale only this far, so it never clips in the sheet. */
+private const val WORDMARK_MAX_FONT_SCALE = 1.15f
 
 /** Left-edge swipe zone over the terminal: Termux's edge width, inside Android's 200dp-per-edge exclusion cap. */
 private val EDGE_ZONE_WIDTH = 20.dp
@@ -411,9 +440,18 @@ fun TerminalScreen(
         drawerContent = {
             TerminalDrawerSheet(
                 sessions = sessions.mapIndexed { i, managed ->
+                    // Read when the screen recomposes (the drawer heading open is one), so the
+                    // marks are fresh whenever the drawer is shown.
+                    val process = managed.session
                     TerminalTabUi(
                         title = managed.title.ifBlank { titles.getOrElse(i) { "session" } },
-                        iconRes = managed.iconRes ?: R.drawable.ic_terminal
+                        iconRes = managed.iconRes ?: R.drawable.ic_terminal,
+                        mark = when {
+                            process == null -> MarkState.IDLE
+                            process.isRunning -> MarkState.RUNNING
+                            process.exitStatus == 0 -> MarkState.IDLE
+                            else -> MarkState.FAILED
+                        }
                     )
                 },
                 selectedIndex = activeIndex,
@@ -477,8 +515,10 @@ fun TerminalScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // Same black as TerminalView's renderer: no seam under the status bar.
-                .background(TerminalBackground)
+                // The terminal's stock under the status bar, the same colour TerminalView's renderer
+                // paints (:terminal-emulator's TerminalColorScheme default background); the empty
+                // state sits on the scheme's own stock (light in light mode).
+                .background(if (activeIndex >= 0) TerminalBackground else MaterialTheme.colorScheme.background)
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(
                     WindowInsets.ime.union(WindowInsets.navigationBars)
@@ -710,6 +750,10 @@ private fun DrawerEdgeZone(
  * then the app's other places (Ubuntu overview, Files, Settings). Stateless (the screen owns the
  * session manager calls) so previews can drive it with fake sessions. [shellMenu] is the
  * "More shells" dropdown, composed only while open. A null destination hides its row.
+ *
+ * Printed as one Federal Blue sheet with the extra-keys field: a grain-printed header band with
+ * the wordmark, session rows marked by process state, the current session as the selection
+ * overprint, "New session" as the sheet's one primary plate.
  */
 @Composable
 fun TerminalDrawerSheet(
@@ -730,28 +774,33 @@ fun TerminalDrawerSheet(
     newSessionLabel: String = stringResource(R.string.terminal_new_session),
     shellMenu: @Composable (onDismiss: () -> Unit) -> Unit = {},
 ) {
-    val colors = MaterialTheme.colorScheme
-    ModalDrawerSheet(modifier = modifier.widthIn(max = DRAWER_MAX_WIDTH)) {
+    val inks = AkaTheme.inks
+    // Cut-paper sheet: square where it meets the screen edge, trimmed at the free edge.
+    val sheetShape = MaterialTheme.shapes.extraLarge.copy(
+        topStart = CornerSize(0),
+        bottomStart = CornerSize(0),
+    )
+    ModalDrawerSheet(
+        modifier = modifier.widthIn(max = DRAWER_MAX_WIDTH),
+        drawerShape = sheetShape,
+        drawerContainerColor = inks.shellField,
+        drawerContentColor = inks.onShellField,
+    ) {
+        DrawerHeader()
         Column(modifier = Modifier.padding(horizontal = FluxSpacing.md, vertical = FluxSpacing.sm)) {
-            Text(
-                text = stringResource(R.string.terminal_drawer_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.onSurface,
-                modifier = Modifier
-                    .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.lg)
-                    .semantics { heading() }
-            )
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(rememberScrollState())
+                    // Room for the selected row's plates, which print outside its bounds.
+                    .padding(vertical = FluxSpacing.xxs),
                 verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
             ) {
                 if (sessions.isEmpty()) {
                     Text(
                         text = stringResource(R.string.terminal_drawer_empty),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant,
+                        color = inks.onShellFieldMuted,
                         modifier = Modifier.padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)
                     )
                 }
@@ -768,11 +817,11 @@ fun TerminalDrawerSheet(
             }
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = FluxSpacing.sm),
-                color = colors.outlineVariant
+                color = inks.shellHairline
             )
             NewSessionRow(label = newSessionLabel, onNewSession = onNewSession, shellMenu = shellMenu)
             DrawerActionRow(
-                icon = Icons.Default.Keyboard,
+                icon = Icons.Sharp.Keyboard,
                 label = stringResource(R.string.terminal_extra_keys),
                 modifier = Modifier.toggleable(
                     value = extraKeysVisible,
@@ -783,14 +832,17 @@ fun TerminalDrawerSheet(
                 FluxSwitch(
                     checked = extraKeysVisible,
                     onCheckedChange = null,
-                    modifier = Modifier.padding(end = FluxSpacing.md)
+                    modifier = Modifier.padding(end = FluxSpacing.md),
+                    onShellField = true
                 )
             }
             onToggleWakeLock?.let { toggle ->
                 DrawerActionRow(
-                    icon = Icons.Default.Coffee,
+                    icon = Icons.Sharp.Coffee,
                     label = stringResource(R.string.terminal_drawer_wakelock),
                     supporting = stringResource(R.string.terminal_drawer_wakelock_sub),
+                    // Held: the yellow half-disc takes the icon's place (the switch says it in words).
+                    leadingMark = if (wakeLockHeld) MarkState.HELD else null,
                     modifier = Modifier.toggleable(
                         value = wakeLockHeld,
                         role = Role.Switch,
@@ -800,33 +852,34 @@ fun TerminalDrawerSheet(
                     FluxSwitch(
                         checked = wakeLockHeld,
                         onCheckedChange = null,
-                        modifier = Modifier.padding(end = FluxSpacing.md)
+                        modifier = Modifier.padding(end = FluxSpacing.md),
+                        onShellField = true
                     )
                 }
             }
             if (onOpenDashboard != null || onOpenFiles != null || onOpenSettings != null) {
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = FluxSpacing.sm),
-                    color = colors.outlineVariant
+                    color = inks.shellHairline
                 )
             }
             onOpenDashboard?.let {
                 DrawerActionRow(
-                    icon = Icons.Default.SpaceDashboard,
+                    icon = Icons.Sharp.SpaceDashboard,
                     label = stringResource(R.string.terminal_drawer_ubuntu),
                     modifier = Modifier.clickable(role = Role.Button, onClick = it)
                 )
             }
             onOpenFiles?.let {
                 DrawerActionRow(
-                    icon = Icons.Default.Folder,
+                    icon = Icons.Sharp.Folder,
                     label = stringResource(R.string.terminal_drawer_files),
                     modifier = Modifier.clickable(role = Role.Button, onClick = it)
                 )
             }
             onOpenSettings?.let {
                 DrawerActionRow(
-                    icon = Icons.Default.Settings,
+                    icon = Icons.Sharp.Settings,
                     label = stringResource(R.string.terminal_drawer_settings),
                     modifier = Modifier.clickable(role = Role.Button, onClick = it)
                 )
@@ -835,30 +888,104 @@ fun TerminalDrawerSheet(
     }
 }
 
-/** One drawer action: 56dp pill row with a leading icon; [modifier] carries the click/toggle. */
+/**
+ * The sheet's header band: the AkaTerminal wordmark printed with grain (static; its two-pass
+ * print belongs to onboarding), then the "Sessions" heading, closed off by a hairline.
+ */
+@Composable
+private fun DrawerHeader() {
+    val inks = AkaTheme.inks
+    val density = LocalDensity.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .risoGrain(inks.grainAlpha)
+            .padding(
+                start = FluxSpacing.xl,
+                end = FluxSpacing.lg,
+                top = FluxSpacing.lg,
+                bottom = FluxSpacing.md,
+            )
+    ) {
+        CompositionLocalProvider(
+            LocalDensity provides Density(density.density, minOf(density.fontScale, WORDMARK_MAX_FONT_SCALE)),
+        ) {
+            // "Aka" prints in the red plate ink, which holds on the blue field in both schemes
+            // (the light scheme's deepened primary sinks into it).
+            MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(primary = inks.selectionPlateA)) {
+                AkaWordmark(
+                    style = MaterialTheme.typography.headlineMedium,
+                    restColor = inks.onShellField,
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.terminal_drawer_title),
+            style = MaterialTheme.typography.titleSmall,
+            color = inks.onShellFieldMuted,
+            modifier = Modifier
+                .padding(top = FluxSpacing.xs)
+                .semantics { heading() }
+        )
+    }
+    HorizontalDivider(color = inks.shellHairline)
+}
+
+/**
+ * State inks on the Federal field. The field is the same blue in both schemes, so marks take
+ * the full-strength spot inks; the light scheme's deepened state inks would sink into it.
+ */
+@Composable
+private fun fieldMarkColor(state: MarkState): Color {
+    val inks = AkaTheme.inks
+    return when (state) {
+        MarkState.RUNNING -> Riso.GreenTint
+        MarkState.HELD -> Riso.Yellow
+        // Fluorescent pink on the dark field; its pale tint on the lighter light-scheme field.
+        MarkState.FAILED -> if (inks.isDark) inks.failed else MaterialTheme.colorScheme.errorContainer
+        MarkState.IDLE, MarkState.WORKING -> inks.onShellFieldMuted
+    }
+}
+
+/**
+ * One drawer action on the field: 56dp row with a leading Sharp icon (or [leadingMark] in its
+ * place); [modifier] carries the click/toggle.
+ */
 @Composable
 private fun DrawerActionRow(
     icon: ImageVector,
     label: String,
     modifier: Modifier = Modifier,
     supporting: String? = null,
+    leadingMark: MarkState? = null,
     trailing: @Composable () -> Unit = {},
 ) {
+    val inks = AkaTheme.inks
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = DRAWER_ROW_HEIGHT)
-            .clip(CircleShape)
+            .clip(MaterialTheme.shapes.small)
             .then(modifier)
             .padding(start = FluxSpacing.lg),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(24.dp)
-        )
+        Box(modifier = Modifier.size(DRAWER_ICON_SIZE), contentAlignment = Alignment.Center) {
+            if (leadingMark != null) {
+                StatusMark(
+                    state = leadingMark,
+                    size = STATUS_MARK_SIZE + FluxSpacing.xs,
+                    color = fieldMarkColor(leadingMark),
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = inks.onShellFieldMuted,
+                    modifier = Modifier.size(DRAWER_ICON_SIZE)
+                )
+            }
+        }
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -868,13 +995,13 @@ private fun DrawerActionRow(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                color = inks.onShellField
             )
             supporting?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = inks.onShellFieldMuted
                 )
             }
         }
@@ -882,7 +1009,11 @@ private fun DrawerActionRow(
     }
 }
 
-/** Tap: new Ubuntu session; long-press or ▾: the shell menu (root, chroot, host). */
+/**
+ * Tap: new Ubuntu session; long-press or ▾: the shell menu (root, chroot, host). The sheet's
+ * primary plate: red ink alone would read under 4.5:1 on the blue field, so it prints as the
+ * vermilion overprint, plates out of register until pressed.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NewSessionRow(
@@ -892,13 +1023,21 @@ private fun NewSessionRow(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val moreLabel = stringResource(R.string.terminal_more_shells)
-    Box {
+    val shape = MaterialTheme.shapes.small
+    val plates = plateInks(PlateKind.PRIMARY)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val offset = plateOffset(registered = pressed)
+    Box(modifier = Modifier.padding(vertical = FluxSpacing.xs)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = DRAWER_ROW_HEIGHT)
-                .clip(CircleShape)
+                .misregistered(shape, plates.fill, plates.plateA, plates.plateB) { offset }
+                .clip(shape)
                 .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = LocalIndication.current,
                     role = Role.Button,
                     onClickLabel = label,
                     onLongClickLabel = moreLabel,
@@ -908,27 +1047,25 @@ private fun NewSessionRow(
                 .padding(start = FluxSpacing.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = FluxSpacing.md, end = FluxSpacing.sm)
-            )
-            IconButton(onClick = { menuOpen = true }) {
+            CompositionLocalProvider(LocalContentColor provides plates.onFill) {
                 Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
-                    contentDescription = moreLabel,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    imageVector = Icons.Sharp.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(DRAWER_ICON_SIZE)
                 )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = FluxSpacing.md, end = FluxSpacing.sm)
+                )
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(
+                        imageVector = Icons.Sharp.ArrowDropDown,
+                        contentDescription = moreLabel
+                    )
+                }
             }
         }
         if (menuOpen) shellMenu { menuOpen = false }
@@ -966,20 +1103,20 @@ private fun ShellMenu(
                 if (choices.mode == UbuntuRuntimeMode.CHROOT) R.string.terminal_new_session_chroot
                 else R.string.terminal_new_session
             ),
-            Icons.Default.Add,
+            Icons.Sharp.Add,
             onNewTab
         )
         if (ubuntuCards.isNotEmpty() || host != null) HorizontalDivider()
         ubuntuCards.forEach { card ->
             val icon = when {
-                card.def.type == "shell-root" -> Icons.Default.AdminPanelSettings
-                card.def.method == "chroot" -> Icons.Default.Security
-                else -> Icons.Default.Terminal
+                card.def.type == "shell-root" -> Icons.Sharp.AdminPanelSettings
+                card.def.method == "chroot" -> Icons.Sharp.Security
+                else -> Icons.Sharp.Terminal
             }
             ShellMenuItem(stringResource(ubuntuShellLabelRes(card, bothRuntimes)), icon) { onOpen(card) }
         }
         host?.let {
-            ShellMenuItem(stringResource(R.string.terminal_shell_host), Icons.Default.Terminal) {
+            ShellMenuItem(stringResource(R.string.terminal_shell_host), Icons.Sharp.Terminal) {
                 onOpen(it)
             }
         }
@@ -997,7 +1134,8 @@ private fun ShellMenuItem(label: String, icon: ImageVector, onClick: () -> Unit)
 
 /**
  * One session in the drawer: tap switches, the own 48dp ✕ target closes, long-press opens
- * "Close" / "Close other tabs". The selected session sits on the secondary container.
+ * "Close" / "Close other tabs". A [StatusMark] tells its process state by form; the selected
+ * session prints as the selection overprint, plates out of register until pressed.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1010,20 +1148,38 @@ private fun DrawerSessionRow(
     onCloseOthers: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val colors = MaterialTheme.colorScheme
+    val inks = AkaTheme.inks
     val title = TerminalSessionDefaults.shortTabTitle(session.title)
     val closeLabel = stringResource(R.string.terminal_tab_close_named, title)
     val switchLabel = stringResource(R.string.terminal_tab_switch, title)
     val menuLabel = stringResource(R.string.terminal_tab_menu)
-    val content = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant
+    val markLabel = stringResource(
+        when (session.mark) {
+            MarkState.FAILED -> R.string.terminal_aka_session_failed
+            MarkState.IDLE -> R.string.terminal_aka_session_exited
+            else -> R.string.terminal_aka_session_running
+        }
+    )
+    val namedState = stringResource(R.string.terminal_aka_session_named, title, markLabel)
+    val shape = MaterialTheme.shapes.small
+    val plates = plateInks(PlateKind.SELECTION)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val offset = plateOffset(registered = pressed)
+    val content = if (selected) plates.onFill else inks.onShellFieldMuted
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = DRAWER_ROW_HEIGHT)
-                .clip(CircleShape)
-                .then(if (selected) Modifier.background(colors.secondaryContainer) else Modifier)
+                .then(
+                    if (selected) Modifier.misregistered(shape, plates.fill, plates.plateA, plates.plateB) { offset }
+                    else Modifier
+                )
+                .clip(shape)
                 .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = LocalIndication.current,
                     role = Role.Tab,
                     onClickLabel = switchLabel,
                     onLongClickLabel = menuLabel,
@@ -1034,33 +1190,33 @@ private fun DrawerSessionRow(
                 .padding(start = FluxSpacing.lg, end = FluxSpacing.xs),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(id = session.iconRes),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp)
-            )
+            // In the icon column of the action rows below, so marks and icons line up.
+            Box(modifier = Modifier.size(DRAWER_ICON_SIZE), contentAlignment = Alignment.Center) {
+                StatusMark(state = session.mark, size = STATUS_MARK_SIZE, color = fieldMarkColor(session.mark))
+            }
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                style = if (selected) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
                 color = content,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = FluxSpacing.md, end = FluxSpacing.sm)
+                    // The name first, then its state.
+                    .semantics { contentDescription = namedState }
             )
             // Own 48dp hit area; the row's select target never overlaps it.
             Box(
                 modifier = Modifier
                     .size(FluxSpacing.touch)
-                    .clip(CircleShape)
+                    .clip(shape)
                     .clickable(role = Role.Button, onClick = onClose)
                     .semantics { contentDescription = closeLabel },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Close,
+                    imageVector = Icons.Sharp.Close,
                     contentDescription = null,
                     tint = content,
                     modifier = Modifier.size(20.dp)
@@ -1070,7 +1226,7 @@ private fun DrawerSessionRow(
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.terminal_tab_close)) },
-                leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Sharp.Close, contentDescription = null) },
                 onClick = {
                     menuOpen = false
                     onClose()
@@ -1090,7 +1246,8 @@ private fun DrawerSessionRow(
 
 /**
  * Links found in the session's output, newest first: tap opens one in the browser, long-press
- * copies it. Stateless for screenshot previews.
+ * copies it. Stateless for screenshot previews. Links are set in the terminal's mono face, in
+ * the Federal tint (the red primary reads under 4.5:1 on the dialog's container).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1101,6 +1258,7 @@ fun TerminalLinksDialog(
     onDismiss: () -> Unit,
 ) {
     val copyLabel = stringResource(R.string.terminal_link_copy)
+    val colors = MaterialTheme.colorScheme
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.terminal_links_title)) },
@@ -1109,18 +1267,13 @@ fun TerminalLinksDialog(
                 Text(
                     text = stringResource(R.string.terminal_links_hint),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = FluxSpacing.sm)
                 )
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     links.forEach { url ->
                         val openLabel = stringResource(R.string.terminal_link_open, url)
-                        Text(
-                            text = url,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = FluxSpacing.touch)
@@ -1133,8 +1286,24 @@ fun TerminalLinksDialog(
                                     onClick = { onOpen(url) }
                                 )
                                 // 14dp top and bottom: a one-line link is exactly the 48dp target.
-                                .padding(horizontal = FluxSpacing.sm, vertical = FluxSpacing.md + FluxSpacing.xxs)
-                        )
+                                .padding(horizontal = FluxSpacing.sm, vertical = FluxSpacing.md + FluxSpacing.xxs),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                imageVector = Icons.Sharp.Link,
+                                contentDescription = null,
+                                tint = colors.secondary,
+                                modifier = Modifier.size(LINK_ICON_SIZE)
+                            )
+                            Text(
+                                text = url,
+                                style = CodeStyle,
+                                color = colors.secondary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(start = FluxSpacing.sm)
+                            )
+                        }
                     }
                 }
             }
@@ -1148,6 +1317,9 @@ fun TerminalLinksDialog(
 /**
  * Compact empty state: no selector, just the Ubuntu shell being opened, or why it failed
  * with a single retry. Stateless for screenshot previews.
+ *
+ * Set flush left on the stock like a zine page: the mark, the title in the display voice, a
+ * status line led by its mark (working, failed or idle by form), then the one primary plate.
  */
 @Composable
 fun TerminalEmptyState(
@@ -1161,75 +1333,73 @@ fun TerminalEmptyState(
     onOpenSettings: (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
-    Column(
+    val failed = !opening && errorMessage != null
+    val mark = when {
+        opening -> MarkState.WORKING
+        failed -> MarkState.FAILED
+        else -> MarkState.IDLE
+    }
+    Box(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = FluxSpacing.xl, vertical = FluxSpacing.xxl),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        contentAlignment = Alignment.CenterStart
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.distro_ubuntu),
-            contentDescription = null,
-            modifier = Modifier.size(56.dp)
-        )
-        Text(
-            text = stringResource(R.string.terminal_empty_title),
-            style = MaterialTheme.typography.titleMedium,
-            color = colors.onSurface,
-            modifier = Modifier.padding(top = FluxSpacing.lg)
-        )
-        Row(
-            modifier = Modifier.padding(top = FluxSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (opening) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = colors.primary
-                )
-                Spacer(Modifier.size(FluxSpacing.sm))
-            }
-            Text(
-                text = when {
-                    opening -> stringResource(R.string.terminal_empty_opening)
-                    errorMessage != null -> errorMessage
-                    else -> stringResource(R.string.terminal_empty_closed)
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (!opening && errorMessage != null) colors.error else colors.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-        }
-        Button(
-            onClick = onOpen,
-            enabled = !opening,
-            modifier = Modifier
-                .padding(top = FluxSpacing.xl)
-                .heightIn(min = FluxSpacing.touch)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Terminal,
+        Column(modifier = Modifier.widthIn(max = EMPTY_STATE_MAX_WIDTH)) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_aka_mark),
                 contentDescription = null,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(EMPTY_MARK_SIZE)
             )
-            Spacer(Modifier.size(FluxSpacing.sm))
-            Text(stringResource(R.string.terminal_open_ubuntu))
-        }
-        if (onOpenDashboard != null || onOpenSettings != null) {
+            Text(
+                text = stringResource(R.string.terminal_empty_title),
+                style = MaterialTheme.typography.headlineMedium,
+                color = colors.onBackground,
+                modifier = Modifier.padding(top = FluxSpacing.xl)
+            )
             Row(
                 modifier = Modifier.padding(top = FluxSpacing.sm),
-                horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
+                verticalAlignment = Alignment.Top
             ) {
-                onOpenDashboard?.let {
-                    TextButton(onClick = it, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
-                        Text(stringResource(R.string.terminal_drawer_ubuntu))
+                StatusMark(
+                    state = mark,
+                    size = STATUS_MARK_SIZE,
+                    color = markColor(mark),
+                    // Centred on the first line of bodyMedium (20sp line, 10dp mark).
+                    modifier = Modifier.padding(top = FluxSpacing.xs + FluxSpacing.xxs / 2)
+                )
+                Spacer(Modifier.width(FluxSpacing.sm))
+                Text(
+                    text = when {
+                        opening -> stringResource(R.string.terminal_empty_opening)
+                        errorMessage != null -> errorMessage
+                        else -> stringResource(R.string.terminal_empty_closed)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (failed) colors.error else colors.onSurfaceVariant
+                )
+            }
+            PlatedButton(
+                text = stringResource(R.string.terminal_open_ubuntu),
+                onClick = onOpen,
+                icon = Icons.Sharp.Terminal,
+                enabled = !opening,
+                modifier = Modifier.padding(top = FluxSpacing.xl)
+            )
+            if (onOpenDashboard != null || onOpenSettings != null) {
+                Row(
+                    modifier = Modifier.padding(top = FluxSpacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
+                ) {
+                    onOpenDashboard?.let {
+                        TextButton(onClick = it, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
+                            Text(stringResource(R.string.terminal_drawer_ubuntu))
+                        }
                     }
-                }
-                onOpenSettings?.let {
-                    TextButton(onClick = it, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
-                        Text(stringResource(R.string.terminal_drawer_settings))
+                    onOpenSettings?.let {
+                        TextButton(onClick = it, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
+                            Text(stringResource(R.string.terminal_drawer_settings))
+                        }
                     }
                 }
             }

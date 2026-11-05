@@ -5,29 +5,22 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.sharp.ContentCopy
+import androidx.compose.material.icons.sharp.Refresh
+import androidx.compose.material.icons.sharp.Visibility
+import androidx.compose.material.icons.sharp.VisibilityOff
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,17 +28,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.core.terminal.PulseHost
-import com.ivarna.fluxlinux.ui.components.GlassSettingCard
-import com.ivarna.fluxlinux.ui.theme.fluxMutedText
+import com.ivarna.fluxlinux.ui.components.aka.MarkState
+import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -55,7 +49,6 @@ import kotlinx.coroutines.withContext
  * Guests stay clients of its unix socket (`PULSE_SERVER=unix:/tmp/pulse-native`
  * in PRoot, `unix:/mnt/host-tmp/pulse-native` in chroot). No TCP listener.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioSettingsScreen(
     onBack: () -> Unit
@@ -114,211 +107,124 @@ fun AudioSettingsScreen(
 
     val running = status?.running == true
     val healthy = status?.healthy == true
-    val statusColor = when {
-        status == null -> fluxMutedText()
-        healthy -> Color(0xFF69F0AE)
-        running -> MaterialTheme.colorScheme.secondary
-        else -> Color(0xFFFF8A80)
+    val statusMark = when {
+        status == null -> MarkState.WORKING
+        healthy -> MarkState.RUNNING
+        running -> MarkState.HELD
+        else -> MarkState.FAILED
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "Audio",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent
-                )
-            )
-        }
-    ) { innerPadding ->
-        Column(
+    SettingsPageScaffold(title = "Audio", onBack = onBack) {
+        SettingsPageNote(
+            "Host PulseAudio in the AkaTerminal prefix. Guests connect through its private unix socket (unix:/tmp/pulse-native; chroot: /mnt/host-tmp/pulse-native), never TCP. Stopping the desktop does not stop this service."
+        )
+
+        SectionLabel("Host server")
+        SettingsPageStatus(
+            text = if (busy && status == null) "Checking…" else (status?.label ?: "Checking…"),
+            state = statusMark,
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                "Host PulseAudio in the FluxLinux prefix. Guests connect through its private unix socket (unix:/tmp/pulse-native; chroot: /mnt/host-tmp/pulse-native), never TCP. Stopping the desktop does not stop this service.",
-                fontSize = 13.sp,
-                color = fluxMutedText()
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.xs)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        SettingsPageNote(status?.detail ?: "Querying pulseaudio --check and pactl info…")
+        if (busy) {
+            LinearProgressIndicator(
+                color = MaterialTheme.colorScheme.secondary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.xs)
             )
-
-            GlassSettingCard {
-                Column(Modifier.padding(20.dp).fillMaxWidth()) {
-                    Text(
-                        "Host server",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        if (busy && status == null) "Checking…" else (status?.label ?: "Checking…"),
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = statusColor
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        status?.detail ?: "Querying pulseaudio --check and pactl info…",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(
-                            onClick = { loadStatus() },
-                            enabled = !busy,
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.secondary
-                            )
-                        ) {
-                            Text("Refresh", fontWeight = FontWeight.Bold)
-                        }
-                        Button(
-                            onClick = {
-                                if (running) {
-                                    runAction("Pulse restarted") { PulseHost.restart(it) }
-                                } else {
-                                    runAction("Pulse started") { PulseHost.start(it) }
-                                }
-                            },
-                            enabled = !busy,
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary,
-                                contentColor = MaterialTheme.colorScheme.onSecondary
-                            )
-                        ) {
-                            Text(
-                                if (running) "Restart" else "Start",
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-
-            GlassSettingCard {
-                Column(Modifier.padding(20.dp).fillMaxWidth()) {
-                    Text(
-                        "Logs",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Supervisor and status output from this app (start_pulse_host.sh).",
-                        fontSize = 13.sp,
-                        color = fluxMutedText()
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showLogs = !showLogs },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.secondary
-                            )
-                        ) {
-                            Text(if (showLogs) "Hide logs" else "View logs", fontWeight = FontWeight.Bold)
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                val clip = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                    as ClipboardManager
-                                clip.setPrimaryClip(
-                                    ClipData.newPlainText("Pulse log", logText.ifBlank { "(empty)" })
-                                )
-                                Toast.makeText(context, "Log copied", Toast.LENGTH_SHORT).show()
-                            },
-                            enabled = logText.isNotBlank(),
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.secondary
-                            )
-                        ) {
-                            Text("Copy", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (showLogs) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = logText.ifBlank { "(no log yet — tap Refresh or Start)" },
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = Color(0xFFE8EAED),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 160.dp, max = 360.dp)
-                                .verticalScroll(rememberScrollState())
-                                .padding(4.dp)
-                        )
-                    }
-                }
-            }
-
-            GlassSettingCard {
-                Column(Modifier.padding(20.dp).fillMaxWidth()) {
-                    Text(
-                        "Guest clients",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Points already-installed guests at the unix socket (moving old tcp:127.0.0.1 settings) and installs pactl. Chroots need root. Does not start a guest Pulse daemon.",
-                        fontSize = 13.sp,
-                        color = fluxMutedText()
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = {
-                            runAction(
-                                "Guest audio repaired",
-                                PulseHost::repairToast
-                            ) { PulseHost.repairGuests(it) }
-                        },
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.secondary
-                        )
-                    ) {
-                        Text("Repair guests", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
         }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(FluxSpacing.md)
+        ) {
+            SettingsPageSecondaryButton(
+                text = "Refresh",
+                icon = Icons.Sharp.Refresh,
+                onClick = { loadStatus() },
+                enabled = !busy,
+                modifier = Modifier.weight(1f)
+            )
+            PlatedButton(
+                text = if (running) "Restart" else "Start",
+                onClick = {
+                    if (running) {
+                        runAction("Pulse restarted") { PulseHost.restart(it) }
+                    } else {
+                        runAction("Pulse started") { PulseHost.start(it) }
+                    }
+                },
+                enabled = !busy,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        SectionLabel("Logs")
+        SettingsPageNote("Supervisor and status output from this app (start_pulse_host.sh).")
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(FluxSpacing.md)
+        ) {
+            SettingsPageSecondaryButton(
+                text = if (showLogs) "Hide logs" else "View logs",
+                icon = if (showLogs) Icons.Sharp.VisibilityOff else Icons.Sharp.Visibility,
+                onClick = { showLogs = !showLogs },
+                modifier = Modifier.weight(1f)
+            )
+            SettingsPageSecondaryButton(
+                text = "Copy",
+                icon = Icons.Sharp.ContentCopy,
+                onClick = {
+                    val clip = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                        as ClipboardManager
+                    clip.setPrimaryClip(
+                        ClipData.newPlainText("Pulse log", logText.ifBlank { "(empty)" })
+                    )
+                    Toast.makeText(context, "Log copied", Toast.LENGTH_SHORT).show()
+                },
+                enabled = logText.isNotBlank(),
+                modifier = Modifier.weight(1f)
+            )
+        }
+        if (showLogs) {
+            SettingsPageBlock(contentPadding = PaddingValues(FluxSpacing.md)) {
+                SelectionContainer {
+                    Text(
+                        text = logText.ifBlank { "(no log yet — tap Refresh or Start)" },
+                        style = CodeStyle,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 160.dp, max = 360.dp)
+                            .verticalScroll(rememberScrollState())
+                    )
+                }
+            }
+        }
+
+        SectionLabel("Guest clients")
+        SettingsPageNote(
+            "Points already-installed guests at the unix socket (moving old tcp:127.0.0.1 settings) and installs pactl. Chroots need root. Does not start a guest Pulse daemon."
+        )
+        SettingsPageSecondaryButton(
+            text = "Repair guests",
+            onClick = {
+                runAction(
+                    "Guest audio repaired",
+                    PulseHost::repairToast
+                ) { PulseHost.repairGuests(it) }
+            },
+            enabled = !busy,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)
+        )
     }
 }

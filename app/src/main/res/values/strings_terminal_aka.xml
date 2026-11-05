@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spoken state of a session's mark in the terminal drawer. -->
+    <string name="terminal_aka_session_running">Running</string>
+    <string name="terminal_aka_session_exited">Exited</string>
+    <string name="terminal_aka_session_failed">Exited with an error</string>
+    <!-- A session row read aloud: its name, then its state ("Ubuntu Shell, Running"). -->
+    <string name="terminal_aka_session_named">%1$s, %2$s</string>
+</resources>

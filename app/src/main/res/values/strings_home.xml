@@ -7,7 +7,7 @@
     <string name="home_top_settings">Settings</string>
     <!-- Ubuntu runtime (PRoot vs chroot) -->
     <string name="home_runtime_proot">PRoot</string>
-    <string name="home_runtime_chroot">Chroot · root</string>
+    <string name="home_runtime_chroot">Chroot (root)</string>
     <string name="home_runtime_switch_to">Switch to %1$s</string>
     <string name="home_runtime_switched_proot">Now using Ubuntu PRoot</string>
     <string name="home_runtime_switched_chroot">Now using Ubuntu chroot</string>

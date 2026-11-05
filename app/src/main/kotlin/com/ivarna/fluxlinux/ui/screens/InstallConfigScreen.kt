@@ -2,28 +2,32 @@ package com.ivarna.fluxlinux.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.automirrored.sharp.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,14 +38,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.desktop.UbuntuDesktop
@@ -50,13 +51,10 @@ import com.ivarna.fluxlinux.core.install.InstallController
 import com.ivarna.fluxlinux.core.install.InstallKind
 import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
-import com.ivarna.fluxlinux.ui.components.GlassScaffold
+import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
 import com.ivarna.fluxlinux.ui.install.InstallThemePickRow
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeChild
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -65,13 +63,12 @@ import kotlinx.coroutines.withContext
  * only when the desktop is installed ([InstallKind.forRerun]); other distros always get
  * XFCE. Uses the process-scoped [InstallController] for both proot and chroot.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InstallConfigScreen(
     distro: Distro,
     onBack: () -> Unit,
     onInstallComplete: () -> Unit,
-    hazeState: HazeState
 ) {
     val context = LocalContext.current
     val appCtx = context.applicationContext
@@ -128,19 +125,24 @@ fun InstallConfigScreen(
         installer.start(distro.id, selectedTheme, runKind)
     }
 
-    GlassScaffold(
-        hazeState = hazeState,
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        // The top bar takes the status bar; the bottom takes the navigation bar.
+        contentWindowInsets = WindowInsets.navigationBars,
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         when (phase) {
-                            InstallPhase.OPTIONS -> "Install ${distro.name}"
-                            InstallPhase.RUNNING -> if (failed) "Install failed" else "Installing…"
-                            InstallPhase.DONE -> "Install complete"
+                            InstallPhase.OPTIONS -> stringResource(R.string.aka_install_cfg_title, distro.name)
+                            InstallPhase.RUNNING -> stringResource(
+                                if (failed) R.string.aka_install_cfg_title_failed else R.string.aka_install_cfg_title_running
+                            )
+                            InstallPhase.DONE -> stringResource(R.string.aka_install_title_done)
                         },
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 navigationIcon = {
@@ -156,57 +158,46 @@ fun InstallConfigScreen(
                         }
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            Icons.AutoMirrored.Sharp.ArrowBack,
+                            contentDescription = stringResource(R.string.aka_onb_back)
                         )
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
-                modifier = Modifier.hazeChild(
-                    state = hazeState,
-                    shape = androidx.compose.ui.graphics.RectangleShape,
-                    style = HazeMaterials.thin()
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         },
         bottomBar = {
             if (phase == InstallPhase.OPTIONS) {
-                Box(
+                val root = distro.id.contains("chroot")
+                val cta = when {
+                    withDesktop && root -> R.string.install_cfg_cta_terminal_desktop_root
+                    withDesktop -> R.string.install_cfg_cta_terminal_desktop
+                    root -> R.string.install_cfg_cta_terminal_root
+                    else -> R.string.install_cfg_cta_terminal
+                }
+                PlatedButton(
+                    text = stringResource(cta),
+                    onClick = { startInstall() },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Button(
-                        onClick = { startInstall() },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            // Cream secondary = readable CTA (dark primary blends into background)
-                            containerColor = MaterialTheme.colorScheme.secondary,
-                            contentColor = MaterialTheme.colorScheme.onSecondary
-                        ),
-                        shape = RoundedCornerShape(28.dp)
-                    ) {
-                        val root = distro.id.contains("chroot")
-                        val cta = when {
-                            withDesktop && root -> R.string.install_cfg_cta_terminal_desktop_root
-                            withDesktop -> R.string.install_cfg_cta_terminal_desktop
-                            root -> R.string.install_cfg_cta_terminal_root
-                            else -> R.string.install_cfg_cta_terminal
-                        }
-                        Text(stringResource(cta), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                }
+                        .navigationBarsPadding()
+                        .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md)
+                )
             }
         }
-    ) {
+    ) { padding ->
         when (phase) {
             InstallPhase.OPTIONS -> Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(padding)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)
             ) {
                 Text(
                     stringResource(
@@ -216,10 +207,10 @@ fun InstallConfigScreen(
                             R.string.install_cfg_heading_terminal
                         }
                     ),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
+                Spacer(Modifier.height(FluxSpacing.sm))
                 val profile = DistroInstallProfile.forId(distro.id)
                 val displayName = profile?.displayName ?: distro.name
                 val rootfsLine = when {
@@ -231,6 +222,7 @@ fun InstallConfigScreen(
                         },
                         displayName,
                     ) + " "
+                    // Other distros are not in the main UI; their copy stays as it was.
                     distro.id.startsWith("alpine") ->
                         "Installs Alpine 3.24 minirootfs, XFCE4 (apk), and Flux customization. "
                     distro.id.startsWith("fedora") ->
@@ -243,89 +235,68 @@ fun InstallConfigScreen(
                         "Installs $displayName rootfs, XFCE4, and Flux customization. "
                 }
                 Text(
-                    rootfsLine +
-                        "App modules can be added later from Distro Settings.",
+                    rootfsLine + stringResource(R.string.aka_install_cfg_modules_later),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 // The theme only styles the desktop; a terminal-only run has nothing to theme.
                 if (withDesktop) {
-                    Text(
-                        "Appearance theme",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    InstallThemePickRow(
-                        id = "dark",
-                        title = "Dark",
-                        desc = "Sleek default",
-                        selected = selectedTheme == "dark",
-                        onSelect = { selectedTheme = "dark" }
-                    )
-                    InstallThemePickRow(
-                        id = "light",
-                        title = "Light",
-                        desc = "Bright desktop",
-                        selected = selectedTheme == "light",
-                        onSelect = { selectedTheme = "light" }
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.90f))
-                        .border(1.dp, com.ivarna.fluxlinux.ui.theme.FluxHairline, RoundedCornerShape(16.dp))
-                        .padding(14.dp)
-                ) {
-                    Column {
-                        Text(
-                            "Includes",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                    Spacer(Modifier.height(FluxSpacing.xl))
+                    GroupTitle(stringResource(R.string.onboarding_theme_title))
+                    Column(
+                        modifier = Modifier.selectableGroup(),
+                        verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
+                    ) {
+                        InstallThemePickRow(
+                            id = "dark",
+                            title = stringResource(R.string.onboarding_theme_dark),
+                            desc = stringResource(R.string.onboarding_theme_dark_desc),
+                            selected = selectedTheme == "dark",
+                            onSelect = { selectedTheme = "dark" }
                         )
-                        Spacer(Modifier.height(6.dp))
-                        val bulletColor = com.ivarna.fluxlinux.ui.theme.fluxMutedText()
-                        Text(
-                            when {
-                                distro.id.startsWith("alpine") ->
-                                    "• Alpine 3.24 minirootfs (~4 MB + apk packages)"
-                                distro.id.startsWith("fedora") ->
-                                    "• Fedora 44 container rootfs"
-                                distro.id.startsWith("void") ->
-                                    "• Void Linux (glibc aarch64) rootfs"
-                                distro.id.startsWith("opensuse") ->
-                                    "• openSUSE Tumbleweed rootfs"
-                                else ->
-                                    "• $displayName rootfs"
-                            },
-                            fontSize = 13.sp,
-                            color = bulletColor
+                        InstallThemePickRow(
+                            id = "light",
+                            title = stringResource(R.string.onboarding_theme_light),
+                            desc = stringResource(R.string.onboarding_theme_light_desc),
+                            selected = selectedTheme == "light",
+                            onSelect = { selectedTheme = "light" }
                         )
-                        Text(stringResource(R.string.install_cfg_bullet_shell), fontSize = 13.sp, color = bulletColor)
-                        if (withDesktop) {
-                            Text(stringResource(R.string.install_cfg_bullet_xfce), fontSize = 13.sp, color = bulletColor)
-                        }
-                        if (distro.id.startsWith("fedora") || distro.id.startsWith("void") ||
-                            distro.id.startsWith("opensuse")
-                        ) {
-                            Text(
-                                "• Mesa / VirGL hardware acceleration",
-                                fontSize = 13.sp,
-                                color = bulletColor
-                            )
-                        }
-                        if (withDesktop) {
-                            Text(stringResource(R.string.install_cfg_bullet_theme), fontSize = 13.sp, color = bulletColor)
-                        }
-                        if (distro.id.contains("chroot")) {
-                            Text("• Requires root (KernelSU / Magisk)", fontSize = 13.sp, color = bulletColor)
-                        }
                     }
                 }
-                Spacer(Modifier.height(80.dp))
+
+                Spacer(Modifier.height(FluxSpacing.xl))
+                GroupTitle(stringResource(R.string.onboarding_manifest_title))
+                // The shared strings carry a "• " prefix; the list draws its own marks.
+                val bullets = buildList {
+                    add(
+                        when {
+                            distro.id.startsWith("alpine") -> "Alpine 3.24 minirootfs (~4 MB + apk packages)"
+                            distro.id.startsWith("fedora") -> "Fedora 44 container rootfs"
+                            distro.id.startsWith("void") -> "Void Linux (glibc aarch64) rootfs"
+                            distro.id.startsWith("opensuse") -> "openSUSE Tumbleweed rootfs"
+                            else -> "$displayName rootfs"
+                        }
+                    )
+                    add(stringResource(R.string.install_cfg_bullet_shell))
+                    if (withDesktop) {
+                        add(stringResource(R.string.install_cfg_bullet_xfce))
+                    }
+                    if (distro.id.startsWith("fedora") || distro.id.startsWith("void") ||
+                        distro.id.startsWith("opensuse")
+                    ) {
+                        add("Mesa / VirGL hardware acceleration")
+                    }
+                    if (withDesktop) {
+                        add(stringResource(R.string.install_cfg_bullet_theme))
+                    }
+                    if (distro.id.contains("chroot")) {
+                        add(stringResource(R.string.aka_install_cfg_needs_root))
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)) {
+                    bullets.forEach { BulletLine(it) }
+                }
+                Spacer(Modifier.height(FluxSpacing.lg))
             }
             InstallPhase.RUNNING, InstallPhase.DONE -> InstallProgressPanel(
                 percent = install.percent,
@@ -341,9 +312,38 @@ fun InstallConfigScreen(
                     installer.clearFinished()
                     onInstallComplete()
                 },
-                isDone = phase == InstallPhase.DONE
+                isDone = phase == InstallPhase.DONE,
+                modifier = Modifier.padding(padding)
             )
         }
+    }
+}
+
+@Composable
+private fun GroupTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.secondary,
+        modifier = Modifier.padding(bottom = FluxSpacing.sm)
+    )
+}
+
+@Composable
+private fun BulletLine(text: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Box(
+            Modifier
+                .padding(top = FluxSpacing.sm)
+                .size(FluxSpacing.xs + FluxSpacing.xxs)
+                .background(MaterialTheme.colorScheme.secondary)
+        )
+        Spacer(Modifier.width(FluxSpacing.md))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

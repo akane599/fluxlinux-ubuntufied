@@ -24,7 +24,7 @@
     <string name="terminal_tab_selected">Selected</string>
     <string name="terminal_empty_title">Ubuntu terminal</string>
     <string name="terminal_empty_opening">Opening an Ubuntu shell…</string>
-    <string name="terminal_empty_closed">All tabs are closed.</string>
+    <string name="terminal_empty_closed">No sessions open.</string>
     <string name="terminal_open_ubuntu">Open Ubuntu terminal</string>
     <string name="terminal_error_tab_limit">Tab limit reached (%1$d)</string>
     <string name="terminal_error_host_bootstrap">AkaTerminal\'s host tools aren\'t ready. Use Repair host files on the Ubuntu page.</string>

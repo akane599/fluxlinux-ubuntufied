@@ -1,106 +1,127 @@
 package com.ivarna.fluxlinux.ui.screens
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.Settings as AndroidSettings
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
-import androidx.compose.material.icons.filled.SdStorage
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.util.Log
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.filled.DisplaySettings
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.automirrored.sharp.ArrowBack
+import androidx.compose.material.icons.automirrored.sharp.HelpOutline
+import androidx.compose.material.icons.automirrored.sharp.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.sharp.OpenInNew
+import androidx.compose.material.icons.automirrored.sharp.VolumeUp
+import androidx.compose.material.icons.sharp.BugReport
+import androidx.compose.material.icons.sharp.Code
+import androidx.compose.material.icons.sharp.DisplaySettings
+import androidx.compose.material.icons.sharp.Folder
+import androidx.compose.material.icons.sharp.History
+import androidx.compose.material.icons.sharp.Person
+import androidx.compose.material.icons.sharp.Replay
+import androidx.compose.material.icons.sharp.SdStorage
+import androidx.compose.material.icons.sharp.Storage
+import androidx.compose.material.icons.sharp.Terminal
+import androidx.compose.material.icons.sharp.TextFields
+import androidx.compose.material.icons.sharp.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
+import com.ivarna.fluxlinux.BuildConfig
 import com.ivarna.fluxlinux.R
-import com.ivarna.fluxlinux.core.system.SharedStorageAccess
-import com.ivarna.fluxlinux.core.utils.ThemeMode
-import com.ivarna.fluxlinux.ui.components.GlassSettingCard
-import androidx.compose.ui.res.stringResource
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.rememberCoroutineScope
 import com.ivarna.fluxlinux.core.desktop.DesktopLauncher
 import com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
 import com.ivarna.fluxlinux.core.root.RootShell
+import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.utils.RuntimeSwitchDecision
+import com.ivarna.fluxlinux.core.utils.ThemeMode
 import com.ivarna.fluxlinux.core.utils.UbuntuInstallCheck
 import com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
+import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeCard
 import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeUi
+import com.ivarna.fluxlinux.ui.components.aka.AkaRow
+import com.ivarna.fluxlinux.ui.components.aka.AkaWordmark
+import com.ivarna.fluxlinux.ui.components.aka.MarkState
+import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
+import com.ivarna.fluxlinux.ui.components.aka.StatusMark
+import com.ivarna.fluxlinux.ui.components.aka.markColor
+import com.ivarna.fluxlinux.ui.theme.AkaTheme
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val SOURCE_URL = "https://github.com/akane599/fluxlinux-ubuntufied"
+private const val ISSUES_URL = "https://github.com/akane599/fluxlinux-ubuntufied/issues"
+private const val AUTHOR_URL = "https://github.com/akane599"
+private const val UPSTREAM_URL = "https://github.com/abhay-byte/fluxlinux"
+
 /**
- * Settings hub (nativecode-style): nav cards open detail pages.
- * Legacy Termux leftover manager on its own page; connection-fix / Prerequisites cards removed.
+ * Settings hub: full-width rows on the stock, grouped by section labels; each row opens a
+ * detail page. About sits at the end: the mark, the wordmark, links and credits.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -132,371 +153,186 @@ fun SettingsScreen(
 
     val context = LocalContext.current
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "Settings",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent
-                )
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                "App",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-            )
+    SettingsPageScaffold(title = "Settings", onBack = onBack) {
+        SectionLabel("App")
 
+        Box(Modifier.padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)) {
             UbuntuRuntimeRow()
-
-            // F-Droid (ivarna) flavor only: its manifest declares the permission, Play's does not.
-            if (SharedStorageAccess.declared(context)) {
-                var lifecycleKey by remember { mutableIntStateOf(0) }
-                val lifecycleOwner = LocalLifecycleOwner.current
-                DisposableEffect(lifecycleOwner) {
-                    val observer = LifecycleEventObserver { _, e ->
-                        if (e == Lifecycle.Event.ON_RESUME) lifecycleKey++
-                    }
-                    lifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-                }
-                val granted = remember(lifecycleKey) { SharedStorageAccess.granted() }
-                SettingsNavCard(
-                    icon = Icons.Default.SdStorage,
-                    title = "Shared storage",
-                    subtitle = if (granted) "Allowed: /sdcard and /storage (SD, USB OTG) are mounted in guests"
-                    else "Not allowed: guests cannot see /sdcard or USB drives. Tap, then enable All files access",
-                    onClick = { SharedStorageAccess.openSettings(context) }
-                )
-            }
-            if (com.ivarna.fluxlinux.core.system.PhantomProcessFixer.applicable()) {
-                var showPhantom by remember { mutableStateOf(false) }
-                val phantomState = com.ivarna.fluxlinux.core.system.PhantomProcessFixer.state(context)
-                SettingsNavCard(
-                    icon = Icons.Default.Warning,
-                    title = "Process killer fix",
-                    subtitle = "Phantom process killer: " + when (phantomState) {
-                        com.ivarna.fluxlinux.core.system.PhantomProcessFixer.State.DISABLED -> "Disabled"
-                        com.ivarna.fluxlinux.core.system.PhantomProcessFixer.State.ENABLED -> "Enabled. Tap to fix with Root, Shizuku or adb"
-                        else -> "Unknown. Tap to fix with Root, Shizuku or adb"
-                    },
-                    onClick = { showPhantom = true }
-                )
-                if (showPhantom) {
-                    com.ivarna.fluxlinux.ui.components.PhantomProcessDialog(warning = false) { showPhantom = false }
-                }
-            }
-            SettingsNavCard(
-                icon = Icons.Default.Terminal,
-                title = "Terminal",
-                subtitle = "Font zoom, extra keys, and guest shell",
-                onClick = { onNavigateToTerminalSettings?.invoke() }
-            )
-            SettingsNavCard(
-                icon = Icons.Default.DisplaySettings,
-                title = "X11 Display",
-                subtitle = "Scale, fullscreen, input for embedded X11",
-                onClick = { onNavigateToX11Settings?.invoke() }
-            )
-            SettingsNavCard(
-                icon = Icons.Default.VolumeUp,
-                title = "Audio",
-                subtitle = "Host PulseAudio status, start, restart, logs",
-                onClick = { onNavigateToAudioSettings?.invoke() }
-            )
-
-            // Other distros' containers and the v1 Termux leftovers stay reachable here.
-            Text(
-                stringResource(R.string.settings_advanced_header),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(start = 4.dp, top = 8.dp)
-            )
-            SettingsNavCard(
-                icon = Icons.Default.Storage,
-                title = "Chroot",
-                subtitle = "Installed roots, size, kill orphan processes",
-                onClick = { onNavigateToChrootSettings?.invoke() }
-            )
-            SettingsNavCard(
-                icon = Icons.Default.Folder,
-                title = "PRoot",
-                subtitle = "Installed containers and app-storage size",
-                onClick = { onNavigateToProotSettings?.invoke() }
-            )
-            SettingsNavCard(
-                icon = Icons.Default.History,
-                title = "Legacy Termux",
-                subtitle = "Leftover PRoot installs from FluxLinux ≤ v1.8.0 live in the Termux app",
-                onClick = { onNavigateToLegacyTermuxSettings?.invoke() }
-            )
-
-            Text(
-                "Help",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(start = 4.dp, top = 8.dp)
-            )
-
-            GlassSettingCard {
-                Column(
-                    Modifier.padding(16.dp).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (onNavigateToOnboarding != null) {
-                        // secondary = cream in dark theme — primary is near-black and vanishes on glass
-                        Button(
-                            onClick = { onNavigateToOnboarding() },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary,
-                                contentColor = MaterialTheme.colorScheme.onSecondary
-                            ),
-                            modifier = Modifier.fillMaxWidth().height(48.dp)
-                        ) {
-                            Text("Show onboarding", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (onNavigateToTroubleshooting != null) {
-                        Button(
-                            onClick = { onNavigateToTroubleshooting() },
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.secondary
-                            ),
-                            border = BorderStroke(
-                                1.5.dp,
-                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
-                            ),
-                            modifier = Modifier.fillMaxWidth().height(48.dp)
-                        ) {
-                            Text("Troubleshoot", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            // About
-            GlassSettingCard {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1A1A1A)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_logo),
-                            contentDescription = "FluxLinux Logo",
-                            modifier = Modifier.size(48.dp),
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "FluxLinux",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Text(
-                        "v${com.ivarna.fluxlinux.BuildConfig.VERSION_NAME} • embedded terminal & X11",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            GlassSettingCard(
-                onClick = { openUrl(context, "https://github.com/abhay-byte/fluxlinux#readme") }
-            ) {
-                Row(
-                    Modifier.padding(20.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("📖", fontSize = 24.sp)
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            "Read documentation",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        Text(
-                            "Setup guides and tutorials",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            }
-
-            GlassSettingCard(
-                onClick = { openUrl(context, "https://discord.gg/tag9kXAs2x") }
-            ) {
-                Row(
-                    Modifier.padding(20.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF5865F2)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_discord),
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            "Join our Discord",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        Text(
-                            "Help, setups, and features",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            }
-
-            GlassSettingCard {
-                Column(Modifier.padding(20.dp).fillMaxWidth()) {
-                    Text(
-                        "Special thanks",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    listOf(
-                        "Termux Team" to "https://github.com/termux",
-                        "PRoot Distro" to "https://github.com/termux/proot-distro",
-                        "Termux:X11" to "https://github.com/termux/termux-x11"
-                    ).forEach { (name, url) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { openUrl(context, url) }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Rounded.Favorite,
-                                null,
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(name, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                }
-            }
-
-            GlassSettingCard(onClick = { openUrl(context, "https://github.com/abhay-byte") }) {
-                Column(Modifier.padding(20.dp).fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.me),
-                                contentDescription = "Profile",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                        Spacer(Modifier.width(16.dp))
-                        Column {
-                            Text(
-                                "Abhay Raj",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Text(
-                                "@abhay-byte",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                    }
-                }
-            }
-
-            GlassSettingCard(
-                onClick = { openUrl(context, "https://github.com/abhay-byte/FluxLinux") }
-            ) {
-                Row(
-                    Modifier.padding(20.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_star),
-                        contentDescription = null,
-                        tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        "Star this repository",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(80.dp))
         }
+
+        // F-Droid (ivarna) flavor only: its manifest declares the permission, Play's does not.
+        if (SharedStorageAccess.declared(context)) {
+            var lifecycleKey by remember { mutableIntStateOf(0) }
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, e ->
+                    if (e == Lifecycle.Event.ON_RESUME) lifecycleKey++
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
+            val granted = remember(lifecycleKey) { SharedStorageAccess.granted() }
+            SettingsPageNavRow(
+                icon = Icons.Sharp.SdStorage,
+                title = "Shared storage",
+                subtitle = if (granted) "Allowed: /sdcard and /storage (SD, USB OTG) are mounted in guests"
+                else "Not allowed: guests cannot see /sdcard or USB drives. Tap, then enable All files access",
+                iconTint = if (granted) MaterialTheme.colorScheme.onSurfaceVariant else AkaTheme.inks.held,
+                onClick = { SharedStorageAccess.openSettings(context) }
+            )
+        }
+        if (com.ivarna.fluxlinux.core.system.PhantomProcessFixer.applicable()) {
+            var showPhantom by remember { mutableStateOf(false) }
+            val phantomState = com.ivarna.fluxlinux.core.system.PhantomProcessFixer.state(context)
+            val phantomFixed = phantomState == com.ivarna.fluxlinux.core.system.PhantomProcessFixer.State.DISABLED
+            SettingsPageNavRow(
+                icon = Icons.Sharp.Warning,
+                title = "Process killer fix",
+                subtitle = "Phantom process killer: " + when (phantomState) {
+                    com.ivarna.fluxlinux.core.system.PhantomProcessFixer.State.DISABLED -> "Disabled"
+                    com.ivarna.fluxlinux.core.system.PhantomProcessFixer.State.ENABLED -> "Enabled. Tap to fix with Root, Shizuku or adb"
+                    else -> "Unknown. Tap to fix with Root, Shizuku or adb"
+                },
+                iconTint = if (phantomFixed) MaterialTheme.colorScheme.onSurfaceVariant else AkaTheme.inks.held,
+                onClick = { showPhantom = true }
+            )
+            if (showPhantom) {
+                com.ivarna.fluxlinux.ui.components.PhantomProcessDialog(warning = false) { showPhantom = false }
+            }
+        }
+        SettingsPageNavRow(
+            icon = Icons.Sharp.Terminal,
+            title = "Terminal",
+            subtitle = "Font zoom, extra keys, and guest shell",
+            onClick = { onNavigateToTerminalSettings?.invoke() }
+        )
+        SettingsPageNavRow(
+            icon = Icons.Sharp.DisplaySettings,
+            title = "X11 display",
+            subtitle = "Scale, fullscreen, input for embedded X11",
+            onClick = { onNavigateToX11Settings?.invoke() }
+        )
+        SettingsPageNavRow(
+            icon = Icons.AutoMirrored.Sharp.VolumeUp,
+            title = "Audio",
+            subtitle = "Host PulseAudio status, start, restart, logs",
+            onClick = { onNavigateToAudioSettings?.invoke() }
+        )
+
+        // Other distros' containers and the v1 Termux leftovers stay reachable here.
+        SectionLabel(stringResource(R.string.settings_advanced_header))
+        SettingsPageNavRow(
+            icon = Icons.Sharp.Storage,
+            title = "Chroot",
+            subtitle = "Installed roots, size, kill orphan processes",
+            onClick = { onNavigateToChrootSettings?.invoke() }
+        )
+        SettingsPageNavRow(
+            icon = Icons.Sharp.Folder,
+            title = "PRoot",
+            subtitle = "Installed containers and app-storage size",
+            onClick = { onNavigateToProotSettings?.invoke() }
+        )
+        SettingsPageNavRow(
+            icon = Icons.Sharp.History,
+            title = "Legacy Termux",
+            subtitle = "Leftover PRoot installs from FluxLinux ≤ v1.8.0 live in the Termux app",
+            onClick = { onNavigateToLegacyTermuxSettings?.invoke() }
+        )
+
+        if (onNavigateToOnboarding != null || onNavigateToTroubleshooting != null) {
+            SectionLabel("Help")
+            if (onNavigateToOnboarding != null) {
+                SettingsPageNavRow(
+                    icon = Icons.Sharp.Replay,
+                    title = "Show onboarding",
+                    onClick = { onNavigateToOnboarding() }
+                )
+            }
+            if (onNavigateToTroubleshooting != null) {
+                SettingsPageNavRow(
+                    icon = Icons.AutoMirrored.Sharp.HelpOutline,
+                    title = "Troubleshoot",
+                    onClick = { onNavigateToTroubleshooting() }
+                )
+            }
+        }
+
+        SettingsAboutSection(open = { openUrl(context, it) })
     }
+}
+
+/** About: the mark and wordmark, the fork's links, credits, and one small upstream line. */
+@Composable
+internal fun SettingsAboutSection(open: (String) -> Unit) {
+    SectionLabel(stringResource(R.string.settings_aka_about_header))
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md)
+            .semantics(mergeDescendants = true) {},
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_aka_mark),
+            contentDescription = null,
+            modifier = Modifier.size(56.dp),
+        )
+        Spacer(Modifier.height(FluxSpacing.md))
+        AkaWordmark(style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(FluxSpacing.xs))
+        Text(
+            stringResource(R.string.settings_aka_version, BuildConfig.VERSION_NAME),
+            style = CodeStyle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            stringResource(R.string.settings_aka_tagline),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+    SettingsPageLinkRow(
+        icon = Icons.Sharp.Code,
+        title = stringResource(R.string.settings_aka_source),
+        onClick = { open(SOURCE_URL) },
+    )
+    SettingsPageLinkRow(
+        icon = Icons.Sharp.BugReport,
+        title = stringResource(R.string.settings_aka_report),
+        onClick = { open(ISSUES_URL) },
+    )
+    SettingsPageLinkRow(
+        icon = Icons.Sharp.Person,
+        title = stringResource(R.string.settings_aka_author),
+        supporting = stringResource(R.string.settings_aka_author_name),
+        onClick = { open(AUTHOR_URL) },
+    )
+
+    SectionLabel(stringResource(R.string.settings_aka_thanks_header))
+    listOf(
+        R.string.settings_aka_thanks_termux to "https://github.com/termux",
+        R.string.settings_aka_thanks_proot_distro to "https://github.com/termux/proot-distro",
+        R.string.settings_aka_thanks_termux_x11 to "https://github.com/termux/termux-x11",
+    ).forEach { (name, url) ->
+        SettingsPageLinkRow(title = stringResource(name), onClick = { open(url) })
+    }
+    AkaRow(
+        title = stringResource(R.string.settings_aka_fonts),
+        supporting = stringResource(R.string.settings_aka_fonts_summary),
+        icon = Icons.Sharp.TextFields,
+    )
+
+    Text(
+        stringResource(R.string.settings_aka_forked),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .padding(top = FluxSpacing.lg)
+            .fillMaxWidth()
+            .heightIn(min = FluxSpacing.touch)
+            .clickable(role = Role.Button) { open(UPSTREAM_URL) }
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+    )
 }
 
 /**
@@ -599,67 +435,386 @@ private fun UbuntuRuntimeRow() {
     }
 }
 
-@Composable
-private fun SettingsNavCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    // Dark theme primary is near-black (filled surfaces); use secondary (cream) for icons.
-    val iconTint = MaterialTheme.colorScheme.secondary
-    val titleColor = MaterialTheme.colorScheme.onBackground
-    val subtitleColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val chevronColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-
-    GlassSettingCard(onClick = onClick) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 18.dp, vertical = 18.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(iconTint.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = titleColor
-                )
-                Text(
-                    subtitle,
-                    fontSize = 12.sp,
-                    color = subtitleColor
-                )
-            }
-            Icon(
-                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                contentDescription = null,
-                tint = chevronColor
-            )
-        }
-    }
-}
-
 private fun openUrl(context: Context, url: String) {
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     } catch (e: Exception) {
         Log.e("Settings", "Error opening URL", e)
+    }
+}
+
+// ─── Settings family building blocks ──────────────────────────────────────────
+// Shared by the Settings detail pages in this package (Terminal, X11, Audio, storage,
+// distro, legacy Termux, troubleshooting). Rows on the stock, grouped by SectionLabel;
+// tonal blocks only for real groups (a readout, a log).
+
+/**
+ * A Settings page: Material top app bar with back on the stock (a printed tint once the
+ * content scrolls under it) and, when [scroll] is true, a scrolling column for [content].
+ * With [scroll] false the column fills the page and the caller scrolls (e.g. a LazyColumn).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SettingsPageScaffold(
+    title: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    scroll: Boolean = true,
+    actions: @Composable RowScope.() -> Unit = {},
+    snackbarHost: @Composable () -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val scheme = MaterialTheme.colorScheme
+    Scaffold(
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = scheme.background,
+        snackbarHost = snackbarHost,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Sharp.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = actions,
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = scheme.background,
+                    scrolledContainerColor = scheme.surfaceContainer,
+                    navigationIconContentColor = scheme.onBackground,
+                    titleContentColor = scheme.onBackground,
+                    actionIconContentColor = scheme.onSurfaceVariant,
+                ),
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+        ) {
+            content()
+            if (scroll) Spacer(Modifier.height(FluxSpacing.xxl))
+        }
+    }
+}
+
+/** A row that opens another page: leading Sharp icon, title, supporting text, chevron. */
+@Composable
+internal fun SettingsPageNavRow(
+    icon: ImageVector?,
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    enabled: Boolean = true,
+) {
+    AkaRow(
+        title = title,
+        supporting = subtitle,
+        icon = icon,
+        iconTint = iconTint,
+        enabled = enabled,
+        onClick = onClick,
+        modifier = modifier,
+        trailing = {
+            Icon(
+                Icons.AutoMirrored.Sharp.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
+}
+
+/** A row that opens a web page: the trailing mark says it leaves the app. */
+@Composable
+internal fun SettingsPageLinkRow(
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    supporting: String? = null,
+) {
+    AkaRow(
+        title = title,
+        supporting = supporting,
+        icon = icon,
+        onClick = onClick,
+        modifier = modifier,
+        trailing = {
+            Icon(
+                Icons.AutoMirrored.Sharp.OpenInNew,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        },
+    )
+}
+
+/**
+ * A setting with a switch. The whole row toggles; [description] overrides what
+ * accessibility services read for it (defaults to the row's own text).
+ */
+@Composable
+internal fun SettingsPageSwitchRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    supporting: String? = null,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    description: String? = null,
+    trailingExtra: (@Composable RowScope.() -> Unit)? = null,
+) {
+    AkaRow(
+        title = title,
+        supporting = supporting,
+        icon = icon,
+        enabled = enabled,
+        modifier = modifier
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier),
+        trailing = {
+            trailingExtra?.invoke(this)
+            FluxSwitch(checked = checked, onCheckedChange = null, enabled = enabled)
+        },
+    )
+}
+
+/** An explanatory paragraph under the top bar or a section label. */
+@Composable
+internal fun SettingsPageNote(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = color,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm),
+    )
+}
+
+/**
+ * A note that needs attention (data that outlives the app, a missing tool): printed in the
+ * held ink with a warning glyph, never colour alone.
+ */
+@Composable
+internal fun SettingsPageAttention(
+    text: String,
+    modifier: Modifier = Modifier,
+    failed: Boolean = false,
+) {
+    val ink = if (failed) AkaTheme.inks.failed else AkaTheme.inks.held
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            Icons.Sharp.Warning,
+            contentDescription = null,
+            tint = ink,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(FluxSpacing.md))
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/**
+ * A tonal block for a real group (a readout with its own controls, a log). Content gets
+ * the block's inner padding; rows inside should not add their own background.
+ */
+@Composable
+internal fun SettingsPageBlock(
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(FluxSpacing.lg),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.medium)
+            .padding(contentPadding),
+        content = content,
+    )
+}
+
+/** A state told by mark form and ink, then words: replaces the old all-caps badges. */
+@Composable
+internal fun SettingsPageStatus(
+    text: String,
+    state: MarkState,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        StatusMark(state = state)
+        Spacer(Modifier.width(FluxSpacing.sm))
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (state == MarkState.IDLE) MaterialTheme.colorScheme.onSurfaceVariant else markColor(state),
+        )
+    }
+}
+
+/** Label on the start, a value (text or a status) on the end: a line of a readout. */
+@Composable
+internal fun SettingsPageMetaRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    trailing: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = FluxSpacing.touch)
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Spacer(Modifier.width(FluxSpacing.md))
+        trailing()
+    }
+}
+
+/** A measured figure (a size, a count): set in mono at headline size, its unit beside it. */
+@Composable
+internal fun SettingsPageFigure(
+    value: String,
+    unit: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    dimmed: Boolean = false,
+) {
+    val figure = MaterialTheme.typography.headlineMedium
+    Row(modifier = modifier, verticalAlignment = Alignment.Bottom) {
+        Text(
+            value,
+            style = CodeStyle.copy(fontSize = figure.fontSize, lineHeight = figure.lineHeight),
+            color = if (dimmed) color.copy(alpha = 0.72f) else color,
+        )
+        if (unit.isNotEmpty()) {
+            Spacer(Modifier.width(FluxSpacing.xs))
+            Text(
+                unit,
+                style = CodeStyle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = FluxSpacing.xxs),
+            )
+        }
+    }
+}
+
+/** A secondary action: outlined, cut-paper corners, 48dp tall. */
+@Composable
+internal fun SettingsPageSecondaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    icon: ImageVector? = null,
+    danger: Boolean = false,
+) {
+    val ink = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = MaterialTheme.shapes.small,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = ink),
+        modifier = modifier.heightIn(min = FluxSpacing.touch),
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(FluxSpacing.sm))
+        }
+        Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 2)
+    }
+}
+
+/** A destructive action, filled in the error ink. Always behind a confirming dialog. */
+@Composable
+internal fun SettingsPageDangerButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        shape = MaterialTheme.shapes.small,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError,
+        ),
+        modifier = modifier.heightIn(min = FluxSpacing.touch),
+    ) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(FluxSpacing.sm))
+        }
+        Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 2)
+    }
+}
+
+/** Usage printed flat: a filled run of [color] on the container ink, no gradient. */
+@Composable
+internal fun SettingsPageUsageBar(
+    fraction: Float,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.secondary,
+) {
+    val f = fraction.coerceIn(0f, 1f)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(FluxSpacing.sm)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.shapes.extraSmall),
+    ) {
+        if (f > 0f) {
+            Box(
+                Modifier
+                    .fillMaxWidth(f)
+                    .height(FluxSpacing.sm)
+                    .background(color, MaterialTheme.shapes.extraSmall),
+            )
+        }
     }
 }

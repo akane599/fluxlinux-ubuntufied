@@ -3,60 +3,53 @@ package com.ivarna.fluxlinux.ui.onboarding
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.DesktopWindows
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.FolderShared
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.automirrored.sharp.ArrowBack
+import androidx.compose.material.icons.sharp.CloudDownload
+import androidx.compose.material.icons.sharp.DesktopWindows
+import androidx.compose.material.icons.sharp.Download
+import androidx.compose.material.icons.sharp.FolderOpen
+import androidx.compose.material.icons.sharp.FolderShared
+import androidx.compose.material.icons.sharp.Layers
+import androidx.compose.material.icons.sharp.LockOpen
+import androidx.compose.material.icons.sharp.Speed
+import androidx.compose.material.icons.sharp.Terminal
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -64,6 +57,7 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -73,47 +67,55 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.withStyle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.install.InstallController
 import com.ivarna.fluxlinux.core.install.InstallKind
 import com.ivarna.fluxlinux.core.root.RootShell
-import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
-import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
-import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
-import com.ivarna.fluxlinux.ui.components.MethodChip
+import com.ivarna.fluxlinux.ui.components.aka.AkaWordmark
+import com.ivarna.fluxlinux.ui.components.aka.MarkState
+import com.ivarna.fluxlinux.ui.components.aka.PlateKind
+import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.StatusMark
+import com.ivarna.fluxlinux.ui.components.aka.markColor
+import com.ivarna.fluxlinux.ui.components.aka.plateInks
+import com.ivarna.fluxlinux.ui.components.aka.plateOffset
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
+import com.ivarna.fluxlinux.ui.theme.AkaTheme
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.DesktopThemeSwatchDark
 import com.ivarna.fluxlinux.ui.theme.DesktopThemeSwatchLight
-import com.ivarna.fluxlinux.ui.theme.FluxSuccess
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
+import com.ivarna.fluxlinux.ui.theme.misregistered
+import com.ivarna.fluxlinux.ui.theme.risoGrain
 import kotlin.concurrent.thread
 
 private enum class OnboardStep { Welcome, Consent, HostSetup, Options, Storage, Running, Done }
@@ -310,7 +312,7 @@ fun OnboardingFlowScreen(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. WELCOME PAGE
+// Welcome: the app's one focal moment (the wordmark printing in two passes)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -320,167 +322,163 @@ internal fun WelcomePage(onNext: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = FluxSpacing.xl, vertical = FluxSpacing.lg)
     ) {
-        // Top Hero Header
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(68.dp)
-                    .clip(MaterialTheme.shapes.large)
-                    .background(colors.surfaceContainerHigh),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_logo),
-                    contentDescription = "FluxLinux Logo",
-                    modifier = Modifier.size(44.dp)
-                )
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            Text(
-                text = "FluxLinux",
-                style = MaterialTheme.typography.displaySmall,
-                color = colors.onBackground
-            )
-
-            Spacer(Modifier.height(6.dp))
-
-            Text(
-                text = stringResource(R.string.onboarding_welcome_tagline),
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        }
-
-        // Scrollable Features & Illustration Area
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .verticalScroll(rememberScrollState())
         ) {
+            Spacer(Modifier.height(FluxSpacing.xxl))
+            // Previews and screenshot tests capture one frame: print them registered.
+            FittedWordmark(animate = !LocalInspectionMode.current)
+            Spacer(Modifier.height(FluxSpacing.md))
+            Text(
+                text = stringResource(R.string.onboarding_welcome_tagline),
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.onBackground
+            )
+
+            Spacer(Modifier.height(FluxSpacing.xl))
+            WelcomeTerminalPlate()
+            Spacer(Modifier.height(FluxSpacing.xl))
+
             // What setup gives you: the terminal first, the desktop as an option, files both ways.
-            ModernFeatureCard(
-                icon = Icons.Filled.Terminal,
-                title = stringResource(R.string.onboarding_feature_ubuntu_title),
-                description = stringResource(R.string.onboarding_feature_ubuntu_desc)
-            )
-            ModernFeatureCard(
-                icon = Icons.Filled.DesktopWindows,
-                title = stringResource(R.string.onboarding_feature_desktop_title),
-                description = stringResource(R.string.onboarding_feature_desktop_desc)
-            )
-            ModernFeatureCard(
-                icon = Icons.Filled.FolderShared,
-                title = stringResource(R.string.onboarding_feature_files_title),
-                description = stringResource(R.string.onboarding_feature_files_desc)
-            )
-
-            Spacer(Modifier.height(4.dp))
-
-            // Responsive Illustration Banner
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 130.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surfaceContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.onboarding_bg_1),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+            Column(verticalArrangement = Arrangement.spacedBy(FluxSpacing.lg)) {
+                WelcomeFeatureRow(
+                    icon = Icons.Sharp.Terminal,
+                    title = stringResource(R.string.onboarding_feature_ubuntu_title),
+                    description = stringResource(R.string.onboarding_feature_ubuntu_desc)
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    MaterialTheme.colorScheme.background.copy(alpha = 0.65f)
-                                )
-                            )
-                        )
+                WelcomeFeatureRow(
+                    icon = Icons.Sharp.DesktopWindows,
+                    title = stringResource(R.string.onboarding_feature_desktop_title),
+                    description = stringResource(R.string.onboarding_feature_desktop_desc)
+                )
+                WelcomeFeatureRow(
+                    icon = Icons.Sharp.FolderShared,
+                    title = stringResource(R.string.onboarding_feature_files_title),
+                    description = stringResource(R.string.onboarding_feature_files_desc)
                 )
             }
+            Spacer(Modifier.height(FluxSpacing.lg))
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(FluxSpacing.lg))
 
-        // Get Started CTA
-        FluxPrimaryButton(
+        PlatedButton(
             text = stringResource(R.string.onboarding_get_started),
-            icon = Icons.Filled.ChevronRight,
-            onClick = onNext
+            onClick = onNext,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
 
-/** One welcome point: icon and two lines of text on the background, no card around it. */
+/**
+ * The wordmark at display scale, shrunk only as far as needed to fit the width (narrow phones,
+ * large font scales), so it never wraps or clips. A little room is kept for the under plate.
+ */
 @Composable
-private fun ModernFeatureCard(
+private fun FittedWordmark(animate: Boolean, modifier: Modifier = Modifier) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val base = MaterialTheme.typography.displayLarge
+        val measurer = rememberTextMeasurer()
+        val maxPx = constraints.maxWidth
+        val style = remember(maxPx, base, measurer) {
+            val width = measurer.measure("AkaTerminal", base, maxLines = 1, softWrap = false).size.width
+            // 0.94: room for the under plate's rest offset and the ExtraBold overhang.
+            val fit = maxPx * 0.94f
+            if (width <= 0 || width <= fit) {
+                base
+            } else {
+                val k = fit / width
+                base.copy(fontSize = base.fontSize * k, lineHeight = base.lineHeight * k)
+            }
+        }
+        AkaWordmark(style = style, animate = animate)
+    }
+}
+
+/** A plausible terminal excerpt, printed on the Federal shell field: the product, shown. */
+private sealed interface ExcerptLine {
+    data class Command(val text: String) : ExcerptLine
+    data class Output(val text: String) : ExcerptLine
+}
+
+private const val EXCERPT_PROMPT = "akane@ubuntu:~$ "
+
+// `ls` lays the ~/storage links (GuestStorageLinks) out in columns for a narrow terminal.
+private val WelcomeExcerpt = listOf(
+    ExcerptLine.Command("uname -sm"),
+    ExcerptLine.Output("Linux aarch64"),
+    ExcerptLine.Command("ls ~/storage"),
+    ExcerptLine.Output("dcim       movies    shared"),
+    ExcerptLine.Output("documents  music"),
+    ExcerptLine.Output("downloads  pictures"),
+)
+
+@Composable
+private fun WelcomeTerminalPlate() {
+    val inks = AkaTheme.inks
+    val promptStyle = SpanStyle(color = inks.onShellFieldMuted)
+    PrintedPlate(
+        // An illustration: TalkBack skips it, the feature rows below say the same in words.
+        modifier = Modifier.clearAndSetSemantics {}
+    ) {
+        WelcomeExcerpt.forEach { line ->
+            val text = when (line) {
+                is ExcerptLine.Command -> buildAnnotatedString {
+                    withStyle(promptStyle) { append(EXCERPT_PROMPT) }
+                    append(line.text)
+                }
+                is ExcerptLine.Output -> buildAnnotatedString { append(line.text) }
+            }
+            Text(text = text, style = CodeStyle, color = inks.onShellField, maxLines = 1, softWrap = false)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = EXCERPT_PROMPT, style = CodeStyle, color = inks.onShellFieldMuted, maxLines = 1, softWrap = false)
+            ExcerptCursor()
+        }
+    }
+}
+
+/** The waiting block cursor, in the red plate's ink (Vermilion reads on both shell fields). */
+@Composable
+private fun ExcerptCursor() {
+    Box(
+        Modifier
+            .size(width = FluxSpacing.sm, height = FluxSpacing.lg)
+            .background(AkaTheme.inks.primaryFill)
+    )
+}
+
+/** One welcome point: a Sharp icon and two lines of text on the stock, no card around it. */
+@Composable
+private fun WelcomeFeatureRow(
     icon: ImageVector,
     title: String,
     description: String
 ) {
     val colors = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(MaterialTheme.shapes.small)
-                .background(colors.secondaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = colors.onSecondaryContainer,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-
-        Spacer(Modifier.width(16.dp))
-
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = colors.secondary,
+            modifier = Modifier.size(FluxSpacing.xl)
+        )
+        Spacer(Modifier.width(FluxSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = colors.onSurface,
-                style = MaterialTheme.typography.titleSmall
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = description,
-                color = colors.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Text(text = title, color = colors.onBackground, style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(FluxSpacing.xxs))
+            Text(text = description, color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. CONSENT PAGE (GITHUB DOWNLOAD NOTICE)
+// Consent (GitHub download notice)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -488,154 +486,92 @@ private fun ConsentPage(onBack: () -> Unit, onNext: () -> Unit) {
     var downloadConsent by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+    StepPage(
+        currentStep = 1,
+        title = stringResource(R.string.aka_onb_consent_title),
+        onBack = onBack,
+        actions = {
+            StepActionsRow(onBack) {
+                PlatedButton(
+                    text = stringResource(R.string.onboarding_continue),
+                    enabled = downloadConsent,
+                    onClick = onNext,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
     ) {
-        // Step Navigation Bar
-        StepHeader(
-            currentStep = 1,
-            totalSteps = ONBOARD_STEP_COUNT,
-            title = "External Downloads",
-            onBack = onBack
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Sharp.CloudDownload,
+                contentDescription = null,
+                tint = colors.secondary,
+                modifier = Modifier.size(FluxSpacing.xl)
+            )
+            Spacer(Modifier.width(FluxSpacing.md))
+            Text(
+                text = stringResource(R.string.aka_onb_notice_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.onBackground
+            )
+        }
+        Spacer(Modifier.height(FluxSpacing.md))
+        Text(
+            text = stringResource(R.string.onboarding_notice_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onBackground
         )
+        Spacer(Modifier.height(FluxSpacing.lg))
 
-        Spacer(Modifier.height(16.dp))
-
+        // What comes from where: one real group, so one tonal block.
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .background(colors.surfaceContainerLow)
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
         ) {
-            // Notice Header Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surfaceContainer)
-                    .padding(18.dp)
-            ) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.secondaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.CloudDownload,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            text = "F-Droid & Package Notice",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.onSurface
-                        )
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    Text(
-                        text = stringResource(R.string.onboarding_notice_body),
-                        color = colors.onSurface.copy(alpha = 0.75f),
-                        fontSize = 13.5.sp,
-                        lineHeight = 19.sp
-                    )
-
-                    Spacer(Modifier.height(14.dp))
-
-                    // Breakdown chips
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        DownloadItemBadge(
-                            title = stringResource(R.string.onboarding_notice_chip_host),
-                            size = stringResource(R.string.onboarding_notice_chip_host_size),
-                            modifier = Modifier.weight(1f)
-                        )
-                        DownloadItemBadge(
-                            title = stringResource(R.string.onboarding_notice_chip_rootfs),
-                            size = stringResource(R.string.onboarding_notice_chip_rootfs_size),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            // Interactive Consent Card
-            FluxConsentCheckboxCard(
-                consented = downloadConsent,
-                onConsentChange = { downloadConsent = it }
+            DownloadItemRow(
+                title = stringResource(R.string.onboarding_notice_chip_host),
+                size = stringResource(R.string.onboarding_notice_chip_host_size)
+            )
+            DownloadItemRow(
+                title = stringResource(R.string.onboarding_notice_chip_rootfs),
+                size = stringResource(R.string.onboarding_notice_chip_rootfs_size)
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(FluxSpacing.xl))
 
-        // Navigation Action Bar
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FluxGhostButton(
-                text = "Back",
-                onClick = onBack,
-                modifier = Modifier.weight(0.7f)
-            )
-
-            FluxPrimaryButton(
-                text = "Continue",
-                enabled = downloadConsent,
-                icon = Icons.AutoMirrored.Filled.ArrowForward,
-                onClick = onNext,
-                modifier = Modifier.weight(1.3f)
-            )
-        }
+        FluxConsentCheckboxCard(
+            consented = downloadConsent,
+            onConsentChange = { downloadConsent = it }
+        )
     }
 }
 
+/** One download source: its name, and where it comes from or how large it is. */
 @Composable
-private fun DownloadItemBadge(
-    title: String,
-    size: String,
-    modifier: Modifier = Modifier
-) {
-    // Title above size: side by side, "~80-150 MiB" got clipped at phone width.
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
+private fun DownloadItemRow(title: String, size: String) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = title,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
         )
+        Spacer(Modifier.width(FluxSpacing.md))
         Text(
             text = size,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.secondary
         )
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. HOST SETUP PAGE
+// Host setup
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -645,11 +581,14 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
     var initializing by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
     var statusText by remember { mutableStateOf("") }
+    // The last run ended without a working host: the failure holds its ink until a new run.
+    var hostFailed by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
 
     fun startInit() {
         initializing = true
-        statusText = "Extracting host bootstrap…"
+        hostFailed = false
+        statusText = context.getString(R.string.aka_onb_host_status_extracting)
         TerminalLauncher.prepareHost(
             context,
             progress = { done, total, phase ->
@@ -659,190 +598,138 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
             onDone = { ok ->
                 initializing = false
                 bootstrapDone = TerminalLauncher.isHostSetupDone(context)
-                statusText = if (bootstrapDone) "Host environment ready."
-                else "Setup failed — check device storage."
+                hostFailed = !bootstrapDone
+                statusText = if (bootstrapDone) context.getString(R.string.aka_onb_host_status_ready)
+                else context.getString(R.string.aka_onb_host_status_failed)
             }
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-    ) {
-        StepHeader(
-            currentStep = 2,
-            totalSteps = ONBOARD_STEP_COUNT,
-            title = "Host Environment",
-            onBack = onBack
-        )
+    val mark = when {
+        bootstrapDone -> MarkState.RUNNING
+        initializing -> MarkState.WORKING
+        hostFailed -> MarkState.FAILED
+        else -> MarkState.IDLE
+    }
+    val stateLabel = stringResource(
+        when (mark) {
+            MarkState.RUNNING -> R.string.aka_onb_host_state_ready
+            MarkState.WORKING -> R.string.aka_onb_host_state_working
+            MarkState.FAILED -> R.string.aka_onb_host_state_failed
+            else -> R.string.aka_onb_host_state_pending
+        }
+    )
 
-        Spacer(Modifier.height(16.dp))
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Text(
-                text = stringResource(R.string.onboarding_host_setup_intro),
-                color = colors.onBackground.copy(alpha = 0.72f),
-                fontSize = 14.sp,
-                lineHeight = 19.sp
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            // Dedicated Host Status Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surfaceContainer)
-                    .padding(18.dp)
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        if (bootstrapDone) MaterialTheme.colorScheme.secondaryContainer
-                                        else MaterialTheme.colorScheme.secondaryContainer
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (bootstrapDone) Icons.Filled.CheckCircle else Icons.Filled.Memory,
-                                    contentDescription = null,
-                                    tint = if (bootstrapDone) FluxSuccess else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Embedded Host Prefix",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.onSurface
-                                )
-                                Text(
-                                    text = if (bootstrapDone) "Initialized & Ready" else "Requires Setup",
-                                    fontSize = 12.sp,
-                                    color = if (bootstrapDone) FluxSuccess else colors.onSurface.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-
-                        MethodChip(
-                            label = if (bootstrapDone) "READY" else if (initializing) "EXTRACTING" else "PENDING",
-                            color = if (bootstrapDone) FluxSuccess else if (initializing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Spacer(Modifier.height(14.dp))
-
-                    if (initializing) {
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = statusText.ifBlank { "Extracting bootstrap…" },
-                                    fontSize = 12.sp,
-                                    color = colors.onSurface.copy(alpha = 0.75f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = "${(progress * 100).toInt()}%",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = { progress },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp)),
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = colors.surfaceContainerHighest
-                            )
-                        }
-                    } else if (!bootstrapDone) {
-                        Text(
-                            text = "Tap below to extract the core userland files and start the embedded runtime.",
-                            fontSize = 12.5.sp,
-                            color = colors.onSurface.copy(alpha = 0.7f)
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = { startInit() },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Initialize Host", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    } else {
-                        Text(
-                            text = "Host environment is extracted and operational. PulseAudio and internal session services are active.",
-                            fontSize = 12.5.sp,
-                            color = colors.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-                }
+    StepPage(
+        currentStep = 2,
+        title = stringResource(R.string.aka_onb_host_title),
+        onBack = onBack,
+        actions = {
+            StepActionsRow(onBack) {
+                PlatedButton(
+                    text = stringResource(if (bootstrapDone) R.string.onboarding_continue else R.string.aka_onb_host_initialize),
+                    enabled = !initializing,
+                    onClick = {
+                        if (bootstrapDone) onNext() else startInit()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
+    ) {
+        Text(
+            text = stringResource(R.string.onboarding_host_setup_intro),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurfaceVariant
+        )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(FluxSpacing.xl))
 
-        // Navigation Actions
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // The host's state: told by the mark's form, then its ink, then in words.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .background(colors.surfaceContainerLow)
+                .padding(FluxSpacing.lg)
         ) {
-            FluxGhostButton(
-                text = "Back",
-                onClick = onBack,
-                modifier = Modifier.weight(0.7f)
-            )
+            Row(
+                modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatusMark(state = mark, size = FluxSpacing.md)
+                Spacer(Modifier.width(FluxSpacing.md))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.aka_onb_host_name),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.onSurface
+                    )
+                    Text(
+                        text = stateLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = markColor(mark)
+                    )
+                }
+            }
 
-            FluxPrimaryButton(
-                text = if (bootstrapDone) "Continue" else "Initialize",
-                enabled = !initializing,
-                icon = Icons.AutoMirrored.Filled.ArrowForward,
-                onClick = {
-                    if (bootstrapDone) onNext() else startInit()
-                },
-                modifier = Modifier.weight(1.3f)
-            )
+            Spacer(Modifier.height(FluxSpacing.md))
+
+            when {
+                initializing -> {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = statusText.ifBlank { stringResource(R.string.aka_onb_host_status_extracting) },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(FluxSpacing.sm))
+                        Text(
+                            text = "${(progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = colors.secondary
+                        )
+                    }
+                    Spacer(Modifier.height(FluxSpacing.sm))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.extraSmall),
+                        color = markColor(MarkState.WORKING),
+                        trackColor = colors.surfaceContainerHighest
+                    )
+                }
+                bootstrapDone -> Text(
+                    text = stringResource(R.string.aka_onb_host_ready_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
+                else -> {
+                    if (hostFailed) {
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.error
+                        )
+                        Spacer(Modifier.height(FluxSpacing.xs))
+                    }
+                    Text(
+                        text = stringResource(R.string.aka_onb_host_pending_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. OPTIONS PAGE
+// Options
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Stateless apart from the consent tick (also rendered by the onboarding screenshot previews). */
@@ -861,207 +748,130 @@ internal fun OptionsPage(
     var downloadConsent by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+    StepPage(
+        currentStep = 3,
+        title = stringResource(R.string.onboarding_options_title),
+        onBack = onBack,
+        actions = {
+            StepActionsRow(onBack) {
+                PlatedButton(
+                    text = stringResource(R.string.onboarding_install),
+                    enabled = downloadConsent,
+                    icon = Icons.Sharp.Download,
+                    onClick = onInstall,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
     ) {
-        StepHeader(
-            currentStep = 3,
-            totalSteps = ONBOARD_STEP_COUNT,
-            title = stringResource(R.string.onboarding_options_title),
-            onBack = onBack
+        // What is being installed, as a heading row on the stock.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painter = painterResource(id = R.drawable.distro_ubuntu),
+                contentDescription = null,
+                modifier = Modifier.size(FluxSpacing.xxl)
+            )
+            Spacer(Modifier.width(FluxSpacing.md))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.onboarding_options_distro_name),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.onBackground
+                )
+                Text(
+                    text = stringResource(
+                        if (runtime == UbuntuRuntimeMode.CHROOT) R.string.onboarding_options_distro_desc_chroot
+                        else R.string.onboarding_options_distro_desc
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
+            }
+        }
+
+        // Runtime: only on rooted phones (off-main su probe), PRoot stays the default.
+        if (rootAvailable) {
+            Spacer(Modifier.height(FluxSpacing.xl))
+            RuntimeChoiceSection(runtime = runtime, onRuntime = onRuntime)
+        }
+
+        Spacer(Modifier.height(FluxSpacing.lg))
+        DesktopOptionRow(checked = installDesktop, onCheckedChange = onInstallDesktop)
+
+        // The desktop theme only matters when the desktop is installed.
+        AnimatedVisibility(visible = installDesktop) {
+            Column(Modifier.padding(top = FluxSpacing.md)) {
+                GroupTitle(stringResource(R.string.onboarding_theme_title))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
+                ) {
+                    ThemeOption(
+                        title = stringResource(R.string.onboarding_theme_dark),
+                        desc = stringResource(R.string.onboarding_theme_dark_desc),
+                        isDark = true,
+                        selected = theme == "dark",
+                        onSelect = { onTheme("dark") },
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                    )
+                    ThemeOption(
+                        title = stringResource(R.string.onboarding_theme_light),
+                        desc = stringResource(R.string.onboarding_theme_light_desc),
+                        isDark = false,
+                        selected = theme == "light",
+                        onSelect = { onTheme("light") },
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(FluxSpacing.xl))
+
+        // Package manifest: a short list on the stock.
+        GroupTitle(stringResource(R.string.onboarding_manifest_title))
+        val items = buildList {
+            add(stringResource(R.string.onboarding_manifest_rootfs))
+            add(stringResource(R.string.onboarding_manifest_terminal))
+            if (installDesktop) {
+                add(stringResource(R.string.onboarding_manifest_desktop))
+                add(stringResource(R.string.onboarding_manifest_theming))
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)) {
+            items.forEach { item -> BulletLine(item) }
+        }
+
+        Spacer(Modifier.height(FluxSpacing.xl))
+
+        FluxConsentCheckboxCard(
+            consented = downloadConsent,
+            onConsentChange = { downloadConsent = it }
         )
-
-        Spacer(Modifier.height(14.dp))
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // Selected Distro Overview Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(colors.surfaceContainer)
-                    .padding(14.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(
-                        painter = painterResource(id = R.drawable.distro_ubuntu),
-                        contentDescription = null,
-                        modifier = Modifier.size(38.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.onboarding_options_distro_name),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = colors.onSurface
-                        )
-                        Text(
-                            text = stringResource(
-                                if (runtime == UbuntuRuntimeMode.CHROOT) R.string.onboarding_options_distro_desc_chroot
-                                else R.string.onboarding_options_distro_desc
-                            ),
-                            fontSize = 12.sp,
-                            color = colors.onSurface.copy(alpha = 0.65f)
-                        )
-                    }
-                }
-            }
-
-            // Runtime: only on rooted phones (off-main su probe), PRoot stays the default.
-            if (rootAvailable) {
-                RuntimeChoiceSection(runtime = runtime, onRuntime = onRuntime)
-            }
-
-            DesktopOptionCard(checked = installDesktop, onCheckedChange = onInstallDesktop)
-
-            // The desktop theme only matters when the desktop is installed.
-            AnimatedVisibility(visible = installDesktop) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = stringResource(R.string.onboarding_theme_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onBackground
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        ThemeOptionCard(
-                            title = stringResource(R.string.onboarding_theme_dark),
-                            desc = stringResource(R.string.onboarding_theme_dark_desc),
-                            isDark = true,
-                            selected = theme == "dark",
-                            onSelect = { onTheme("dark") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        ThemeOptionCard(
-                            title = stringResource(R.string.onboarding_theme_light),
-                            desc = stringResource(R.string.onboarding_theme_light_desc),
-                            isDark = false,
-                            selected = theme == "light",
-                            onSelect = { onTheme("light") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            // Package Manifest Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surfaceContainer)
-                    .padding(16.dp)
-            ) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.Layers,
-                            contentDescription = null,
-                            tint = colors.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.onboarding_manifest_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = colors.onSurface
-                        )
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    val items = buildList {
-                        add(stringResource(R.string.onboarding_manifest_rootfs))
-                        add(stringResource(R.string.onboarding_manifest_terminal))
-                        if (installDesktop) {
-                            add(stringResource(R.string.onboarding_manifest_desktop))
-                            add(stringResource(R.string.onboarding_manifest_theming))
-                        }
-                    }
-
-                    items.forEach { item ->
-                        Row(
-                            modifier = Modifier.padding(vertical = 3.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .padding(top = 7.dp)
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = item,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Download Consent Checkbox Card
-            FluxConsentCheckboxCard(
-                consented = downloadConsent,
-                onConsentChange = { downloadConsent = it }
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Navigation Actions
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FluxGhostButton(
-                text = "Back",
-                onClick = onBack,
-                modifier = Modifier.weight(0.7f)
-            )
-
-            FluxPrimaryButton(
-                text = stringResource(R.string.onboarding_install),
-                enabled = downloadConsent,
-                icon = Icons.Filled.Download,
-                onClick = onInstall,
-                modifier = Modifier.weight(1.3f)
-            )
-        }
     }
 }
 
 /** "Also install the XFCE desktop": off by default; the desktop can be added later. */
 @Composable
-private fun DesktopOptionCard(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun DesktopOptionRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(colors.surfaceContainer)
+            .heightIn(min = FluxSpacing.touch)
+            .clip(MaterialTheme.shapes.small)
             .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(vertical = FluxSpacing.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(FluxSpacing.xxs)) {
             Text(
                 text = stringResource(R.string.onboarding_desktop_option),
                 style = MaterialTheme.typography.titleSmall,
-                color = colors.onSurface
+                color = colors.onBackground
             )
             Text(
                 text = stringResource(R.string.onboarding_desktop_option_desc),
@@ -1069,7 +879,7 @@ private fun DesktopOptionCard(checked: Boolean, onCheckedChange: (Boolean) -> Un
                 color = colors.onSurfaceVariant
             )
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(FluxSpacing.lg))
         FluxSwitch(checked = checked, onCheckedChange = null)
     }
 }
@@ -1081,105 +891,66 @@ internal fun RuntimeChoiceSection(
     onRuntime: (UbuntuRuntimeMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = MaterialTheme.colorScheme
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = stringResource(R.string.onboarding_runtime_title),
-            style = MaterialTheme.typography.titleSmall,
-            color = colors.onBackground
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+    Column(modifier) {
+        GroupTitle(stringResource(R.string.onboarding_runtime_title))
+        Column(
+            modifier = Modifier.selectableGroup(),
+            verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
         ) {
-            RuntimeOptionCard(
-                icon = Icons.Filled.Layers,
+            RuntimeOption(
+                icon = Icons.Sharp.Layers,
                 title = stringResource(R.string.onboarding_runtime_proot),
                 desc = stringResource(R.string.onboarding_runtime_proot_desc),
                 selected = runtime == UbuntuRuntimeMode.PROOT,
-                onSelect = { onRuntime(UbuntuRuntimeMode.PROOT) },
-                modifier = Modifier.weight(1f).fillMaxHeight()
+                onSelect = { onRuntime(UbuntuRuntimeMode.PROOT) }
             )
-            RuntimeOptionCard(
-                icon = Icons.Filled.Speed,
+            RuntimeOption(
+                icon = Icons.Sharp.Speed,
                 title = stringResource(R.string.onboarding_runtime_chroot),
                 desc = stringResource(R.string.onboarding_runtime_chroot_desc),
                 selected = runtime == UbuntuRuntimeMode.CHROOT,
-                onSelect = { onRuntime(UbuntuRuntimeMode.CHROOT) },
-                modifier = Modifier.weight(1f).fillMaxHeight()
+                onSelect = { onRuntime(UbuntuRuntimeMode.CHROOT) }
             )
         }
+        Spacer(Modifier.height(FluxSpacing.sm))
         Text(
             text = stringResource(R.string.onboarding_runtime_hint),
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            color = colors.onSurface.copy(alpha = 0.65f)
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
+/** One runtime: the selected one is printed as the plum overprint, the other rests on the stock. */
 @Composable
-private fun RuntimeOptionCard(
+private fun RuntimeOption(
     icon: ImageVector,
     title: String,
     desc: String,
     selected: Boolean,
     onSelect: () -> Unit,
-    modifier: Modifier = Modifier
 ) {
-    val colors = MaterialTheme.colorScheme
-    val borderColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else colors.surfaceContainer)
-            .border(if (selected) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(14.dp))
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
-            .padding(12.dp)
-    ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (selected) MaterialTheme.colorScheme.primary else colors.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.size(22.dp)
-                )
-                RadioButton(
-                    selected = selected,
-                    onClick = null,
-                    colors = RadioButtonDefaults.colors(
-                        selectedColor = MaterialTheme.colorScheme.primary,
-                        unselectedColor = colors.onSurface.copy(alpha = 0.4f)
-                    ),
-                    modifier = Modifier.size(20.dp)
-                )
+    SelectionPlate(selected = selected, onSelect = onSelect, modifier = Modifier.fillMaxWidth()) { muted ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) LocalContentColor.current else muted,
+                modifier = Modifier.size(FluxSpacing.xl)
+            )
+            Spacer(Modifier.width(FluxSpacing.md))
+            Column(Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.titleSmall)
+                Text(text = desc, style = MaterialTheme.typography.bodySmall, color = muted)
             }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = title,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = colors.onSurface
-            )
-            Text(
-                text = desc,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-                color = colors.onSurface.copy(alpha = 0.7f)
-            )
+            Spacer(Modifier.width(FluxSpacing.sm))
+            PlateRadio(selected = selected)
         }
     }
 }
 
 @Composable
-private fun ThemeOptionCard(
+private fun ThemeOption(
     title: String,
     desc: String,
     isDark: Boolean,
@@ -1187,72 +958,32 @@ private fun ThemeOptionCard(
     onSelect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = MaterialTheme.colorScheme
-    val borderColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else colors.surfaceContainer)
-            .border(if (selected) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(14.dp))
-            .clickable(onClick = onSelect)
-            .padding(12.dp)
-    ) {
+    SelectionPlate(selected = selected, onSelect = onSelect, modifier = modifier) { muted ->
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Swatch preview circle
+                // The desktop theme's own swatch: content, not app chrome.
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
+                        .size(FluxSpacing.xl)
+                        .clip(MaterialTheme.shapes.extraSmall)
                         .background(if (isDark) DesktopThemeSwatchDark else DesktopThemeSwatchLight)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (selected) {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = null,
-                            tint = if (isDark) MaterialTheme.colorScheme.primary else DesktopThemeSwatchDark,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-
-                RadioButton(
-                    selected = selected,
-                    onClick = onSelect,
-                    colors = RadioButtonDefaults.colors(
-                        selectedColor = MaterialTheme.colorScheme.primary,
-                        unselectedColor = colors.onSurface.copy(alpha = 0.4f)
-                    ),
-                    modifier = Modifier.size(20.dp)
+                        .border(FluxSpacing.xxs / 2, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
                 )
+                PlateRadio(selected = selected)
             }
-
-            Spacer(Modifier.height(10.dp))
-
-            Text(
-                text = title,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = colors.onSurface
-            )
-            Text(
-                text = desc,
-                fontSize = 11.sp,
-                color = colors.onSurface.copy(alpha = 0.6f)
-            )
+            Spacer(Modifier.height(FluxSpacing.sm))
+            Text(text = title, style = MaterialTheme.typography.titleSmall)
+            Text(text = desc, style = MaterialTheme.typography.bodySmall, color = muted)
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. DONE / COMPLETION PAGE
+// Done
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -1266,128 +997,115 @@ internal fun DonePage(
     runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT
 ) {
     val colors = MaterialTheme.colorScheme
+    val inks = AkaTheme.inks
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = FluxSpacing.xl, vertical = FluxSpacing.lg)
+    ) {
+        // Centred in the space above the actions while it fits; scrolls at large font scales.
+        BoxWithConstraints(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Ubuntu badge with a success status mark
-            Box(contentAlignment = Alignment.BottomEnd) {
-                Box(
-                    modifier = Modifier
-                        .size(108.dp)
-                        .clip(MaterialTheme.shapes.extraLarge)
-                        .background(colors.surfaceContainerHigh),
-                    contentAlignment = Alignment.Center
-                ) {
+            val minHeight = maxHeight
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = minHeight),
+                verticalArrangement = Arrangement.Center
+            ) {
+                // The shell field with a prompt waiting: what "ready" looks like.
+                PrintedPlate {
                     Image(
                         painter = painterResource(id = R.drawable.distro_ubuntu),
                         contentDescription = stringResource(R.string.onboarding_done_icon_desc),
-                        modifier = Modifier.size(68.dp)
+                        modifier = Modifier.size(FluxSpacing.xxl + FluxSpacing.sm)
                     )
+                    Spacer(Modifier.height(FluxSpacing.xl))
+                    Row(
+                        modifier = Modifier.clearAndSetSemantics {},
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = EXCERPT_PROMPT,
+                            style = CodeStyle,
+                            color = inks.onShellField,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        ExcerptCursor()
+                    }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(colors.background)
-                        .padding(3.dp)
-                        .clip(CircleShape)
-                        .background(FluxSuccess),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = colors.background,
-                        modifier = Modifier.size(18.dp)
+                Spacer(Modifier.height(FluxSpacing.xl))
+
+                // Success by form and ink: the filled running mark, then the words.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StatusMark(state = MarkState.RUNNING, size = FluxSpacing.lg + FluxSpacing.xs)
+                    Spacer(Modifier.width(FluxSpacing.md))
+                    Text(
+                        text = stringResource(R.string.onboarding_done_title),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = colors.onBackground
                     )
                 }
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            Text(
-                text = stringResource(R.string.onboarding_done_title),
-                style = MaterialTheme.typography.headlineMedium,
-                textAlign = TextAlign.Center,
-                color = colors.onBackground
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = stringResource(
-                    if (onDesktop != null) R.string.onboarding_done_body_desktop
-                    else R.string.onboarding_done_body
-                ),
-                textAlign = TextAlign.Center,
-                color = colors.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(horizontal = 12.dp)
-            )
-
-            Spacer(Modifier.height(14.dp))
-
-            Text(
-                text = stringResource(
-                    if (runtime == UbuntuRuntimeMode.CHROOT) R.string.onboarding_done_chip_chroot
-                    else R.string.onboarding_done_chip
-                ),
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.onSecondaryContainer,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(colors.secondaryContainer)
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
-            )
-
-            Spacer(Modifier.height(32.dp))
-
-            // Primary action: the terminal, the app's home
-            Button(
-                onClick = onTerminal,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Icon(Icons.Filled.Terminal, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.height(FluxSpacing.sm))
                 Text(
-                    stringResource(R.string.onboarding_done_open_terminal),
-                    style = MaterialTheme.typography.titleSmall
+                    text = stringResource(
+                        if (onDesktop != null) R.string.onboarding_done_body_desktop
+                        else R.string.onboarding_done_body
+                    ),
+                    color = colors.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(Modifier.height(FluxSpacing.md))
+                Text(
+                    text = stringResource(
+                        if (runtime == UbuntuRuntimeMode.CHROOT) R.string.onboarding_done_chip_chroot
+                        else R.string.onboarding_done_chip
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.secondary
                 )
             }
+        }
 
-            if (onDesktop != null) {
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = onDesktop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 50.dp),
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Icon(Icons.Filled.DesktopWindows, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        stringResource(R.string.onboarding_done_start_desktop),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
+        Spacer(Modifier.height(FluxSpacing.lg))
+
+        // Primary action: the terminal, the app's home.
+        PlatedButton(
+            text = stringResource(R.string.onboarding_done_open_terminal),
+            icon = Icons.Sharp.Terminal,
+            onClick = onTerminal,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        if (onDesktop != null) {
+            Spacer(Modifier.height(FluxSpacing.md))
+            OutlinedButton(
+                onClick = onDesktop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = FluxSpacing.touch),
+                shape = MaterialTheme.shapes.small
+            ) {
+                Icon(Icons.Sharp.DesktopWindows, contentDescription = null, modifier = Modifier.size(FluxSpacing.lg + FluxSpacing.xxs))
+                Spacer(Modifier.width(FluxSpacing.sm))
+                Text(
+                    stringResource(R.string.onboarding_done_start_desktop),
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STORAGE ACCESS PAGE (shown only while shared storage access is supported but not granted)
+// Storage access (shown only while shared storage access is supported but not granted)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -1443,186 +1161,196 @@ internal fun StorageAccessContent(
     onContinue: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    val accent = if (granted) FluxSuccess else MaterialTheme.colorScheme.primary
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+    StepPage(
+        currentStep = 4,
+        title = stringResource(R.string.onboarding_storage_title),
+        onBack = onBack,
+        actions = {
+            StorageActions(granted = granted, onGrant = onGrant, onContinue = onContinue)
+        }
     ) {
-        StepHeader(
-            currentStep = 4,
-            totalSteps = ONBOARD_STEP_COUNT,
-            title = stringResource(R.string.onboarding_storage_title),
-            onBack = onBack
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(accent.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.FolderShared,
-                    contentDescription = stringResource(R.string.onboarding_storage_icon_desc),
-                    tint = accent,
-                    modifier = Modifier.size(38.dp)
-                )
-            }
-
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(
+                imageVector = Icons.Sharp.FolderShared,
+                contentDescription = stringResource(R.string.onboarding_storage_icon_desc),
+                tint = colors.secondary,
+                modifier = Modifier.size(FluxSpacing.xl)
+            )
+            Spacer(Modifier.width(FluxSpacing.md))
             Text(
                 text = stringResource(R.string.onboarding_storage_intro),
-                color = colors.onSurface.copy(alpha = 0.8f),
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                modifier = Modifier.fillMaxWidth()
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onBackground,
+                modifier = Modifier.weight(1f)
             )
+        }
 
-            // The ~/storage links Ubuntu gets
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surfaceContainer)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                StorageLinkRows.forEach { (name, descRes) ->
-                    StorageLinkRow(path = "~/storage/$name", description = stringResource(descRes))
-                }
-            }
+        Spacer(Modifier.height(FluxSpacing.lg))
 
-            // The other direction: the phone's file manager sees Ubuntu's home
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.FolderOpen,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = stringResource(R.string.onboarding_storage_file_manager),
-                    color = colors.onSurface.copy(alpha = 0.85f),
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            if (granted) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .semantics { liveRegion = LiveRegionMode.Polite }
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FluxSuccess, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        stringResource(R.string.onboarding_storage_granted),
-                        color = FluxSuccess,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
-                    )
-                }
-            } else {
-                if (opensSettings) {
-                    Text(
-                        text = stringResource(R.string.onboarding_storage_settings_hint),
-                        color = colors.onSurface.copy(alpha = 0.7f),
-                        fontSize = 12.5.sp,
-                        lineHeight = 17.sp,
-                        textAlign = TextAlign.Center
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.onboarding_storage_later),
-                    color = colors.onSurface.copy(alpha = 0.6f),
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center
-                )
+        // The ~/storage links Ubuntu gets: one group, one tonal block.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .background(colors.surfaceContainerLow)
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(FluxSpacing.md)
+        ) {
+            StorageLinkRows.forEach { (name, descRes) ->
+                StorageLinkRow(path = "~/storage/$name", description = stringResource(descRes))
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(FluxSpacing.lg))
+
+        // The other direction: the phone's file manager sees Ubuntu's home.
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(
+                imageVector = Icons.Sharp.FolderOpen,
+                contentDescription = null,
+                tint = colors.secondary,
+                modifier = Modifier.size(FluxSpacing.xl)
+            )
+            Spacer(Modifier.width(FluxSpacing.md))
+            Text(
+                text = stringResource(R.string.onboarding_storage_file_manager),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(Modifier.height(FluxSpacing.lg))
 
         if (granted) {
-            FluxPrimaryButton(
-                text = stringResource(R.string.onboarding_continue),
-                icon = Icons.AutoMirrored.Filled.ArrowForward,
-                onClick = onContinue
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatusMark(state = MarkState.RUNNING, size = FluxSpacing.md)
+                Spacer(Modifier.width(FluxSpacing.sm))
+                Text(
+                    stringResource(R.string.onboarding_storage_granted),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = markColor(MarkState.RUNNING)
+                )
+            }
         } else {
-            FluxPrimaryButton(
-                text = stringResource(R.string.onboarding_storage_grant),
-                icon = Icons.Filled.LockOpen,
-                onClick = onGrant
+            if (opensSettings) {
+                Text(
+                    text = stringResource(R.string.onboarding_storage_settings_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
+                Spacer(Modifier.height(FluxSpacing.xs))
+            }
+            Text(
+                text = stringResource(R.string.onboarding_storage_later),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant
             )
-            FluxGhostButton(
-                text = stringResource(R.string.onboarding_storage_skip),
+        }
+    }
+}
+
+/** Granted: Continue. Not yet: Grant access as the plate, Skip for now as a text button. */
+@Composable
+private fun StorageActions(granted: Boolean, onGrant: () -> Unit, onContinue: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
+    ) {
+        if (granted) {
+            PlatedButton(
+                text = stringResource(R.string.onboarding_continue),
                 onClick = onContinue,
                 modifier = Modifier.fillMaxWidth()
             )
+        } else {
+            PlatedButton(
+                text = stringResource(R.string.onboarding_storage_grant),
+                icon = Icons.Sharp.LockOpen,
+                onClick = onGrant,
+                modifier = Modifier.fillMaxWidth()
+            )
+            TextButton(
+                onClick = onContinue,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = FluxSpacing.touch)
+            ) {
+                Text(stringResource(R.string.onboarding_storage_skip), style = MaterialTheme.typography.labelLarge)
+            }
         }
     }
 }
 
 @Composable
 private fun StorageLinkRow(path: String, description: String) {
-    Row(verticalAlignment = Alignment.Top) {
-        Icon(
-            imageVector = Icons.Filled.FolderOpen,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .padding(top = 2.dp)
-                .size(18.dp)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(text = path, style = CodeStyle, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = path,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.5.sp
-            )
-            Text(
-                text = description,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                fontSize = 12.sp,
-                lineHeight = 16.sp
-            )
-        }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REUSABLE ONBOARDING UI COMPONENTS
+// Shared onboarding parts
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A numbered setup step: header, scrolling body, bottom-anchored [actions] (Back as a text
+ * button, the step's one primary action as a printed plate; see [StepActionsRow]).
+ */
+@Composable
+private fun StepPage(
+    currentStep: Int,
+    title: String,
+    onBack: () -> Unit,
+    actions: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = FluxSpacing.xl, vertical = FluxSpacing.lg)
+    ) {
+        StepHeader(currentStep = currentStep, totalSteps = ONBOARD_STEP_COUNT, title = title, onBack = onBack)
+        Spacer(Modifier.height(FluxSpacing.xl))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+        ) {
+            content()
+            Spacer(Modifier.height(FluxSpacing.lg))
+        }
+        Spacer(Modifier.height(FluxSpacing.lg))
+        actions()
+    }
+}
+
+/** Back as a text button at the start, the step's primary plate filling the rest. */
+@Composable
+private fun StepActionsRow(onBack: () -> Unit, primary: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(FluxSpacing.md),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = onBack, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
+            Text(stringResource(R.string.aka_onb_back), style = MaterialTheme.typography.labelLarge)
+        }
+        primary()
+    }
+}
 
 @Composable
 private fun StepHeader(
@@ -1632,56 +1360,155 @@ private fun StepHeader(
     onBack: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    val progress = currentStep.toFloat() / totalSteps.toFloat()
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.size(36.dp)
-            ) {
+            // The icon's glyph lines up with the page edge; the target stays 48dp.
+            IconButton(onClick = onBack, modifier = Modifier.offset(x = -FluxSpacing.md)) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+                    imageVector = Icons.AutoMirrored.Sharp.ArrowBack,
+                    contentDescription = stringResource(R.string.aka_onb_back),
+                    tint = colors.onBackground
                 )
             }
-
+            Spacer(Modifier.weight(1f))
             Text(
-                text = "Step $currentStep of $totalSteps",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.onBackground.copy(alpha = 0.55f)
+                text = stringResource(R.string.aka_onb_step, currentStep, totalSteps),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurfaceVariant
             )
         }
 
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(FluxSpacing.xs))
 
-        // Step Progress Bar
-        LinearProgressIndicator(
-            progress = { progress },
+        // The step track: one printed segment per step, the words above say the same.
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp)),
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = colors.surfaceContainerHighest
-        )
+                .clearAndSetSemantics {},
+            horizontalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
+        ) {
+            repeat(totalSteps) { i ->
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(FluxSpacing.xs)
+                        .clip(MaterialTheme.shapes.extraSmall)
+                        .background(if (i < currentStep) colors.secondary else colors.surfaceContainerHighest)
+                )
+            }
+        }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(FluxSpacing.lg))
 
         Text(
             text = title,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.headlineMedium,
             color = colors.onBackground
         )
     }
+}
+
+@Composable
+private fun GroupTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.secondary,
+        modifier = Modifier.padding(bottom = FluxSpacing.sm)
+    )
+}
+
+@Composable
+private fun BulletLine(text: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Box(
+            Modifier
+                .padding(top = FluxSpacing.sm)
+                .size(FluxSpacing.xs + FluxSpacing.xxs)
+                .background(MaterialTheme.colorScheme.secondary)
+        )
+        Spacer(Modifier.width(FluxSpacing.md))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** A large printed field: Federal shell ink, riso grain, cut-paper corners. */
+@Composable
+private fun PrintedPlate(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(AkaTheme.inks.shellField)
+            .risoGrain(AkaTheme.inks.grainAlpha)
+            .padding(FluxSpacing.lg),
+        content = content
+    )
+}
+
+/**
+ * A selectable option. Selected: the plum overprint with its red and Federal plates resting
+ * out of register, settling into register while pressed. Unselected: a row on the stock.
+ * [content] gets the matching muted ink for supporting text.
+ */
+@Composable
+private fun SelectionPlate(
+    selected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable (muted: Color) -> Unit,
+) {
+    val shape = MaterialTheme.shapes.medium
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val ink = plateInks(PlateKind.SELECTION)
+    val offset = plateOffset(registered = pressed)
+    val colors = MaterialTheme.colorScheme
+    val contentColor = if (selected) ink.onFill else colors.onSurface
+    val muted = if (selected) ink.onFill.copy(alpha = 0.82f) else colors.onSurfaceVariant
+    Box(
+        modifier = modifier
+            .then(
+                if (selected) Modifier.misregistered(shape, ink.fill, ink.plateA, ink.plateB) { offset }
+                else Modifier
+            )
+            .clip(shape)
+            .selectable(
+                selected = selected,
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                role = Role.RadioButton,
+                onClick = onSelect
+            )
+            .heightIn(min = FluxSpacing.touch)
+            .padding(FluxSpacing.md)
+    ) {
+        CompositionLocalProvider(LocalContentColor provides contentColor) { content(muted) }
+    }
+}
+
+/** The radio inside a [SelectionPlate]: decorative (the plate carries the semantics). */
+@Composable
+private fun PlateRadio(selected: Boolean) {
+    RadioButton(
+        selected = selected,
+        onClick = null,
+        colors = RadioButtonDefaults.colors(
+            selectedColor = LocalContentColor.current,
+            unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    )
 }
 
 @Composable
@@ -1696,15 +1523,15 @@ private fun FluxConsentCheckboxCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.medium)
-            .background(if (consented) colors.secondaryContainer else colors.surfaceContainer)
+            .background(colors.surfaceContainerLow)
             .toggleable(value = consented, role = Role.Checkbox, onValueChange = onConsentChange)
-            .padding(start = 4.dp, top = 4.dp, end = 16.dp, bottom = 14.dp),
+            .padding(start = FluxSpacing.xs, top = FluxSpacing.xs, end = FluxSpacing.lg, bottom = FluxSpacing.md),
         verticalAlignment = Alignment.Top
     ) {
         Checkbox(
             checked = consented,
             onCheckedChange = null,
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.size(FluxSpacing.touch),
             colors = CheckboxDefaults.colors(
                 checkedColor = colors.primary,
                 checkmarkColor = colors.onPrimary,
@@ -1715,47 +1542,7 @@ private fun FluxConsentCheckboxCard(
             text = body,
             style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurface,
-            modifier = Modifier.padding(top = 14.dp)
+            modifier = Modifier.padding(top = FluxSpacing.md)
         )
     }
 }
-
-@Composable
-private fun FluxPrimaryButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    icon: ImageVector? = null
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(52.dp),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        if (icon != null) {
-            Spacer(Modifier.width(6.dp))
-            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        }
-    }
-}
-
-@Composable
-private fun FluxGhostButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    TextButton(
-        onClick = onClick,
-        modifier = modifier.height(52.dp),
-        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-    ) {
-        Text(text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-    }
-}
-

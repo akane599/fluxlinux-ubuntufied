@@ -1,39 +1,7 @@
 package com.ivarna.fluxlinux.ui.screens
 
-import androidx.compose.ui.res.stringResource
-import com.ivarna.fluxlinux.R
-
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.sharp.Layers
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -44,26 +12,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.chroot.ChrootDetection
 import com.ivarna.fluxlinux.core.chroot.ChrootInfoStore
 import com.ivarna.fluxlinux.core.chroot.ChrootSettingsModel
 import com.ivarna.fluxlinux.core.chroot.GuestStorageCatalog
-import com.ivarna.fluxlinux.core.data.Distro
 import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.utils.StateManager
-import com.ivarna.fluxlinux.ui.components.GlassSettingCard
-import com.ivarna.fluxlinux.ui.screens.storage.StatusBadge
+import com.ivarna.fluxlinux.ui.components.aka.MarkState
+import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -72,7 +34,6 @@ import kotlinx.coroutines.withContext
  * Chroot storage list screen: renders all chroots aggregate row and installed chroots.
  * Two-phase loading: initial paint from cache/TTL, followed by sequential IO Job.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChrootStorageListScreen(
     onBack: () -> Unit,
@@ -174,234 +135,51 @@ fun ChrootStorageListScreen(
         }
     }
 
-    val accent = MaterialTheme.colorScheme.secondary
-    val body = MaterialTheme.colorScheme.onBackground
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    SettingsPageScaffold(title = "Chroot", onBack = onBack) {
+        SettingsPageAttention("Rootfs is not removed when you uninstall the app. Free space here.")
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "Chroot",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent
+        // Universal row (always present)
+        val (sizeVal, sizeUnit) = ChrootInfoStore.formatStorageBytes(totalBytes)
+        val sizeStr = if (sizeVal == "—") "—" else "$sizeVal $sizeUnit"
+        val procStr = if (totalProcCount >= 0) "$totalProcCount running" else "— running"
+        SettingsStorageRow(
+            title = "All chroots",
+            figure = "${installedDistros.size} installed · $sizeStr · $procStr",
+            icon = Icons.Sharp.Layers,
+            chevronDescription = "View all",
+            onClick = { onSelectDistro(GuestStorageCatalog.ALL_CHROOT_ID) }
+        )
+
+        // Installed rows or empty CTA
+        if (installedDistros.isNotEmpty()) {
+            SectionLabel("Installed roots")
+            installedDistros.forEach { distro ->
+                val path = GuestStorageCatalog.chrootPathOrNull(distro.id) ?: ""
+                val bytes = liveSizes[distro.id] ?: ChrootInfoStore.cachedBytes(context, distro.id)
+                val (v, u) = ChrootInfoStore.formatStorageBytes(bytes)
+                val rowSize = if (v == "—") "—" else "$v $u"
+                SettingsStorageRow(
+                    title = distro.name,
+                    figure = rowSize,
+                    path = path,
+                    status = { SettingsPageStatus("Installed", MarkState.IDLE) },
+                    chevronDescription = "View detail",
+                    onClick = { onSelectDistro(distro.id) }
                 )
+            }
+        } else {
+            SettingsStorageEmpty(
+                title = "No chroot installed",
+                hint = stringResource(R.string.storage_chroot_empty_hint),
+                action = stringResource(R.string.storage_go_home),
+                onAction = onNavigateToHome
             )
         }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                "// Root-level Linux — outside app storage",
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                color = muted
-            )
 
-            // Amber warning banner
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Color(0x33FF9800),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(12.dp)
-            ) {
-                Text(
-                    "Rootfs is not removed when you uninstall the app. Free space here.",
-                    fontSize = 12.sp,
-                    color = Color(0xFFFFCC80)
-                )
-            }
-
-            // Universal row (always present)
-            GlassSettingCard {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelectDistro(GuestStorageCatalog.ALL_CHROOT_ID) }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Layers,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(Modifier.size(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "All chroots",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = body
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        val (sizeVal, sizeUnit) = ChrootInfoStore.formatStorageBytes(totalBytes)
-                        val sizeStr = if (sizeVal == "—") "—" else "$sizeVal $sizeUnit"
-                        val procStr = if (totalProcCount >= 0) "$totalProcCount running" else "— running"
-                        Text(
-                            "${installedDistros.size} installed · $sizeStr · $procStr",
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = muted
-                        )
-                    }
-                    Icon(
-                        Icons.Default.ChevronRight,
-                        contentDescription = "View all",
-                        tint = muted
-                    )
-                }
-            }
-
-            // Installed rows or empty CTA
-            if (installedDistros.isNotEmpty()) {
-                Text(
-                    "Installed Roots",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = accent,
-                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
-                )
-
-                installedDistros.forEach { distro ->
-                    val path = GuestStorageCatalog.chrootPathOrNull(distro.id) ?: ""
-                    val bytes = liveSizes[distro.id] ?: ChrootInfoStore.cachedBytes(context, distro.id)
-                    val (v, u) = ChrootInfoStore.formatStorageBytes(bytes)
-                    val sizeStr = if (v == "—") "—" else "$v $u"
-
-                    GlassSettingCard {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelectDistro(distro.id) }
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        distro.name,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = body
-                                    )
-                                    StatusBadge(text = "INSTALLED", ok = true)
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    sizeStr,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = accent
-                                )
-                                Text(
-                                    path,
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = muted
-                                )
-                            }
-                            Spacer(Modifier.size(8.dp))
-                            Icon(
-                                Icons.Default.ChevronRight,
-                                contentDescription = "View detail",
-                                tint = muted
-                            )
-                        }
-                    }
-                }
-            } else {
-                // Empty state CTA
-                GlassSettingCard {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "No chroot installed",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = body
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            stringResource(R.string.storage_chroot_empty_hint),
-                            fontSize = 12.sp,
-                            color = muted,
-                            lineHeight = 16.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Button(
-                            onClick = onNavigateToHome,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = accent,
-                                contentColor = MaterialTheme.colorScheme.onSecondary
-                            ),
-                            modifier = Modifier.fillMaxWidth().height(44.dp)
-                        ) {
-                            Text(stringResource(R.string.storage_go_home), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            // Refresh sizes button
-            Button(
-                onClick = { runSequentialProbe() },
-                enabled = !liveMeasuring,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = accent,
-                    contentColor = MaterialTheme.colorScheme.onSecondary,
-                    disabledContainerColor = com.ivarna.fluxlinux.ui.theme.FluxSwitchUncheckedTrack,
-                    disabledContentColor = com.ivarna.fluxlinux.ui.theme.FluxBodyMuted
-                ),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) {
-                if (liveMeasuring) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = com.ivarna.fluxlinux.ui.theme.FluxBodyMuted
-                    )
-                    Spacer(Modifier.size(8.dp))
-                }
-                Text("Refresh sizes", fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(Modifier.height(32.dp))
-        }
+        SettingsStorageRefresh(
+            text = "Refresh sizes",
+            working = liveMeasuring,
+            onClick = { runSequentialProbe() }
+        )
     }
 }

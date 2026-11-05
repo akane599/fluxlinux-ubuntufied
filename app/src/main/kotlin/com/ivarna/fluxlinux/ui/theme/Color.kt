@@ -3,77 +3,79 @@ package com.ivarna.fluxlinux.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 
-// ─── Brand ────────────────────────────────────────────────────────────────────
-// FluxLinux is warm cream on warm dark. Cream is the one accent: primary actions,
-// the current selection and active state. Everything else is a warm neutral.
+// ─── Riso inks ────────────────────────────────────────────────────────────────
+// AkaTerminal is printed, not rendered: a two-ink risograph sheet. Every colour is a spot
+// ink or the stock it is printed on. Red (aka) carries primary actions, Federal Blue is the
+// shell field (extra keys, drawer), their overprint marks selection, Yellow means "held /
+// look at this", Green means running, Fluorescent Pink means failed (always with a mark).
 
-/** The brand cream. Primary actions, selection, active modifiers. */
-val BrandCream = Color(0xFFF5E6CA)
-/** Text and icons on cream. */
-val BrandInk = Color(0xFF23201A)
+/** The spot inks, as printed on dark stock. Light-stock variants live in [LightInks]. */
+object Riso {
+    /** Dark stock: the app ground and the terminal's background. */
+    val Stock = Color(0xFF0F1326)
+    /** One step under the stock: the terminal well and scrims. */
+    val StockDeep = Color(0xFF0A0D1C)
+    /** Light stock (light scheme ground). Cool white, never cream. */
+    val StockLight = Color(0xFFEFF1F5)
 
-// Warm neutral ramp (dark scheme), lowest → highest.
-val FluxNeutral0 = Color(0xFF0E0D0C)
-val FluxNeutral1 = Color(0xFF131211)
-val FluxNeutral2 = Color(0xFF1A1917)
-val FluxNeutral3 = Color(0xFF1F1E1B)
-val FluxNeutral4 = Color(0xFF282622)
-val FluxNeutral5 = Color(0xFF322F2B)
-val FluxNeutral6 = Color(0xFF3A3732)
-val FluxOutline = Color(0xFF8C857A)
-val FluxOnSurface = Color(0xFFEDE8E0)
-val FluxOnSurfaceVariant = Color(0xFFC9C2B6)
-val FluxCreamContainer = Color(0xFF3A352C)
-val FluxCreamContainerStrong = Color(0xFF4A4235)
+    /** Federal Blue ink. */
+    val Federal = Color(0xFF3255A4)
+    /** Federal Blue laid down as a solid field on dark stock: the shell. */
+    val FederalField = Color(0xFF1B2A5C)
+    /** One printed tint up from the field: pressed keys, hovered rows. */
+    val FederalFieldHigh = Color(0xFF243670)
+    /** Federal ink tint that reads as text on dark stock. */
+    val FederalTint = Color(0xFFA9BCF2)
 
-/** Status: a running session/desktop. Only for state, never decoration. */
-val FluxSuccess = Color(0xFF8FD6A8)
+    /** Bright Red: aka, the brand ink. */
+    val Red = Color(0xFFF15060)
+    /** Red ink deepened for text and fills on light stock. */
+    val RedDeep = Color(0xFFC62E3F)
 
-/** The terminal's own background (TerminalView's renderer paints #000000). */
-val TerminalBackground = Color(0xFF000000)
+    /** Red over Federal Blue: the overprint that marks selection. */
+    val Overprint = Color(0xFF4A2150)
+    /** Red over Yellow: the overprint of primary buttons. */
+    val Vermilion = Color(0xFFF25C3C)
 
-// ─── Legacy names still referenced by older screens ───────────────────────────
-val FluxCream = Color(0xFFFDFCF0)
-val FluxDarkGrey = Color(0xFF1A1C1E)
-val FluxDarkSurface = FluxNeutral1
+    val Yellow = Color(0xFFFFE800)
+    val Green = Color(0xFF00A95C)
+    val GreenTint = Color(0xFF3FD98A)
+    val Pink = Color(0xFFFF48B0)
+    val PinkDeep = Color(0xFFC2186B)
 
-/** Legacy accents. Do not use in new or restyled UI: the accent is cream. */
-val FluxAccentCyan = Color(0xFF00E5FF)
-val FluxAccentMagenta = Color(0xFFFF00E6)
+    /** Cool bone: text on dark stock and on the shell field. */
+    val Bone = Color(0xFFE9ECF2)
+    /** Secondary text on dark stock (≥ 7:1 on [Stock]). */
+    val BoneMuted = Color(0xFFB4BCD3)
+    /** Secondary text on the Federal field (≥ 4.5:1 on [FederalField]). */
+    val BoneOnField = Color(0xFFC3CDEB)
+    /** Ink-black text on light stock and on Red / Yellow / Vermilion. */
+    val InkText = Color(0xFF14193A)
+}
 
-// Glass defaults (deprecated, kept for compilation of older screens)
-val FluxBackgroundStart = Color(0xFF0F0C29)
-val FluxBackgroundMid = Color(0xFF302B63)
-val FluxBackgroundEnd = Color(0xFF24243E)
-val GlassWhiteHigh = Color(0x26FFFFFF)
-val GlassWhiteMedium = Color(0x1AFFFFFF)
-val GlassWhiteLow = Color(0x0DFFFFFF)
-val GlassBorder = Color(0x4DFFFFFF)
-val TextWhite = Color(0xFFFFFFFF)
-val TextGrey = Color(0xFFDDDDDD)
-val Seed = Color(0xFF00E5FF)
+/** The terminal's own background: the dark stock, so chrome and terminal read as one sheet. */
+val TerminalBackground = Riso.Stock
 
-// Contrast-safe on the dark ground
-val FluxBodyMuted = FluxOnSurfaceVariant
-val FluxHairline = Color(0x33FFFFFF)
-val FluxCardFill = Color(0xE61A1C1E)
-val FluxDanger = Color(0xFFC62828)
-val FluxSwitchCheckedTrack = BrandCream
-val FluxSwitchCheckedThumb = BrandInk
-val FluxSwitchUncheckedTrack = FluxNeutral5
-val FluxSwitchUncheckedThumb = Color(0xFFE8E8E8)
-val FluxSwitchUncheckedBorder = Color(0xFF6B6B6B)
+// ─── Legacy names ─────────────────────────────────────────────────────────────
+// Older screens still import these; they now resolve to the riso inks so nothing drifts
+// back to the old cream/neon look. New code reads MaterialTheme.colorScheme / AkaTheme.inks.
+
+val FluxSuccess = Riso.GreenTint
+val FluxAccentCyan = Riso.FederalTint
+val FluxAccentMagenta = Riso.Pink
+val FluxBackgroundStart = Riso.Stock
+val FluxBackgroundMid = Riso.Stock
+val FluxBackgroundEnd = Riso.Stock
+val Seed = Riso.Red
+val FluxBodyMuted = Riso.BoneMuted
+val FluxHairline = Color(0x33A9BCF2)
+val FluxCardFill = Color(0xFF171D38)
+val FluxDanger = Riso.Pink
+val FluxSwitchUncheckedTrack = Color(0xFF242C50)
 
 @Composable
-fun fluxMutedText(): Color {
-    return if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
-        FluxBodyMuted
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-}
+fun fluxMutedText(): Color = MaterialTheme.colorScheme.onSurfaceVariant
 
 /** Swatches previewing the XFCE desktop themes in setup: content, not app chrome. */
 val DesktopThemeSwatchDark = Color(0xFF1E1E24)

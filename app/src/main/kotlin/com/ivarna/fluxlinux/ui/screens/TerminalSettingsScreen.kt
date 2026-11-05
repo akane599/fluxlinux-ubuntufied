@@ -1,34 +1,18 @@
 package com.ivarna.fluxlinux.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.sharp.Add
+import androidx.compose.material.icons.sharp.Remove
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -37,26 +21,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.terminal.GuestLoginShell
 import com.ivarna.fluxlinux.core.utils.TerminalPreferences
-import com.ivarna.fluxlinux.ui.components.FluxSwitch
-import com.ivarna.fluxlinux.ui.components.GlassSettingCard
-import com.ivarna.fluxlinux.ui.theme.fluxMutedText
+import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 
 /**
  * Terminal font zoom + ExtraKeys toolbar + guest login shell (nativecode settings parity).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalSettingsScreen(
     onBack: () -> Unit = {}
@@ -78,233 +57,138 @@ fun TerminalSettingsScreen(
         mutableStateOf(TerminalPreferences.isLegacyProotLauncher(context))
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "Terminal",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent
-                )
-            )
-        }
-    ) { innerPadding ->
+    SettingsPageScaffold(title = "Terminal", onBack = onBack) {
+        SectionLabel(stringResource(R.string.settings_aka_terminal_text))
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)
         ) {
-            GlassSettingCard {
-                Column(Modifier.padding(20.dp).fillMaxWidth()) {
-                    Text(
-                        "Global terminal zoom",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Font size for the embedded terminal (pinch zoom also updates this).",
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp,
-                        color = fluxMutedText()
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        val canDecrease = fontSize > TerminalPreferences.FONT_MIN
-                        IconButton(
-                            onClick = {
-                                val next = (fontSize - 2).coerceAtLeast(TerminalPreferences.FONT_MIN)
-                                fontSize = next
-                                TerminalPreferences.setFontSize(context, next)
-                            },
-                            enabled = canDecrease,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            colors = IconButtonDefaults.iconButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onSurface,
-                                disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            )
-                        ) {
-                            Icon(Icons.Default.Remove, contentDescription = "Smaller")
-                        }
-                        Text(
-                            "${fontSize} pt",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        val canIncrease = fontSize < TerminalPreferences.FONT_MAX
-                        IconButton(
-                            onClick = {
-                                val next = (fontSize + 2).coerceAtMost(TerminalPreferences.FONT_MAX)
-                                fontSize = next
-                                TerminalPreferences.setFontSize(context, next)
-                            },
-                            enabled = canIncrease,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            colors = IconButtonDefaults.iconButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onSurface,
-                                disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            )
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "Larger")
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Range ${TerminalPreferences.FONT_MIN}–${TerminalPreferences.FONT_MAX}",
-                        fontSize = 12.sp,
-                        color = fluxMutedText(),
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
-                }
-            }
-
-            TerminalSwitchSettingCard(
-                title = "Extra keyboard rows",
-                description = "Show CTRL, ALT, ESC, arrows and symbols under the terminal.",
-                checked = showExtraKeys,
-                onCheckedChange = {
-                    showExtraKeys = it
-                    TerminalPreferences.setExtraKeysEnabled(context, it)
-                }
+            Text(
+                "Global terminal zoom",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface
             )
-
-            TerminalSwitchSettingCard(
-                title = stringResource(R.string.terminal_settings_accelerate_keys),
-                description = stringResource(R.string.terminal_settings_accelerate_keys_summary),
-                checked = accelerateKeys,
-                onCheckedChange = {
-                    accelerateKeys = it
-                    TerminalPreferences.setKeyRepeatAccelerated(context, it)
-                }
+            Text(
+                "Font size for the embedded terminal (pinch zoom also updates this).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
-            GlassSettingCard {
-                Row(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "Guest login shell",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "On = zsh, off = bash. New proot/chroot Terminal sessions only; live tabs keep their shell.",
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
-                            color = fluxMutedText()
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (guestShellZsh) "zsh" else "bash",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    FluxSwitch(
-                        checked = guestShellZsh,
-                        onCheckedChange = { on ->
-                            guestShellZsh = on
-                            TerminalPreferences.setGuestLoginShell(
-                                context,
-                                if (on) GuestLoginShell.ZSH else GuestLoginShell.BASH
-                            )
-                        },
-                        modifier = Modifier.semantics {
-                            contentDescription =
-                                "Guest login shell: ${if (guestShellZsh) "zsh" else "bash"}"
-                        }
-                    )
-                }
-            }
-
-            GlassSettingCard {
-                Row(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "Legacy proot launcher",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Open proot terminals through proot-distro (python). Slower; use only if the default launch fails.",
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
-                            color = fluxMutedText()
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    FluxSwitch(
-                        checked = legacyProot,
-                        onCheckedChange = {
-                            legacyProot = it
-                            TerminalPreferences.setLegacyProotLauncher(context, it)
-                        },
-                        modifier = Modifier.semantics {
-                            contentDescription = "Legacy proot launcher"
-                        }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(40.dp))
         }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val stepperColors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            )
+            val canDecrease = fontSize > TerminalPreferences.FONT_MIN
+            FilledTonalIconButton(
+                onClick = {
+                    val next = (fontSize - 2).coerceAtLeast(TerminalPreferences.FONT_MIN)
+                    fontSize = next
+                    TerminalPreferences.setFontSize(context, next)
+                },
+                enabled = canDecrease,
+                shape = MaterialTheme.shapes.small,
+                colors = stepperColors,
+            ) {
+                Icon(Icons.Sharp.Remove, contentDescription = "Smaller")
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "${fontSize} pt",
+                    style = CodeStyle.copy(
+                        fontSize = MaterialTheme.typography.headlineSmall.fontSize,
+                        lineHeight = MaterialTheme.typography.headlineSmall.lineHeight,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                )
+                Text(
+                    "Range ${TerminalPreferences.FONT_MIN}–${TerminalPreferences.FONT_MAX}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            val canIncrease = fontSize < TerminalPreferences.FONT_MAX
+            FilledTonalIconButton(
+                onClick = {
+                    val next = (fontSize + 2).coerceAtMost(TerminalPreferences.FONT_MAX)
+                    fontSize = next
+                    TerminalPreferences.setFontSize(context, next)
+                },
+                enabled = canIncrease,
+                shape = MaterialTheme.shapes.small,
+                colors = stepperColors,
+            ) {
+                Icon(Icons.Sharp.Add, contentDescription = "Larger")
+            }
+        }
+
+        SectionLabel(stringResource(R.string.settings_aka_terminal_keyboard))
+        TerminalSwitchSettingCard(
+            title = "Extra keyboard rows",
+            description = "Show CTRL, ALT, ESC, arrows and symbols under the terminal.",
+            checked = showExtraKeys,
+            onCheckedChange = {
+                showExtraKeys = it
+                TerminalPreferences.setExtraKeysEnabled(context, it)
+            }
+        )
+        TerminalSwitchSettingCard(
+            title = stringResource(R.string.terminal_settings_accelerate_keys),
+            description = stringResource(R.string.terminal_settings_accelerate_keys_summary),
+            checked = accelerateKeys,
+            onCheckedChange = {
+                accelerateKeys = it
+                TerminalPreferences.setKeyRepeatAccelerated(context, it)
+            }
+        )
+
+        SectionLabel(stringResource(R.string.settings_aka_terminal_shell))
+        SettingsPageSwitchRow(
+            title = "Guest login shell",
+            supporting = "On = zsh, off = bash. New proot/chroot Terminal sessions only; live tabs keep their shell.",
+            checked = guestShellZsh,
+            onCheckedChange = { on ->
+                guestShellZsh = on
+                TerminalPreferences.setGuestLoginShell(
+                    context,
+                    if (on) GuestLoginShell.ZSH else GuestLoginShell.BASH
+                )
+            },
+            description = "Guest login shell: ${if (guestShellZsh) "zsh" else "bash"}",
+            trailingExtra = {
+                Text(
+                    text = if (guestShellZsh) "zsh" else "bash",
+                    style = CodeStyle,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(end = FluxSpacing.md)
+                )
+            }
+        )
+        SettingsPageSwitchRow(
+            title = "Legacy proot launcher",
+            supporting = "Open proot terminals through proot-distro (python). Slower; use only if the default launch fails.",
+            checked = legacyProot,
+            onCheckedChange = {
+                legacyProot = it
+                TerminalPreferences.setLegacyProotLauncher(context, it)
+            },
+            description = "Legacy proot launcher"
+        )
     }
 }
 
-/** Title + one-line description + switch, the card pattern of this screen's toggles. */
+/**
+ * Title + one-line description + switch: this screen's toggle row (a full-width row on the
+ * stock; the name is historical).
+ */
 @Composable
 fun TerminalSwitchSettingCard(
     title: String,
@@ -313,34 +197,11 @@ fun TerminalSwitchSettingCard(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    GlassSettingCard(modifier = modifier) {
-        Row(
-            modifier = Modifier
-                .padding(20.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    description,
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
-                    color = fluxMutedText()
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            FluxSwitch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                modifier = Modifier.semantics { contentDescription = title }
-            )
-        }
-    }
+    SettingsPageSwitchRow(
+        title = title,
+        supporting = description,
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        modifier = modifier,
+    )
 }

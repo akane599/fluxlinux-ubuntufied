@@ -1,38 +1,23 @@
 package com.ivarna.fluxlinux.ui.screens
 
-import androidx.compose.ui.res.stringResource
-import com.ivarna.fluxlinux.R
-
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.automirrored.sharp.KeyboardArrowRight
+import androidx.compose.material.icons.sharp.Folder
+import androidx.compose.material.icons.sharp.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -45,23 +30,25 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.chroot.GuestStorageCatalog
 import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.proot.ProotInfoStore
 import com.ivarna.fluxlinux.core.proot.ProotSettingsModel
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
 import com.ivarna.fluxlinux.core.utils.StateManager
-import com.ivarna.fluxlinux.ui.components.GlassSettingCard
-import com.ivarna.fluxlinux.ui.screens.storage.StatusBadge
+import com.ivarna.fluxlinux.ui.components.aka.MarkState
+import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -69,7 +56,6 @@ import kotlinx.coroutines.withContext
 /**
  * PRoot storage list screen: displays all PRoot containers and total container size.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProotStorageListScreen(
     onBack: () -> Unit,
@@ -154,232 +140,155 @@ fun ProotStorageListScreen(
         if (measured.isEmpty()) null else measured.sum()
     }
 
-    val accent = MaterialTheme.colorScheme.secondary
-    val body = MaterialTheme.colorScheme.onBackground
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    SettingsPageScaffold(title = "PRoot", onBack = onBack) {
+        SettingsPageNote("PRoot lives in app storage (container + rootfs) and is removed if you uninstall the app.")
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "PRoot",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent
+        // Universal row (always present)
+        val (sizeVal, sizeUnit) = ProotInfoStore.formatStorageBytes(totalBytes)
+        val totalStr = if (sizeVal == "—") "—" else "$sizeVal $sizeUnit"
+        SettingsStorageRow(
+            title = "All containers",
+            figure = "${installedDistros.size} installed · $totalStr",
+            icon = Icons.Sharp.Folder,
+            chevronDescription = "View all",
+            onClick = { onSelectDistro(GuestStorageCatalog.ALL_PROOT_ID) }
+        )
+
+        // Installed rows or empty state
+        if (installedDistros.isNotEmpty()) {
+            SectionLabel("Installed containers")
+            installedDistros.forEach { distro ->
+                val path = GuestStorageCatalog.prootContainerPath(context, distro.id) ?: ""
+                val bytes = liveSizes[distro.id] ?: ProotInfoStore.cachedBytes(context, distro.id)
+                val (v, u) = ProotInfoStore.formatStorageBytes(bytes)
+                val sizeStr = if (v == "—") "—" else "$v $u"
+                SettingsStorageRow(
+                    title = distro.name,
+                    figure = sizeStr,
+                    path = path,
+                    status = { SettingsPageStatus("Installed", MarkState.IDLE) },
+                    chevronDescription = "View detail",
+                    onClick = { onSelectDistro(distro.id) }
                 )
+            }
+        } else {
+            SettingsStorageEmpty(
+                title = "No PRoot container installed",
+                hint = stringResource(R.string.storage_proot_empty_hint),
+                action = stringResource(R.string.storage_go_home),
+                onAction = onNavigateToHome
             )
         }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                "// Userspace Linux — inside app storage",
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                color = muted
-            )
 
-            // Info banner
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(12.dp)
-            ) {
-                Text(
-                    "PRoot lives in app storage (container + rootfs) and is removed if you uninstall the app.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        SettingsStorageRefresh(
+            text = "Refresh sizes",
+            working = liveMeasuring,
+            onClick = { runSequentialProbe() }
+        )
+    }
+}
 
-            // Universal row (always present)
-            GlassSettingCard {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelectDistro(GuestStorageCatalog.ALL_PROOT_ID) }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(Modifier.size(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "All containers",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = body
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        val (sizeVal, sizeUnit) = ProotInfoStore.formatStorageBytes(totalBytes)
-                        val sizeStr = if (sizeVal == "—") "—" else "$sizeVal $sizeUnit"
-                        Text(
-                            "${installedDistros.size} installed · $sizeStr",
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = muted
-                        )
-                    }
-                    Icon(
-                        Icons.Default.ChevronRight,
-                        contentDescription = "View all",
-                        tint = muted
-                    )
-                }
-            }
-
-            // Installed rows or empty state
-            if (installedDistros.isNotEmpty()) {
-                Text(
-                    "Installed Containers",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = accent,
-                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
-                )
-
-                installedDistros.forEach { distro ->
-                    val path = GuestStorageCatalog.prootContainerPath(context, distro.id) ?: ""
-                    val bytes = liveSizes[distro.id] ?: ProotInfoStore.cachedBytes(context, distro.id)
-                    val (v, u) = ProotInfoStore.formatStorageBytes(bytes)
-                    val sizeStr = if (v == "—") "—" else "$v $u"
-
-                    GlassSettingCard {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelectDistro(distro.id) }
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        distro.name,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = body
-                                    )
-                                    StatusBadge(text = "INSTALLED", ok = true)
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    sizeStr,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = accent
-                                )
-                                Text(
-                                    path,
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = muted
-                                )
-                            }
-                            Spacer(Modifier.size(8.dp))
-                            Icon(
-                                Icons.Default.ChevronRight,
-                                contentDescription = "View detail",
-                                tint = muted
-                            )
-                        }
-                    }
-                }
-            } else {
-                GlassSettingCard {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "No PRoot container installed",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = body
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            stringResource(R.string.storage_proot_empty_hint),
-                            fontSize = 12.sp,
-                            color = muted,
-                            lineHeight = 16.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Button(
-                            onClick = onNavigateToHome,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = accent,
-                                contentColor = MaterialTheme.colorScheme.onSecondary
-                            ),
-                            modifier = Modifier.fillMaxWidth().height(44.dp)
-                        ) {
-                            Text(stringResource(R.string.storage_go_home), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            // Refresh sizes button
-            Button(
-                onClick = { runSequentialProbe() },
-                enabled = !liveMeasuring,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = accent,
-                    contentColor = MaterialTheme.colorScheme.onSecondary,
-                    disabledContainerColor = com.ivarna.fluxlinux.ui.theme.FluxSwitchUncheckedTrack,
-                    disabledContentColor = com.ivarna.fluxlinux.ui.theme.FluxBodyMuted
-                ),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) {
-                if (liveMeasuring) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = com.ivarna.fluxlinux.ui.theme.FluxBodyMuted
-                    )
-                    Spacer(Modifier.size(8.dp))
-                }
-                Text("Refresh sizes", fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(Modifier.height(32.dp))
+/**
+ * A storage row on the stock: title (and an optional status at its end), the measured
+ * figure and the host path in mono, a chevron to the detail page.
+ */
+@Composable
+internal fun SettingsStorageRow(
+    title: String,
+    figure: String,
+    chevronDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    path: String? = null,
+    icon: ImageVector? = null,
+    status: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(FluxSpacing.lg))
         }
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (status != null) {
+                    Spacer(Modifier.width(FluxSpacing.md))
+                    status()
+                }
+            }
+            Text(figure, style = CodeStyle, color = MaterialTheme.colorScheme.onSurface)
+            if (!path.isNullOrEmpty()) {
+                Text(path, style = CodeStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.width(FluxSpacing.md))
+        Icon(
+            Icons.AutoMirrored.Sharp.KeyboardArrowRight,
+            contentDescription = chevronDescription,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** Nothing installed: what that means, and the one way forward (a printed primary). */
+@Composable
+internal fun SettingsStorageEmpty(
+    title: String,
+    hint: String,
+    action: String,
+    onAction: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(hint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(FluxSpacing.xs))
+        PlatedButton(text = action, onClick = onAction)
+    }
+}
+
+/** The page's re-measure action, with a working bar while it runs. */
+@Composable
+internal fun SettingsStorageRefresh(
+    text: String,
+    working: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
+    ) {
+        if (working) {
+            LinearProgressIndicator(
+                color = MaterialTheme.colorScheme.secondary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        SettingsPageSecondaryButton(
+            text = text,
+            icon = Icons.Sharp.Refresh,
+            onClick = onClick,
+            enabled = !working,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

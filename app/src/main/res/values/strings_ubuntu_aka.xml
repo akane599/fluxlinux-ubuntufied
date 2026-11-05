@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ubuntu page (AkaTerminal redesign): status plate words, the phantom process dialog and the
+     legacy distro card. Existing Ubuntu page copy stays in strings_home.xml. -->
+<resources>
+    <!-- Status plate: the desktop's run state, next to Ready / Root needed / Not installed. -->
+    <string name="ubuntu_aka_status_running">Desktop running</string>
+    <string name="ubuntu_aka_status_starting">Desktop starting</string>
+
+    <!-- Phantom process killer dialog (copy moved out of the composable unchanged). -->
+    <string name="ubuntu_aka_phantom_title">Phantom process killer</string>
+    <string name="ubuntu_aka_phantom_intro">Android 12+ limits the background child processes each app may run. Without this fix your desktop or terminal can be killed after a few seconds (exit 137).</string>
+    <string name="ubuntu_aka_phantom_status_not_needed">Not needed (Android 11 or lower)</string>
+    <string name="ubuntu_aka_phantom_status_disabled">Fixed: the limit is off</string>
+    <string name="ubuntu_aka_phantom_status_enabled">Enabled (desktop may be killed)</string>
+    <string name="ubuntu_aka_phantom_status_unknown">Unknown</string>
+    <string name="ubuntu_aka_phantom_status">Status: %1$s</string>
+    <string name="ubuntu_aka_phantom_failed">Failed: %1$s</string>
+    <string name="ubuntu_aka_phantom_applied">Applied. Restart the terminal/desktop.</string>
+    <string name="ubuntu_aka_phantom_requesting_root">Requesting root…</string>
+    <string name="ubuntu_aka_phantom_fix_root">Fix with root</string>
+    <string name="ubuntu_aka_phantom_fix_shizuku">Fix with Shizuku</string>
+    <string name="ubuntu_aka_phantom_shizuku_not_running">Shizuku is not running. Install and start Shizuku, then retry.</string>
+    <string name="ubuntu_aka_phantom_shizuku_denied">Shizuku permission denied.</string>
+    <string name="ubuntu_aka_phantom_adb_intro">Or from a PC over adb:</string>
+    <string name="ubuntu_aka_phantom_copy_adb">Copy adb commands</string>
+    <string name="ubuntu_aka_phantom_adb_copied">Commands copied to clipboard</string>
+    <string name="ubuntu_aka_phantom_close">Close</string>
+    <string name="ubuntu_aka_phantom_hide">Don\'t show again</string>
+
+    <!-- Legacy distro card (other distros; not in the main UI). Sentence case. -->
+    <string name="ubuntu_aka_distro_logo">%1$s logo</string>
+    <string name="ubuntu_aka_distro_settings">Settings</string>
+    <string name="ubuntu_aka_chip_proot">PRoot</string>
+    <string name="ubuntu_aka_chip_chroot">Chroot</string>
+    <string name="ubuntu_aka_chip_no_root">No root</string>
+    <string name="ubuntu_aka_chip_starting">Starting</string>
+    <string name="ubuntu_aka_chip_running">Running</string>
+    <string name="ubuntu_aka_chip_soon">Soon</string>
+    <string name="ubuntu_aka_card_progress">Progress</string>
+    <string name="ubuntu_aka_card_busy">Busy</string>
+    <string name="ubuntu_aka_card_install">Install</string>
+    <string name="ubuntu_aka_card_open">Open</string>
+    <string name="ubuntu_aka_card_stop">Stop</string>
+    <string name="ubuntu_aka_card_logs">Logs</string>
+    <string name="ubuntu_aka_card_need_root">Need root</string>
+    <string name="ubuntu_aka_card_start">Start</string>
+</resources>

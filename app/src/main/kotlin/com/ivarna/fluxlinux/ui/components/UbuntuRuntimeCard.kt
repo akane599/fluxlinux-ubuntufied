@@ -1,9 +1,9 @@
 package com.ivarna.fluxlinux.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,45 +15,41 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.sharp.Check
+import androidx.compose.material.icons.sharp.Layers
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
+import com.ivarna.fluxlinux.ui.components.aka.MarkState
+import com.ivarna.fluxlinux.ui.components.aka.PlateKind
+import com.ivarna.fluxlinux.ui.components.aka.StatusMark
+import com.ivarna.fluxlinux.ui.components.aka.plateInks
+import com.ivarna.fluxlinux.ui.components.aka.plateOffset
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
+import com.ivarna.fluxlinux.ui.theme.misregistered
 
-// Same scale as the Settings cards (SettingsNavCard / SettingsSwitchCard).
-private val CardPaddingH = 18.dp
-private val CardPaddingV = 18.dp
-private val IconBadgeSize = 44.dp
+// Local sizes; spacing comes from FluxSpacing, radii from MaterialTheme.shapes.
 private val IconSize = 22.dp
-private val BadgeGap = 14.dp
-private val SectionGap = 14.dp
-private val SegmentHeight = 48.dp
-private val SegmentInset = 4.dp
-private val StatusIcon = 16.dp
-private val SegmentTrackShape = RoundedCornerShape(16.dp)
-private val SegmentShape = RoundedCornerShape(12.dp)
+private val CheckIcon = 16.dp
+private val StatusMarkSize = 12.dp
 
 /** What the Settings "Ubuntu runtime" row shows. */
 @Immutable
@@ -68,7 +64,8 @@ data class UbuntuRuntimeUi(
 
 /**
  * Settings row choosing which Ubuntu install the app drives: PRoot (any phone) or chroot
- * (root). Stateless: the screen probes root and applies the switch.
+ * (root). Stateless: the screen probes root and applies the switch. The chosen runtime is
+ * printed as the selection overprint, its plates resting out of register until touched.
  */
 @Composable
 fun UbuntuRuntimeCard(
@@ -77,26 +74,21 @@ fun UbuntuRuntimeCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    val accent = colors.secondary
     GlassSettingCard(modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = CardPaddingH, vertical = CardPaddingV)) {
+        Column(Modifier.padding(FluxSpacing.lg)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(IconBadgeSize)
-                        .clip(CircleShape)
-                        .background(accent.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.Layers, contentDescription = null, tint = accent, modifier = Modifier.size(IconSize))
-                }
-                Spacer(Modifier.width(BadgeGap))
+                Icon(
+                    Icons.Sharp.Layers,
+                    contentDescription = null,
+                    tint = colors.onSurfaceVariant,
+                    modifier = Modifier.size(IconSize)
+                )
+                Spacer(Modifier.width(FluxSpacing.lg))
                 Column(Modifier.weight(1f)) {
                     Text(
                         stringResource(R.string.settings_runtime_title),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.onBackground
+                        color = colors.onSurface
                     )
                     Text(
                         stringResource(
@@ -109,16 +101,15 @@ fun UbuntuRuntimeCard(
                 }
             }
 
-            Spacer(Modifier.height(SectionGap))
+            Spacer(Modifier.height(FluxSpacing.md))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(SegmentTrackShape)
-                    .background(colors.onSurface.copy(alpha = 0.06f))
-                    .border(1.dp, colors.onSurface.copy(alpha = 0.12f), SegmentTrackShape)
-                    .padding(SegmentInset)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(colors.surfaceContainerHighest)
+                    .padding(FluxSpacing.xs)
                     .selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(SegmentInset)
+                horizontalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
             ) {
                 RuntimeSegment(
                     label = stringResource(R.string.settings_runtime_proot),
@@ -138,25 +129,24 @@ fun UbuntuRuntimeCard(
 
             val status = if (state.checking) stringResource(R.string.settings_runtime_checking) else state.message
             if (status != null) {
-                Spacer(Modifier.height(SectionGap - 2.dp))
+                Spacer(Modifier.height(FluxSpacing.md))
                 Row(
                     verticalAlignment = Alignment.Top,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                 ) {
-                    when {
-                        state.checking -> CircularProgressIndicator(
-                            modifier = Modifier.size(StatusIcon),
-                            strokeWidth = 2.dp,
-                            color = accent
-                        )
-                        state.messageIsError -> Icon(
-                            Icons.Filled.ErrorOutline,
-                            contentDescription = null,
-                            tint = colors.error,
-                            modifier = Modifier.size(StatusIcon)
-                        )
+                    val mark = when {
+                        state.checking -> MarkState.WORKING
+                        state.messageIsError -> MarkState.FAILED
+                        else -> null
                     }
-                    if (state.checking || state.messageIsError) Spacer(Modifier.width(SegmentInset * 2))
+                    if (mark != null) {
+                        StatusMark(
+                            state = mark,
+                            size = StatusMarkSize,
+                            modifier = Modifier.padding(top = FluxSpacing.xxs)
+                        )
+                        Spacer(Modifier.width(FluxSpacing.sm))
+                    }
                     Text(
                         status,
                         style = MaterialTheme.typography.bodySmall,
@@ -177,34 +167,52 @@ private fun RuntimeSegment(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val shape = MaterialTheme.shapes.extraSmall
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val ink = plateInks(PlateKind.SELECTION)
+    val offset = plateOffset(registered = pressed)
     Row(
         modifier = modifier
-            .heightIn(min = SegmentHeight)
-            .clip(SegmentShape)
-            .background(if (selected) colors.secondary else Color.Transparent)
-            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = SegmentInset * 2),
+            .heightIn(min = FluxSpacing.touch)
+            .then(
+                if (selected) {
+                    Modifier.misregistered(shape, ink.fill, ink.plateA, ink.plateB) { offset }
+                } else {
+                    Modifier
+                }
+            )
+            .clip(shape)
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.RadioButton,
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                onClick = onClick,
+            )
+            .padding(horizontal = FluxSpacing.sm),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val content = when {
+            selected -> ink.onFill
+            enabled -> colors.onSurface
+            else -> colors.onSurfaceVariant.copy(alpha = 0.6f)
+        }
         if (selected) {
             Icon(
-                Icons.Filled.Check,
+                Icons.Sharp.Check,
                 contentDescription = null,
-                tint = colors.onSecondary,
-                modifier = Modifier.size(StatusIcon)
+                tint = content,
+                modifier = Modifier.size(CheckIcon)
             )
-            Spacer(Modifier.width(SegmentInset + 2.dp))
+            Spacer(Modifier.width(FluxSpacing.sm))
         }
         Text(
             label,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-            color = when {
-                selected -> colors.onSecondary
-                enabled -> colors.onSurface
-                else -> colors.onSurfaceVariant.copy(alpha = 0.6f)
-            },
+            style = if (selected) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelLarge,
+            color = content,
             textAlign = TextAlign.Center
         )
     }

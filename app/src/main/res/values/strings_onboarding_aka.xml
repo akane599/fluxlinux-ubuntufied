@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Onboarding chrome (AkaTerminal redesign); were literals in OnboardingFlowScreen -->
+    <string name="aka_onb_back">Back</string>
+    <string name="aka_onb_step">Step %1$d of %2$d</string>
+    <string name="aka_onb_consent_title">External downloads</string>
+    <string name="aka_onb_notice_title">F-Droid and package notice</string>
+
+    <!-- Host setup page -->
+    <string name="aka_onb_host_title">Host environment</string>
+    <string name="aka_onb_host_name">Embedded host prefix</string>
+    <string name="aka_onb_host_state_ready">Ready</string>
+    <string name="aka_onb_host_state_pending">Needs setup</string>
+    <string name="aka_onb_host_state_working">Extracting</string>
+    <string name="aka_onb_host_state_failed">Setup failed</string>
+    <string name="aka_onb_host_status_extracting">Extracting host bootstrap…</string>
+    <string name="aka_onb_host_status_ready">Host environment ready.</string>
+    <string name="aka_onb_host_status_failed">Setup failed. Check that the phone has free storage, then try again.</string>
+    <string name="aka_onb_host_pending_body">Tap Initialize to extract the core userland files and start the embedded runtime.</string>
+    <string name="aka_onb_host_ready_body">The host environment is extracted and working. PulseAudio and the session services are running.</string>
+    <string name="aka_onb_host_initialize">Initialize</string>
+
+    <!-- Install progress (shared by onboarding and the install wizard) -->
+    <string name="aka_install_title_running">Setting up Ubuntu</string>
+    <string name="aka_install_title_failed">Setup failed</string>
+    <string name="aka_install_title_done">Install complete</string>
+    <string name="aka_install_sub_running">Downloading and configuring packages</string>
+    <string name="aka_install_sub_failed">Setup stopped with an error. The output shows where.</string>
+    <string name="aka_install_sub_done">Everything is installed</string>
+    <string name="aka_install_working">Working…</string>
+    <string name="aka_install_output">Output</string>
+    <string name="aka_install_show_log">Show log</string>
+    <string name="aka_install_hide_log">Hide log</string>
+    <string name="aka_install_log_waiting">Waiting for output…</string>
+    <string name="aka_install_retry">Retry</string>
+    <string name="aka_install_back_to_options">Back to options</string>
+
+    <!-- Install wizard (InstallConfigScreen) -->
+    <string name="aka_install_cfg_title">Install %1$s</string>
+    <string name="aka_install_cfg_title_running">Installing…</string>
+    <string name="aka_install_cfg_title_failed">Install failed</string>
+    <string name="aka_install_cfg_modules_later">Add or remove components later in Ubuntu settings.</string>
+    <string name="aka_install_cfg_needs_root">Requires root (KernelSU or Magisk)</string>
+</resources>

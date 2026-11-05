@@ -6,91 +6,194 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 /**
- * The FluxLinux scheme: cream (primary and secondary, since older screens use `secondary`
- * as the accent) on a warm neutral ramp. Containers step up one neutral per level, so
- * hierarchy comes from tone, not borders or shadows.
+ * Dark stock (the scene: a phone at night, long sessions). Surfaces step up in printed
+ * blue-black tints, so hierarchy comes from tone. Red is primary, the Federal tint is
+ * secondary (older screens use `secondary` for accent text, so it must read as text),
+ * Yellow is tertiary, Fluorescent Pink is error.
  */
 private val DarkColorScheme = darkColorScheme(
-    primary = BrandCream,
-    onPrimary = BrandInk,
-    primaryContainer = FluxCreamContainerStrong,
-    onPrimaryContainer = BrandCream,
-    inversePrimary = Color(0xFF6B5E45),
-    secondary = BrandCream,
-    onSecondary = BrandInk,
-    secondaryContainer = FluxCreamContainer,
-    onSecondaryContainer = BrandCream,
-    tertiary = Color(0xFFD9C9A8),
-    onTertiary = BrandInk,
-    tertiaryContainer = FluxCreamContainer,
-    onTertiaryContainer = BrandCream,
-    background = FluxNeutral1,
-    onBackground = FluxOnSurface,
-    surface = FluxNeutral3,
-    onSurface = FluxOnSurface,
-    surfaceVariant = FluxNeutral4,
-    onSurfaceVariant = FluxOnSurfaceVariant,
-    surfaceTint = BrandCream,
-    inverseSurface = FluxOnSurface,
-    inverseOnSurface = FluxNeutral4,
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6),
-    outline = FluxOutline,
-    outlineVariant = FluxNeutral6,
+    primary = Riso.Red,
+    onPrimary = Riso.InkText,
+    primaryContainer = Riso.Overprint,
+    onPrimaryContainer = Color(0xFFFFD9DD),
+    inversePrimary = Riso.RedDeep,
+    secondary = Riso.FederalTint,
+    onSecondary = Riso.InkText,
+    secondaryContainer = Riso.FederalField,
+    onSecondaryContainer = Riso.Bone,
+    tertiary = Riso.Yellow,
+    onTertiary = Riso.InkText,
+    tertiaryContainer = Color(0xFF3D3A12),
+    onTertiaryContainer = Color(0xFFFFF4A3),
+    background = Riso.Stock,
+    onBackground = Riso.Bone,
+    surface = Riso.Stock,
+    onSurface = Riso.Bone,
+    surfaceVariant = Color(0xFF1D2443),
+    onSurfaceVariant = Riso.BoneMuted,
+    surfaceTint = Riso.Stock,
+    inverseSurface = Riso.Bone,
+    inverseOnSurface = Riso.InkText,
+    error = Riso.Pink,
+    onError = Riso.InkText,
+    errorContainer = Color(0xFF55123F),
+    onErrorContainer = Color(0xFFFFD6EA),
+    outline = Color(0xFF6E7899),
+    outlineVariant = Color(0xFF2E3760),
     scrim = Color(0xFF000000),
-    surfaceBright = FluxNeutral6,
-    surfaceDim = FluxNeutral1,
-    surfaceContainerLowest = FluxNeutral0,
-    surfaceContainerLow = FluxNeutral2,
-    surfaceContainer = FluxNeutral3,
-    surfaceContainerHigh = FluxNeutral4,
-    surfaceContainerHighest = FluxNeutral5,
+    surfaceBright = Color(0xFF2B3460),
+    surfaceDim = Riso.StockDeep,
+    surfaceContainerLowest = Riso.StockDeep,
+    surfaceContainerLow = Color(0xFF131830),
+    surfaceContainer = Color(0xFF171D38),
+    surfaceContainerHigh = Color(0xFF1D2443),
+    surfaceContainerHighest = Color(0xFF242C50),
 )
 
-/** Light scheme: only previews use it (the app forces dark). */
+/** Light stock: cool white, the same inks deepened where they carry text. */
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF6B5E45),
+    primary = Riso.RedDeep,
     onPrimary = Color.White,
-    primaryContainer = BrandCream,
-    onPrimaryContainer = BrandInk,
-    secondary = Color(0xFF6B5E45),
+    primaryContainer = Color(0xFFF8CDD2),
+    onPrimaryContainer = Color(0xFF4A0D17),
+    inversePrimary = Riso.Red,
+    secondary = Color(0xFF2A4A94),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF1E4CB),
-    onSecondaryContainer = BrandInk,
-    tertiary = Color(0xFF6B5E45),
-    background = Color(0xFFFBF8F3),
-    onBackground = BrandInk,
-    surface = Color(0xFFFBF8F3),
-    onSurface = BrandInk,
-    surfaceVariant = Color(0xFFEDE6DA),
-    onSurfaceVariant = Color(0xFF4D463B),
-    outline = Color(0xFF7E776B),
-    outlineVariant = Color(0xFFD0C8BA),
+    secondaryContainer = Color(0xFFD5DEF4),
+    onSecondaryContainer = Color(0xFF0F1A40),
+    tertiary = Color(0xFF6B5D00),
+    onTertiary = Color.White,
+    tertiaryContainer = Riso.Yellow,
+    onTertiaryContainer = Color(0xFF2E2900),
+    background = Riso.StockLight,
+    onBackground = Riso.InkText,
+    surface = Riso.StockLight,
+    onSurface = Riso.InkText,
+    surfaceVariant = Color(0xFFE1E5EE),
+    onSurfaceVariant = Color(0xFF444B66),
+    surfaceTint = Riso.StockLight,
+    inverseSurface = Color(0xFF242A45),
+    inverseOnSurface = Riso.Bone,
+    error = Riso.PinkDeep,
+    onError = Color.White,
+    errorContainer = Color(0xFFFFD6EA),
+    onErrorContainer = Color(0xFF4A0628),
+    outline = Color(0xFF737A95),
+    outlineVariant = Color(0xFFC3C8D6),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color.White,
+    surfaceDim = Color(0xFFD9DEE9),
     surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF6F1E9),
-    surfaceContainer = Color(0xFFF1EBE2),
-    surfaceContainerHigh = Color(0xFFEBE5DB),
-    surfaceContainerHighest = Color(0xFFE5DFD5),
+    surfaceContainerLow = Color(0xFFF6F7FA),
+    surfaceContainer = Color(0xFFE8EBF1),
+    surfaceContainerHigh = Color(0xFFE1E5EE),
+    surfaceContainerHighest = Color(0xFFD9DEE9),
 )
 
 /**
- * App theme. Dynamic (wallpaper) color is off by default: FluxLinux is a branded tool and
- * wallpaper hues leaking into containers made the extra keys and drawer drift per phone.
+ * Inks Material 3 has no role for. The shell field (extra keys, drawer, onboarding plates)
+ * is Federal Blue in both schemes: it is the app's printed sheet, not a theme surface.
+ */
+@Immutable
+data class AkaInks(
+    val shellField: Color,
+    val shellFieldHigh: Color,
+    val onShellField: Color,
+    val onShellFieldMuted: Color,
+    val shellHairline: Color,
+    /** Primary plates: fill (the overprint) and the two misregistered fringes. */
+    val primaryFill: Color,
+    val onPrimaryFill: Color,
+    val primaryPlateA: Color,
+    val primaryPlateB: Color,
+    /** Selection plates: overprint fill and fringes, on the shell field. */
+    val selectionFill: Color,
+    val onSelectionFill: Color,
+    val selectionPlateA: Color,
+    val selectionPlateB: Color,
+    /** State inks: always paired with a [com.ivarna.fluxlinux.ui.components.aka.StatusMark] form. */
+    val running: Color,
+    val held: Color,
+    val failed: Color,
+    val idle: Color,
+    /** Grain strength over large printed fields (0 disables it). */
+    val grainAlpha: Float,
+    val isDark: Boolean,
+)
+
+private val DarkInks = AkaInks(
+    shellField = Riso.FederalField,
+    shellFieldHigh = Riso.FederalFieldHigh,
+    onShellField = Riso.Bone,
+    onShellFieldMuted = Riso.BoneOnField,
+    shellHairline = Color(0x40A9BCF2),
+    primaryFill = Riso.Vermilion,
+    onPrimaryFill = Riso.InkText,
+    primaryPlateA = Riso.Red,
+    primaryPlateB = Riso.Yellow,
+    selectionFill = Riso.Overprint,
+    onSelectionFill = Riso.Bone,
+    selectionPlateA = Riso.Red,
+    selectionPlateB = Riso.Federal,
+    running = Riso.GreenTint,
+    held = Riso.Yellow,
+    failed = Riso.Pink,
+    idle = Riso.BoneOnField,
+    grainAlpha = 0.07f,
+    isDark = true,
+)
+
+private val LightInks = AkaInks(
+    shellField = Color(0xFF2A4A94),
+    shellFieldHigh = Color(0xFF34569F),
+    onShellField = Color.White,
+    onShellFieldMuted = Color(0xFFD5DEF4),
+    shellHairline = Color(0x4DFFFFFF),
+    primaryFill = Riso.Vermilion,
+    onPrimaryFill = Riso.InkText,
+    primaryPlateA = Riso.RedDeep,
+    primaryPlateB = Riso.Yellow,
+    selectionFill = Color(0xFF6E2C66),
+    onSelectionFill = Color.White,
+    selectionPlateA = Riso.Red,
+    selectionPlateB = Color(0xFF7D9BE0),
+    running = Color(0xFF007A45),
+    held = Color(0xFF8A7700),
+    failed = Riso.PinkDeep,
+    idle = Color(0xFF444B66),
+    grainAlpha = 0.06f,
+    isDark = false,
+)
+
+val LocalAkaInks = staticCompositionLocalOf { DarkInks }
+
+/** Entry point for the inks that have no Material role. */
+object AkaTheme {
+    val inks: AkaInks
+        @Composable @ReadOnlyComposable get() = LocalAkaInks.current
+}
+
+/**
+ * App theme. Dynamic (wallpaper) colour stays off: AkaTerminal is a printed object with a
+ * fixed set of inks, and wallpaper hues leaking into the shell made it drift per phone.
  */
 @Composable
 fun FluxLinuxTheme(
     themeMode: com.ivarna.fluxlinux.core.utils.ThemeMode = com.ivarna.fluxlinux.core.utils.ThemeMode.SYSTEM,
     @Suppress("UNUSED_PARAMETER") dynamicColor: Boolean = false,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val darkTheme = when (themeMode) {
         com.ivarna.fluxlinux.core.utils.ThemeMode.LIGHT -> false
@@ -98,8 +201,10 @@ fun FluxLinuxTheme(
         else -> isSystemInDarkTheme()
     }
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val inks = if (darkTheme) DarkInks else LightInks
 
     val view = LocalView.current
+    if (LocalInspectionMode.current) usePreviewFontFiles()
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
@@ -112,10 +217,12 @@ fun FluxLinuxTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = FluxShapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalAkaInks provides inks) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = FluxShapes,
+            content = content,
+        )
+    }
 }

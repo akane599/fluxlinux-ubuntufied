@@ -111,7 +111,7 @@ fun TerminalEmptyFailedPreview() {
     TerminalPreviewHost {
         TerminalEmptyState(
             opening = false,
-            errorMessage = "FluxLinux's host tools aren't ready. Use Repair host files on the Ubuntu page.",
+            errorMessage = "AkaTerminal's host tools aren't ready. Use Repair host files on the Ubuntu page.",
             onOpen = {},
             onOpenDashboard = {},
             onOpenSettings = {},

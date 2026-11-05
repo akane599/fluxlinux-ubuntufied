@@ -883,14 +883,12 @@ class MainActivity : ComponentActivity() {
                     }
                     Screen.PREREQUISITES -> { currentScreen = Screen.HOME }
                     Screen.INSTALL_WIZARD -> {
-                         val hazeState = remember { HazeState() }
                          if (selectedDistro != null) {
                              // Shared runner with onboarding: rootfs + XFCE + customization
                              // for both proot and chroot (no feature modules).
                              com.ivarna.fluxlinux.ui.screens.InstallConfigScreen(
                                  distro = selectedDistro!!,
                                  onBack = { currentScreen = Screen.HOME },
-                                 hazeState = hazeState,
                                  onInstallComplete = {
                                      currentScreen = Screen.HOME
                                      currentTab = BottomTab.HOME

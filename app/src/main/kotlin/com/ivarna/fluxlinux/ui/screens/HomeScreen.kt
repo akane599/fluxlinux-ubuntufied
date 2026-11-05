@@ -16,10 +16,11 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.automirrored.sharp.OpenInNew
+import androidx.compose.material.icons.sharp.Build
+import androidx.compose.material.icons.sharp.Close
+import androidx.compose.material.icons.sharp.ContentCopy
+import androidx.compose.material.icons.sharp.DesktopWindows
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -28,8 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -63,8 +65,8 @@ import com.ivarna.fluxlinux.ui.components.UbuntuDashboard
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardActions
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardState
 import com.ivarna.fluxlinux.ui.components.UbuntuStatus
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
-import com.ivarna.fluxlinux.ui.theme.TerminalBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -529,6 +531,7 @@ fun HomeScreen(
     if (showRepairConfirm) {
         AlertDialog(
             onDismissRequest = { showRepairConfirm = false },
+            icon = { Icon(Icons.Sharp.Build, contentDescription = null) },
             title = { Text(stringResource(R.string.home_repair_dialog_title)) },
             text = { Text(stringResource(R.string.home_repair_dialog_body)) },
             confirmButton = {
@@ -604,7 +607,7 @@ private fun DesktopInstallDialog(onInstall: (theme: String) -> Unit, onDismiss: 
     var theme by rememberSaveable { mutableStateOf("dark") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.DesktopWindows, contentDescription = null) },
+        icon = { Icon(Icons.Sharp.DesktopWindows, contentDescription = null) },
         title = { Text(stringResource(R.string.home_desktop_confirm_title)) },
         text = {
             Column {
@@ -693,7 +696,7 @@ private fun LogDialog(
                     }
                     IconButton(onClick = onDismiss) {
                         Icon(
-                            imageVector = Icons.Filled.Close,
+                            imageVector = Icons.Sharp.Close,
                             contentDescription = stringResource(R.string.home_log_close),
                             tint = colors.onSurfaceVariant
                         )
@@ -704,16 +707,15 @@ private fun LogDialog(
                         .padding(top = FluxSpacing.md)
                         .weight(1f)
                         .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(TerminalBackground)
+                        .clip(MaterialTheme.shapes.small)
+                        .background(colors.surfaceContainerLowest)
                         .padding(FluxSpacing.md)
                 ) {
-                    // Real program output: a monospace face is the content, not decoration.
+                    // Real program output: the code face is the content, not decoration.
                     Text(
                         text = logText.ifBlank { stringResource(R.string.home_log_waiting) },
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = colors.onSurface,
+                        style = CodeStyle,
+                        color = if (logText.isBlank()) colors.onSurfaceVariant else colors.onSurface,
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scroll)
@@ -725,28 +727,49 @@ private fun LogDialog(
                         .padding(top = FluxSpacing.md),
                     horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
                 ) {
-                    OutlinedButton(
+                    LogDialogButton(
+                        label = stringResource(R.string.home_log_copy),
+                        icon = Icons.Sharp.ContentCopy,
                         onClick = onCopy,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.weight(1f).heightIn(min = FluxSpacing.touch)
-                    ) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(FluxSpacing.sm))
-                        Text(stringResource(R.string.home_log_copy))
-                    }
+                        modifier = Modifier.weight(1f)
+                    )
                     if (openDisplay != null) {
-                        Button(
+                        LogDialogButton(
+                            label = stringResource(R.string.home_log_open_display),
+                            icon = Icons.AutoMirrored.Sharp.OpenInNew,
                             onClick = openDisplay,
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.weight(1f).heightIn(min = FluxSpacing.touch)
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(FluxSpacing.sm))
-                            Text(stringResource(R.string.home_log_open_display))
-                        }
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
         }
     }
 }
+
+/** The log dialog's actions: outlined, in the text ink (no plate in a viewer). */
+@Composable
+private fun LogDialogButton(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.small,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+        modifier = modifier.heightIn(min = FluxSpacing.touch)
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(LogButtonIcon))
+        Spacer(Modifier.width(FluxSpacing.sm))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private val LogButtonIcon = 18.dp

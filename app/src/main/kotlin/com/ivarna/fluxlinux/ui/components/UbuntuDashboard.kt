@@ -1,7 +1,7 @@
 package com.ivarna.fluxlinux.ui.components
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,41 +10,38 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.DesktopWindows
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SdStorage
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.StopCircle
-import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material.icons.automirrored.sharp.HelpOutline
+import androidx.compose.material.icons.automirrored.sharp.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.sharp.OpenInNew
+import androidx.compose.material.icons.sharp.Build
+import androidx.compose.material.icons.sharp.DesktopWindows
+import androidx.compose.material.icons.sharp.Download
+import androidx.compose.material.icons.sharp.Folder
+import androidx.compose.material.icons.sharp.FolderOpen
+import androidx.compose.material.icons.sharp.PlayArrow
+import androidx.compose.material.icons.sharp.Refresh
+import androidx.compose.material.icons.sharp.SdStorage
+import androidx.compose.material.icons.sharp.Settings
+import androidx.compose.material.icons.sharp.Stop
+import androidx.compose.material.icons.sharp.StopCircle
+import androidx.compose.material.icons.sharp.SwapHoriz
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -53,6 +50,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -63,16 +62,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
+import com.ivarna.fluxlinux.ui.components.aka.MarkState
+import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
+import com.ivarna.fluxlinux.ui.components.aka.StatusMark
+import com.ivarna.fluxlinux.ui.components.aka.markColor
+import com.ivarna.fluxlinux.ui.theme.AkaMotion
+import com.ivarna.fluxlinux.ui.theme.AkaTheme
+import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
-import com.ivarna.fluxlinux.ui.theme.FluxSuccess
+import com.ivarna.fluxlinux.ui.theme.Riso
+import com.ivarna.fluxlinux.ui.theme.risoGrain
 
 // Sizes local to the dashboard; spacing comes from FluxSpacing, radii from MaterialTheme.shapes.
-private val LogoBox = 56.dp
 private val LogoSize = 40.dp
-private val RowIcon = 24.dp
+private val RowIcon = 22.dp
 private val ButtonIcon = 18.dp
-private val StatusDot = 8.dp
-private const val STATE_ANIM_MS = 200
+private val ChipIcon = 14.dp
+private val HeaderMark = 12.dp
+private val RowMark = 12.dp
+private val RowMinHeight = 56.dp
 
 /**
  * The active Ubuntu install as the dashboard header shows it. STOPPED / STARTING / RUNNING mean
@@ -162,6 +171,9 @@ class UbuntuDashboardActions(
 /**
  * The Ubuntu overview, reached from the terminal drawer. Stateless: callers own state and
  * scrolling. The terminal itself is not repeated here: Back (or the top bar arrow) returns to it.
+ *
+ * One printed plate (the Federal shell field) carries the install's state; below it the
+ * Desktop, Files, Shared storage and Recovery groups sit as full-width rows on the stock.
  */
 @Composable
 fun UbuntuDashboard(
@@ -173,48 +185,44 @@ fun UbuntuDashboard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm),
-        verticalArrangement = Arrangement.spacedBy(FluxSpacing.lg)
+            .padding(vertical = FluxSpacing.sm),
     ) {
         UbuntuHeader(
             status = state.status,
             runtime = state.runtime,
             canSwitchRuntime = state.canSwitchRuntime,
             actions = actions,
+            modifier = Modifier.padding(horizontal = FluxSpacing.lg),
         )
 
         if (ready) {
-            Section(title = stringResource(R.string.home_section_desktop)) {
-                DesktopPanel(
-                    desktop = state.desktop,
-                    status = state.status,
-                    otherDesktopRunning = state.otherDesktopRunning,
-                    actions = actions,
-                )
-            }
-            Section(title = stringResource(R.string.home_section_files)) {
-                Panel {
-                    Column(Modifier.padding(vertical = FluxSpacing.xs)) {
-                        NavRow(
-                            Icons.Filled.Folder,
-                            stringResource(R.string.home_files_home),
-                            stringResource(R.string.home_files_home_sub),
-                            actions.onFiles
-                        )
-                        NavRow(
-                            Icons.Filled.FolderOpen,
-                            stringResource(R.string.home_quick_filesystem),
-                            stringResource(R.string.home_files_system_sub),
-                            actions.onFilesystem
-                        )
-                    }
-                }
-                SharedStorageCard(
-                    storage = state.storage,
-                    onAllow = actions.onAllowStorage,
-                    onCreateLinks = actions.onCreateLinks
-                )
-            }
+            GroupLabel(stringResource(R.string.home_section_desktop))
+            DesktopPanel(
+                desktop = state.desktop,
+                status = state.status,
+                otherDesktopRunning = state.otherDesktopRunning,
+                actions = actions,
+            )
+
+            GroupLabel(stringResource(R.string.home_section_files))
+            NavRow(
+                Icons.Sharp.Folder,
+                stringResource(R.string.home_files_home),
+                stringResource(R.string.home_files_home_sub),
+                actions.onFiles
+            )
+            NavRow(
+                Icons.Sharp.FolderOpen,
+                stringResource(R.string.home_quick_filesystem),
+                stringResource(R.string.home_files_system_sub),
+                actions.onFilesystem
+            )
+
+            SharedStorageCard(
+                storage = state.storage,
+                onAllow = actions.onAllowStorage,
+                onCreateLinks = actions.onCreateLinks
+            )
         }
 
         RecoverySection(installed = ready, actions = actions)
@@ -223,8 +231,9 @@ fun UbuntuDashboard(
     }
 }
 
-// ─── Header ───────────────────────────────────────────────────────────────────
+// ─── Header: the printed status plate ────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun UbuntuHeader(
     status: UbuntuStatus,
@@ -233,7 +242,7 @@ fun UbuntuHeader(
     actions: UbuntuDashboardActions,
     modifier: Modifier = Modifier,
 ) {
-    val colors = MaterialTheme.colorScheme
+    val inks = AkaTheme.inks
     val chroot = runtime == UbuntuRuntimeMode.CHROOT
     val body = when (status) {
         UbuntuStatus.CHECKING -> stringResource(R.string.home_hero_checking)
@@ -242,76 +251,84 @@ fun UbuntuHeader(
             stringResource(if (chroot) R.string.home_hero_not_installed_chroot else R.string.home_hero_not_installed)
         else -> null
     }
-    Panel(modifier = modifier) {
-        Column(Modifier.padding(FluxSpacing.lg).animateContentSize(tween(STATE_ANIM_MS))) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(LogoBox)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(colors.surfaceContainerHighest),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.distro_ubuntu),
-                        contentDescription = stringResource(R.string.home_ubuntu_logo),
-                        modifier = Modifier.size(LogoSize)
-                    )
-                }
-                Spacer(Modifier.width(FluxSpacing.lg))
+    val shape = MaterialTheme.shapes.large
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .animateContentSize(AkaMotion.standard()),
+    ) {
+        // The field and its grain print under the content, never over the type.
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(inks.shellField)
+                .risoGrain(inks.grainAlpha)
+        )
+        Column(Modifier.fillMaxWidth().padding(FluxSpacing.lg)) {
+            Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.home_ubuntu_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = colors.onSurface
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = inks.onShellField,
+                        modifier = Modifier.semantics { heading() }
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        StatusLabel(status)
-                        Spacer(Modifier.width(FluxSpacing.sm))
+                    FlowRow(
+                        modifier = Modifier.padding(top = FluxSpacing.xs),
+                        horizontalArrangement = Arrangement.spacedBy(FluxSpacing.md),
+                    ) {
+                        StatusLabel(status, Modifier.align(Alignment.CenterVertically))
                         RuntimeChip(
                             runtime = runtime,
                             canSwitch = canSwitchRuntime,
-                            onSwitch = actions.onSwitchRuntime
+                            onSwitch = actions.onSwitchRuntime,
+                            modifier = Modifier.align(Alignment.CenterVertically),
                         )
                     }
                 }
+                Spacer(Modifier.width(FluxSpacing.md))
+                Image(
+                    painter = painterResource(R.drawable.distro_ubuntu),
+                    contentDescription = stringResource(R.string.home_ubuntu_logo),
+                    modifier = Modifier.size(LogoSize)
+                )
             }
             if (body != null) {
                 Text(
                     text = body,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceVariant,
+                    color = inks.onShellFieldMuted,
                     modifier = Modifier.padding(top = FluxSpacing.md)
                 )
             }
             when (status) {
-                UbuntuStatus.CHECKING -> LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = FluxSpacing.md)
-                        .clip(CircleShape),
-                )
                 // Stacked: side by side, "Check root again" wraps at 360dp.
                 UbuntuStatus.NEEDS_ROOT -> Column(
                     modifier = Modifier.padding(top = FluxSpacing.lg),
                     verticalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
                 ) {
-                    PrimaryButton(
-                        label = stringResource(R.string.home_action_retry_root),
-                        icon = Icons.Filled.Refresh,
+                    PlatedButton(
+                        text = stringResource(R.string.home_action_retry_root),
+                        icon = Icons.Sharp.Refresh,
                         onClick = actions.onRetryRoot,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    SecondaryButton(
-                        label = stringResource(R.string.home_action_use_proot),
-                        icon = null,
+                    OutlinedButton(
                         onClick = actions.onSwitchRuntime,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        shape = MaterialTheme.shapes.small,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = inks.onShellField),
+                        border = BorderStroke(1.dp, inks.onShellFieldMuted),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = FluxSpacing.touch)
+                    ) {
+                        ButtonContent(stringResource(R.string.home_action_use_proot), icon = null)
+                    }
                 }
-                UbuntuStatus.NOT_INSTALLED -> PrimaryButton(
-                    label = stringResource(R.string.home_action_set_up),
-                    icon = Icons.Filled.PlayArrow,
+                UbuntuStatus.NOT_INSTALLED -> PlatedButton(
+                    text = stringResource(R.string.home_action_set_up),
+                    icon = Icons.Sharp.PlayArrow,
                     onClick = actions.onSetUpUbuntu,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -323,25 +340,40 @@ fun UbuntuHeader(
     }
 }
 
-/** "● Ready" etc. Error states use the error colour; ready uses the success tint. */
+/** The install's state on the plate: a mark (form first) and the words for it. */
 @Composable
-private fun StatusLabel(status: UbuntuStatus) {
-    val colors = MaterialTheme.colorScheme
-    val (label, tint) = when (status) {
-        UbuntuStatus.CHECKING -> stringResource(R.string.home_status_checking) to colors.onSurfaceVariant
-        UbuntuStatus.NEEDS_ROOT -> stringResource(R.string.home_status_needs_root) to colors.error
-        UbuntuStatus.NOT_INSTALLED -> stringResource(R.string.home_status_not_installed) to colors.error
-        else -> stringResource(R.string.home_status_ready) to FluxSuccess
+private fun StatusLabel(status: UbuntuStatus, modifier: Modifier = Modifier) {
+    val (mark, label) = when (status) {
+        UbuntuStatus.CHECKING -> MarkState.WORKING to stringResource(R.string.home_status_checking)
+        UbuntuStatus.NEEDS_ROOT -> MarkState.FAILED to stringResource(R.string.home_status_needs_root)
+        UbuntuStatus.NOT_INSTALLED -> MarkState.FAILED to stringResource(R.string.home_status_not_installed)
+        UbuntuStatus.STOPPED -> MarkState.IDLE to stringResource(R.string.home_status_ready)
+        UbuntuStatus.STARTING -> MarkState.WORKING to stringResource(R.string.ubuntu_aka_status_starting)
+        UbuntuStatus.RUNNING -> MarkState.RUNNING to stringResource(R.string.ubuntu_aka_status_running)
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(StatusDot)
-                .clip(CircleShape)
-                .background(tint)
-        )
+    Row(
+        modifier = modifier.padding(vertical = FluxSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatusMark(state = mark, size = HeaderMark, color = plateMarkColor(mark))
         Spacer(Modifier.width(FluxSpacing.sm))
-        Text(text = label, style = MaterialTheme.typography.labelLarge, color = colors.onSurface)
+        Text(text = label, style = MaterialTheme.typography.labelLarge, color = AkaTheme.inks.onShellField)
+    }
+}
+
+/**
+ * State inks on the Federal plate. The plate stays a dark printed field in both schemes, so its
+ * marks use the inks as printed on dark stock (the light-stock state inks vanish on blue).
+ */
+@Composable
+private fun plateMarkColor(state: MarkState): Color {
+    val inks = AkaTheme.inks
+    return when (state) {
+        MarkState.RUNNING -> Riso.GreenTint
+        MarkState.IDLE -> inks.onShellFieldMuted
+        MarkState.WORKING -> inks.onShellField
+        MarkState.HELD -> Riso.Yellow
+        MarkState.FAILED -> Riso.Pink
     }
 }
 
@@ -354,42 +386,46 @@ private fun RuntimeChip(
     runtime: UbuntuRuntimeMode,
     canSwitch: Boolean,
     onSwitch: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val colors = MaterialTheme.colorScheme
+    val inks = AkaTheme.inks
     val chroot = runtime == UbuntuRuntimeMode.CHROOT
     val label = stringResource(if (chroot) R.string.home_runtime_chroot else R.string.home_runtime_proot)
     val other = stringResource(if (chroot) R.string.home_runtime_proot else R.string.home_runtime_chroot)
     val switchLabel = stringResource(R.string.home_runtime_switch_to, other)
+    val chipShape = MaterialTheme.shapes.extraSmall
     Box(
-        modifier = if (canSwitch) {
-            Modifier
-                .minimumInteractiveComponentSize()
-                .clip(CircleShape)
-                .clickable(role = Role.Button, onClickLabel = switchLabel, onClick = onSwitch)
-        } else {
-            Modifier
-        },
+        modifier = modifier.then(
+            if (canSwitch) {
+                Modifier
+                    .minimumInteractiveComponentSize()
+                    .clip(chipShape)
+                    .clickable(role = Role.Button, onClickLabel = switchLabel, onClick = onSwitch)
+            } else {
+                Modifier
+            }
+        ),
         contentAlignment = Alignment.Center
     ) {
         Row(
             modifier = Modifier
-                .clip(CircleShape)
-                .background(colors.secondaryContainer)
-                .padding(horizontal = FluxSpacing.sm + FluxSpacing.xxs, vertical = FluxSpacing.xxs),
+                .clip(chipShape)
+                .background(inks.shellFieldHigh)
+                .padding(horizontal = FluxSpacing.sm, vertical = FluxSpacing.xxs),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
-                color = colors.onSecondaryContainer
+                color = inks.onShellField
             )
             if (canSwitch) {
                 Spacer(Modifier.width(FluxSpacing.xs))
                 Icon(
-                    Icons.Filled.SwapHoriz,
+                    Icons.Sharp.SwapHoriz,
                     contentDescription = null,
-                    tint = colors.onSecondaryContainer,
-                    modifier = Modifier.size(14.dp)
+                    tint = inks.onShellField,
+                    modifier = Modifier.size(ChipIcon)
                 )
             }
         }
@@ -398,6 +434,11 @@ private fun RuntimeChip(
 
 // ─── Desktop ──────────────────────────────────────────────────────────────────
 
+/**
+ * The optional desktop as one row plus its actions, on the stock. The row's mark and the
+ * subtitle's ink carry the state; a failed install keeps the failed ink and mark until the
+ * state changes (Try again, or the desktop turns up installed).
+ */
 @Composable
 fun DesktopPanel(
     desktop: DesktopAddOnUi,
@@ -407,78 +448,85 @@ fun DesktopPanel(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    // A trailing text-button row already carries its own 48dp touch height.
-    val endsWithTextAction = desktop is DesktopAddOnUi.Installing || desktop == DesktopAddOnUi.Installed
-    Panel(modifier = modifier) {
-        Column(
-            Modifier
-                .padding(
-                    start = FluxSpacing.lg,
-                    top = FluxSpacing.lg,
-                    end = FluxSpacing.lg,
-                    bottom = if (endsWithTextAction) FluxSpacing.xs else FluxSpacing.lg,
-                )
-                .animateContentSize(tween(STATE_ANIM_MS))
-        ) {
-            val subtitle = when (desktop) {
-                DesktopAddOnUi.NotInstalled -> stringResource(R.string.home_desktop_not_installed)
-                is DesktopAddOnUi.Installing -> desktop.phaseLabel.ifBlank {
-                    stringResource(R.string.home_desktop_installing_starting)
-                }
-                is DesktopAddOnUi.Failed -> stringResource(R.string.home_desktop_install_failed)
-                DesktopAddOnUi.Installed -> when {
-                    otherDesktopRunning != null && status == UbuntuStatus.STOPPED ->
-                        stringResource(R.string.home_hero_other_running, otherDesktopRunning)
-                    status == UbuntuStatus.RUNNING -> stringResource(R.string.home_hero_running)
-                    status == UbuntuStatus.STARTING -> stringResource(R.string.home_hero_starting)
-                    else -> stringResource(R.string.home_hero_stopped)
-                }
-            }
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(
-                    Icons.Filled.DesktopWindows,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(top = FluxSpacing.xxs).size(RowIcon)
-                )
-                Spacer(Modifier.width(FluxSpacing.lg))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(
-                            if (desktop is DesktopAddOnUi.Installing) R.string.home_desktop_installing
-                            else R.string.home_desktop_title
-                        ),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colors.onSurface
-                    )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (desktop is DesktopAddOnUi.Failed) colors.error else colors.onSurfaceVariant
-                    )
-                }
-                if (desktop == DesktopAddOnUi.Installed && status == UbuntuStatus.RUNNING) {
-                    Box(
-                        Modifier
-                            .padding(top = FluxSpacing.sm)
-                            .size(StatusDot)
-                            .clip(CircleShape)
-                            .background(FluxSuccess)
-                    )
-                }
-            }
+    val inks = AkaTheme.inks
+    val subtitle = when (desktop) {
+        DesktopAddOnUi.NotInstalled -> stringResource(R.string.home_desktop_not_installed)
+        is DesktopAddOnUi.Installing -> desktop.phaseLabel.ifBlank {
+            stringResource(R.string.home_desktop_installing_starting)
+        }
+        is DesktopAddOnUi.Failed -> stringResource(R.string.home_desktop_install_failed)
+        DesktopAddOnUi.Installed -> when {
+            otherDesktopRunning != null && status == UbuntuStatus.STOPPED ->
+                stringResource(R.string.home_hero_other_running, otherDesktopRunning)
+            status == UbuntuStatus.RUNNING -> stringResource(R.string.home_hero_running)
+            status == UbuntuStatus.STARTING -> stringResource(R.string.home_hero_starting)
+            else -> stringResource(R.string.home_hero_stopped)
+        }
+    }
+    val mark: MarkState? = when (desktop) {
+        DesktopAddOnUi.NotInstalled -> null
+        is DesktopAddOnUi.Installing -> MarkState.WORKING
+        is DesktopAddOnUi.Failed -> MarkState.FAILED
+        DesktopAddOnUi.Installed -> when (status) {
+            UbuntuStatus.RUNNING -> MarkState.RUNNING
+            UbuntuStatus.STARTING -> MarkState.WORKING
+            else -> MarkState.IDLE
+        }
+    }
+    val subtitleColor = when (mark) {
+        MarkState.FAILED -> inks.failed
+        MarkState.RUNNING -> inks.running
+        else -> colors.onSurfaceVariant
+    }
 
+    Column(modifier = modifier.fillMaxWidth().animateContentSize(AkaMotion.standard())) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = RowMinHeight)
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Sharp.DesktopWindows,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(RowIcon)
+            )
+            Spacer(Modifier.width(FluxSpacing.lg))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(
+                        if (desktop is DesktopAddOnUi.Installing) R.string.home_desktop_installing
+                        else R.string.home_desktop_title
+                    ),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = subtitleColor
+                )
+            }
+            if (mark != null) {
+                Spacer(Modifier.width(FluxSpacing.md))
+                // The subtitle says the state in words; the mark is its printed form.
+                StatusMark(state = mark, size = RowMark, color = markColor(mark))
+            }
+        }
+
+        Column(Modifier.fillMaxWidth().padding(horizontal = FluxSpacing.lg)) {
             when (desktop) {
                 DesktopAddOnUi.NotInstalled -> {
                     Text(
                         text = stringResource(R.string.home_desktop_value),
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant,
-                        modifier = Modifier.padding(top = FluxSpacing.md)
                     )
-                    TonalButton(
-                        label = stringResource(R.string.home_desktop_install),
-                        icon = Icons.Filled.Download,
+                    PlatedButton(
+                        text = stringResource(R.string.home_desktop_install),
+                        icon = Icons.Sharp.Download,
                         onClick = actions.onInstallDesktop,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -486,27 +534,31 @@ fun DesktopPanel(
                     )
                 }
                 is DesktopAddOnUi.Installing -> {
+                    val percent = desktop.percent.coerceIn(0, 100)
                     LinearProgressIndicator(
-                        progress = { desktop.percent.coerceIn(0, 100) / 100f },
+                        progress = { percent / 100f },
+                        color = markColor(MarkState.WORKING),
+                        trackColor = colors.surfaceContainerHighest,
+                        strokeCap = StrokeCap.Butt,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = FluxSpacing.lg)
-                            .clip(CircleShape),
+                            .clip(MaterialTheme.shapes.extraSmall),
                     )
                     Row(
                         modifier = Modifier.padding(top = FluxSpacing.sm),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // apt's own output line: program text, so it is set in the code face.
                         Text(
                             text = desktop.detail,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = CodeStyle,
                             color = colors.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            text = stringResource(R.string.home_desktop_percent, desktop.percent.coerceIn(0, 100)),
+                            text = stringResource(R.string.home_desktop_percent, percent),
                             style = MaterialTheme.typography.labelMedium,
                             color = colors.onSurface,
                             modifier = Modifier.padding(start = FluxSpacing.sm)
@@ -521,7 +573,7 @@ fun DesktopPanel(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = FluxSpacing.sm),
+                            .padding(top = FluxSpacing.xs),
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextAction(stringResource(R.string.home_desktop_show_log), actions.onDesktopInstallLog)
@@ -536,17 +588,17 @@ fun DesktopPanel(
                             color = colors.onSurfaceVariant,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = FluxSpacing.md)
                         )
                     }
                     Row(
                         modifier = Modifier.padding(top = FluxSpacing.lg),
                         horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
                     ) {
-                        TonalButton(
-                            label = stringResource(R.string.home_desktop_retry),
-                            icon = Icons.Filled.Refresh,
+                        PlatedButton(
+                            text = stringResource(R.string.home_desktop_retry),
+                            icon = Icons.Sharp.Refresh,
                             onClick = actions.onInstallDesktop,
+                            contentPadding = CompactButtonPadding,
                             modifier = Modifier.weight(1f)
                         )
                         SecondaryButton(
@@ -558,38 +610,34 @@ fun DesktopPanel(
                     }
                 }
                 DesktopAddOnUi.Installed -> {
-                    if (status == UbuntuStatus.STARTING) {
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = FluxSpacing.lg)
-                                .clip(CircleShape),
-                        )
-                    }
-                    Spacer(Modifier.height(FluxSpacing.lg))
                     when (status) {
-                        UbuntuStatus.STOPPED -> PrimaryButton(
-                            label = stringResource(R.string.home_action_start_desktop),
-                            icon = Icons.Filled.PlayArrow,
+                        UbuntuStatus.STOPPED -> PlatedButton(
+                            text = stringResource(R.string.home_action_start_desktop),
+                            icon = Icons.Sharp.PlayArrow,
                             onClick = actions.onStartDesktop,
                             modifier = Modifier.fillMaxWidth()
                         )
                         else -> Row(horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)) {
-                            PrimaryButton(
+                            SecondaryButton(
                                 label = stringResource(R.string.home_action_open_desktop),
-                                icon = Icons.AutoMirrored.Filled.OpenInNew,
+                                icon = Icons.AutoMirrored.Sharp.OpenInNew,
                                 onClick = actions.onOpenDesktop,
                                 modifier = Modifier.weight(1.4f)
                             )
                             SecondaryButton(
                                 label = stringResource(R.string.home_action_stop),
-                                icon = Icons.Filled.Stop,
+                                icon = Icons.Sharp.Stop,
                                 onClick = actions.onStopDesktop,
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = FluxSpacing.xs),
+                        horizontalArrangement = Arrangement.End
+                    ) {
                         TextAction(stringResource(R.string.home_recovery_view_log), actions.onViewLog)
                     }
                 }
@@ -609,43 +657,43 @@ fun SharedStorageCard(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
-    Panel(modifier = modifier) {
-        Column(Modifier.padding(FluxSpacing.lg)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(
-                    Icons.Filled.SdStorage,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(top = FluxSpacing.xxs).size(RowIcon)
-                )
-                Spacer(Modifier.width(FluxSpacing.lg))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.home_storage_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colors.onSurface
-                    )
-                    Text(
-                        text = when {
-                            !storage.supported -> stringResource(R.string.home_storage_unsupported)
-                            storage.granted -> stringResource(R.string.home_storage_granted)
-                            else -> stringResource(R.string.home_storage_denied)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant
-                    )
-                }
-            }
-            if (!storage.supported) return@Column
+    Column(modifier = modifier.fillMaxWidth()) {
+        GroupLabel(stringResource(R.string.home_storage_title))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = RowMinHeight)
+                .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Sharp.SdStorage,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(RowIcon)
+            )
+            Spacer(Modifier.width(FluxSpacing.lg))
+            Text(
+                text = when {
+                    !storage.supported -> stringResource(R.string.home_storage_unsupported)
+                    storage.granted -> stringResource(R.string.home_storage_granted)
+                    else -> stringResource(R.string.home_storage_denied)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        if (!storage.supported) return@Column
 
+        Column(Modifier.fillMaxWidth().padding(horizontal = FluxSpacing.lg)) {
             if (!storage.granted) {
-                PrimaryButton(
-                    label = stringResource(R.string.home_storage_allow),
-                    icon = null,
+                PlatedButton(
+                    text = stringResource(R.string.home_storage_allow),
                     onClick = onAllow,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = FluxSpacing.md)
+                        .padding(bottom = FluxSpacing.sm)
                 )
             }
 
@@ -656,25 +704,15 @@ fun SharedStorageCard(
                     stringResource(R.string.home_storage_links_missing)
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurface,
-                modifier = Modifier.padding(top = FluxSpacing.lg)
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(top = FluxSpacing.sm)
             )
             FlowRow(
                 modifier = Modifier.padding(top = FluxSpacing.sm),
                 horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm),
                 verticalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
             ) {
-                storage.linkNames.forEach { name ->
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onSurfaceVariant,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(colors.surfaceContainerHighest)
-                            .padding(horizontal = FluxSpacing.md, vertical = FluxSpacing.xs)
-                    )
-                }
+                storage.linkNames.forEach { name -> PathChip(name) }
             }
             if (!storage.linksPresent) {
                 SecondaryButton(
@@ -695,6 +733,21 @@ fun SharedStorageCard(
     }
 }
 
+/** A `~/storage` link name: a path, so it is set in the code face on a printed tint. */
+@Composable
+private fun PathChip(name: String) {
+    Text(
+        text = name,
+        style = CodeStyle,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(horizontal = FluxSpacing.sm, vertical = FluxSpacing.xxs)
+    )
+}
+
 // ─── Recovery ─────────────────────────────────────────────────────────────────
 
 @Composable
@@ -703,79 +756,54 @@ fun RecoverySection(
     actions: UbuntuDashboardActions,
     modifier: Modifier = Modifier
 ) {
-    Section(title = stringResource(R.string.home_recovery_title), modifier = modifier) {
-        Panel {
-            Column(Modifier.padding(vertical = FluxSpacing.xs)) {
-                NavRow(
-                    Icons.Filled.StopCircle,
-                    stringResource(R.string.home_recovery_stop_all),
-                    stringResource(R.string.home_recovery_stop_all_sub),
-                    actions.onStopEverything
-                )
-                NavRow(
-                    Icons.Filled.Build,
-                    stringResource(R.string.home_recovery_repair),
-                    stringResource(R.string.home_recovery_repair_sub),
-                    actions.onRepairHost
-                )
-                if (installed) {
-                    NavRow(
-                        Icons.Filled.Refresh,
-                        stringResource(R.string.home_recovery_rerun),
-                        stringResource(R.string.home_recovery_rerun_sub),
-                        actions.onRerunSetup
-                    )
-                    NavRow(
-                        Icons.Filled.Settings,
-                        stringResource(R.string.home_recovery_settings),
-                        stringResource(R.string.home_recovery_settings_sub),
-                        actions.onUbuntuSettings
-                    )
-                }
-                NavRow(
-                    Icons.AutoMirrored.Filled.HelpOutline,
-                    stringResource(R.string.home_recovery_troubleshooting),
-                    stringResource(R.string.home_recovery_troubleshooting_sub),
-                    actions.onTroubleshooting
-                )
-            }
+    Column(modifier = modifier.fillMaxWidth()) {
+        GroupLabel(stringResource(R.string.home_recovery_title))
+        NavRow(
+            Icons.Sharp.StopCircle,
+            stringResource(R.string.home_recovery_stop_all),
+            stringResource(R.string.home_recovery_stop_all_sub),
+            actions.onStopEverything
+        )
+        NavRow(
+            Icons.Sharp.Build,
+            stringResource(R.string.home_recovery_repair),
+            stringResource(R.string.home_recovery_repair_sub),
+            actions.onRepairHost
+        )
+        if (installed) {
+            NavRow(
+                Icons.Sharp.Refresh,
+                stringResource(R.string.home_recovery_rerun),
+                stringResource(R.string.home_recovery_rerun_sub),
+                actions.onRerunSetup
+            )
+            NavRow(
+                Icons.Sharp.Settings,
+                stringResource(R.string.home_recovery_settings),
+                stringResource(R.string.home_recovery_settings_sub),
+                actions.onUbuntuSettings
+            )
         }
+        NavRow(
+            Icons.AutoMirrored.Sharp.HelpOutline,
+            stringResource(R.string.home_recovery_troubleshooting),
+            stringResource(R.string.home_recovery_troubleshooting_sub),
+            actions.onTroubleshooting
+        )
     }
 }
 
 // ─── Shared bits ──────────────────────────────────────────────────────────────
 
-/** A titled group: heading on the background, its panels below. */
+private val CompactButtonPadding = PaddingValues(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md)
+
+/** A group's label on the stock, announced as a heading. */
 @Composable
-private fun Section(
-    title: String,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(FluxSpacing.sm)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .padding(start = FluxSpacing.xs, top = FluxSpacing.xs)
-                .semantics { heading() }
-        )
-        content()
-    }
+private fun GroupLabel(text: String) {
+    SectionLabel(text = text, modifier = Modifier.semantics { heading() })
 }
 
-/** Tonal surface one step above the background; hierarchy through tone, no borders. */
-@Composable
-private fun Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        content = content
-    )
-}
-
+/** A full-width navigation row on the stock (the whole row is the button). */
 @Composable
 private fun NavRow(
     icon: ImageVector,
@@ -787,7 +815,7 @@ private fun NavRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = FluxSpacing.touch + FluxSpacing.sm)
+            .heightIn(min = RowMinHeight)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
         verticalAlignment = Alignment.CenterVertically
@@ -798,8 +826,9 @@ private fun NavRow(
             Text(title, style = MaterialTheme.typography.titleSmall, color = colors.onSurface)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
+        Spacer(Modifier.width(FluxSpacing.sm))
         Icon(
-            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            Icons.AutoMirrored.Sharp.KeyboardArrowRight,
             contentDescription = null,
             tint = colors.onSurfaceVariant
         )
@@ -808,39 +837,17 @@ private fun NavRow(
 
 @Composable
 private fun TextAction(label: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
+    TextButton(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.small,
+        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.secondary),
+        modifier = Modifier.heightIn(min = FluxSpacing.touch)
+    ) {
         Text(label, style = MaterialTheme.typography.labelLarge)
     }
 }
 
-@Composable
-private fun PrimaryButton(
-    label: String,
-    icon: ImageVector?,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Button(onClick = onClick, shape = MaterialTheme.shapes.medium, modifier = modifier.heightIn(min = FluxSpacing.touch)) {
-        ButtonContent(label, icon)
-    }
-}
-
-@Composable
-private fun TonalButton(
-    label: String,
-    icon: ImageVector?,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    FilledTonalButton(
-        onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
-        modifier = modifier.heightIn(min = FluxSpacing.touch)
-    ) {
-        ButtonContent(label, icon)
-    }
-}
-
+/** Secondary actions: outlined, in the text ink, so red stays with the one primary plate. */
 @Composable
 private fun SecondaryButton(
     label: String,
@@ -852,7 +859,8 @@ private fun SecondaryButton(
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.small,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
         modifier = modifier.heightIn(min = FluxSpacing.touch)
     ) {
         ButtonContent(label, icon)
