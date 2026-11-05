@@ -5,15 +5,15 @@ _State of ongoing work (Current effort), baselines, the append-only decision log
 ## Current effort: terminal-first app (on top of the Ubuntu chroot runtime)
 _Updated: 2026-11-05 · rewrite this section, don't append_
 - **Goal:** the terminal is the product: the app opens on it, XFCE is optional (setup switch off by default, "Install desktop" later), links open on tap, a Paste key, Hold wakelock, and a refined dark + cream design. Stacked on the chroot work: `feat/ubuntu-chroot` ([PR #1](https://github.com/akane599/fluxlinux-ubuntufied/pull/1)) → `feat/terminal-first` (PR against `feat/ubuntu-chroot`).
-- **Done:** both branches build; on `feat/terminal-first` 942 unit tests, lint (0 errors), screenshots and shell tests are green. Emulator QA (UI only, staged fake rootfs) covered onboarding, terminal-first launch, the empty/failed terminal state, the Ubuntu page and the desktop add-on confirm/failed states.
+- **Done:** both branches build; on `feat/terminal-first` 947 unit tests, lint (0 errors), screenshots and shell tests are green. Emulator QA (UI only, staged fake rootfs) covered onboarding, terminal-first launch, the empty/failed terminal state, the Ubuntu page and the desktop add-on confirm/failed states.
 - **Next:**
-  - [ ] On the SM-S938B (user taps, monitor via adb): scrolling up/down with sideways drift keeps scrolling and never opens the drawer, links open in the browser (also inside Claude Code / Codex full screen), Paste key, More… menu, Hold wakelock from the notification and the drawer (`dumpsys power | grep FluxLinux`), an existing XFCE install shows Start/Open/Stop, the add-on Installing row (Show log / Cancel).
+  - [ ] On the SM-S938B (user taps, monitor via adb): scrolling up/down with sideways drift keeps scrolling and never opens the drawer, in the chroot Ubuntu `codex` (and htop/vim) open and exit without waiting for a key (`ls -l /proc/$$/fd/0` shows a /dev/pts path, not a KernelSU wrapper), links open in the browser (also inside Claude Code / Codex full screen), Paste key, More… menu, Hold wakelock from the notification and the drawer (`dumpsys power | grep FluxLinux`), an existing XFCE install shows Start/Open/Stop, the add-on Installing row (Show log / Cancel).
   - [ ] Chroot checks still open from PR #1: grant root in KernelSU, onboarding → Chroot (now terminal-only by default), `whoami` = akane, network, `~/storage`, audio, Files → "Ubuntu"; a PRoot flux → akane migration from a v2.1.8 install.
   - [ ] Merge PR #1, then the terminal-first PR; release v2.2.0 (`.claude/rules/release.md`).
 - **Open questions:** none.
 
 ## Baseline
-- 2026-11-05 @ feat/terminal-first (on 43e5253): 942 unit tests, 0 failing; lint 0 errors; screenshots valid; shell tests pass.
+- 2026-11-05 @ feat/terminal-first (on 43e5253): 947 unit tests, 0 failing; lint 0 errors; screenshots valid; shell tests pass.
 - 2026-10-19 @ 7f6e61d: `:app:assembleIvarnaDebug` ok, 402 unit tests (`:app:testIvarnaDebugUnitTest`), 2 failing (pre-existing, not ours):
   - `ui.OnboardingConsentContractTest.optionsPage_requiresDownloadConsentBeforeInstall`: AssertionError (cause not yet investigated)
   - `core.terminal.GuestRootfsShellTest.alpine_absolute_sh_symlink_counts_as_installed`: AssertionError (cause not yet investigated)
@@ -53,6 +53,7 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 - 2026-11-05: the empty/failed terminal state links to the Ubuntu page and Settings, because a failed shell left only the edge-swipe drawer, which a mid-height swipe can turn into system Back; the window background is dark in both themes (no white flash before the first frame).
 - 2026-11-05: the Ubuntu zsh set gains oh-my-zsh's bundled `sudo` plugin (Esc Esc prefixes the line or the last command with sudo; a line-editor widget only, so PRoot and chroot are unaffected; akane has NOPASSWD sudo in both), at the user's request. Existing managed blocks get it through `PREVIOUS_PLUGIN_LISTS` (only an unedited list is rewritten) and a bumped one-shot key (`guest_zsh_plugins_v2_<id>`).
 - 2026-11-05: the terminal claims every gesture that starts on it (`requestDisallowInterceptTouchEvent` on ACTION_DOWN), because Compose gives an AndroidView's moves to ancestors first and the drawer's horizontal drag cancelled scrolls on slight sideways drift (user report; also in the original app). The drawer opens only from the left-edge zone and ☰, as the edge zone's design already assumed.
+- 2026-11-05: chroot terminal sessions use KernelSU's `su -W` (no fd wrapper) when su accepts it and root runs in `u:r:su:s0`. The default wrapper forwards reads to the original tty file, so a program's fcntl(O_NONBLOCK) on stdin is ignored and read-until-EAGAIN loops (codex's startup probe, its exit DA1 query) blocked until a key press (user report). Custom App Profile domains keep the wrapper, which is what lets them reach the app's terminal; installs and non-tty root commands are unchanged.
 
 ## Audit status
 | Area | Last run | Result | How |

@@ -8,7 +8,7 @@ Android, developed on Ubuntu from the CLI.
 - JDK target 17 · Gradle 8.14 · AGP 8.7.3 · Kotlin 2.0.20 · compileSdk 36 · targetSdk 36 · minSdk 26
 - Modules: :app :termux-x11 :terminal-emulator :stub · Architecture: single-activity Compose, no DI framework · DI/DB/Net: none / none / okhttp
 - Flavors (dimension `store`): `ivarna` = com.ivarna.fluxlinux (F-Droid/GitHub, arm64-v8a only) · `zenithblue` = com.zenithblue.fluxlinux (Play) · Launcher: .MainActivity
-- Baseline: build ok (ivarnaDebug) · 942 unit tests, 0 failures (feat/terminal-first, 2026-11-05)
+- Baseline: build ok (ivarnaDebug) · 947 unit tests, 0 failures (feat/terminal-first, 2026-11-05)
 
 ## How work flows here
 - For ongoing multi-session work, read PROGRESS.md at the repo root before planning, and update it at milestones. Its decision log is append-only (one line each).

@@ -51,7 +51,8 @@ object ChrootCommandBuilder {
             RootShell.cachedBusyBox(),
             RootShell.helperExecGuard(),
         )
-        val cmd = RootShell.shellRootCommand(withPath)
+        // Unwrapped terminal (KernelSU `su -W`) so full-screen programs' non-blocking reads work.
+        val cmd = RootShell.shellRootCommand(withPath, noFdWrapper = RootShell.supportsNoFdWrapper())
         // Inline WINCH trap on outer sh (mShellPid). Keep this shell as parent (no leading exec).
         val winchCmd = winchWrap(cmd)
         return arrayOf(SESSION_EXEC, "-c", winchCmd) to buildEnv(guestUser, chrootPath)
