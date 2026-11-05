@@ -21,7 +21,6 @@
     <string name="terminal_tab_close_named">Close %1$s</string>
     <string name="terminal_tab_close">Close</string>
     <string name="terminal_tab_close_others">Close other tabs</string>
-    <string name="terminal_tab_selected">Selected</string>
     <string name="terminal_empty_title">Ubuntu terminal</string>
     <string name="terminal_empty_opening">Opening an Ubuntu shell…</string>
     <string name="terminal_empty_closed">No sessions open.</string>
@@ -36,7 +35,6 @@
     <string name="terminal_error_ubuntu_chroot_missing">Ubuntu chroot is not installed yet. Set it up from the Ubuntu page, then try again.</string>
     <string name="terminal_error_chroot_no_root">Ubuntu chroot needs root. Allow AkaTerminal in your root manager, or switch to PRoot in Settings.</string>
     <string name="install_starting">Starting…</string>
-    <string name="install_base_desktop_done">Base desktop installed</string>
     <string name="home_repair_blocked_install">Host files are in use by an install or another repair. Try again when it finishes.</string>
     <string name="install_blocked_uninstall">A distro is being uninstalled. Close the uninstall tab when it finishes, then install again.</string>
     <string name="terminal_settings_accelerate_keys">Accelerate held keys</string>

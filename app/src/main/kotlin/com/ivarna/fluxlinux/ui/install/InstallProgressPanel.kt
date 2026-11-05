@@ -73,10 +73,10 @@ fun InstallProgressPanel(
     showLog: Boolean,
     onToggleLog: () -> Unit,
     onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     onDone: (() -> Unit)? = null,
     isDone: Boolean = false,
-    modifier: Modifier = Modifier,
     warning: String? = null,
     warningHint: String? = null,
 ) {
