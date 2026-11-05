@@ -31,7 +31,11 @@ handle_error() {
     exit 1
 }
 
-echo "FluxLinux: Starting XFCE4 Customization..."
+if [ "${FLUX_CUSTOMIZE_DESKTOP:-1}" != 0 ]; then
+    echo "FluxLinux: Starting XFCE4 Customization..."
+else
+    echo "FluxLinux: Starting shell customization..."
+fi
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "FluxLinux: ERROR: must run as root inside the guest (got uid=$(id -u))."
@@ -1281,5 +1285,20 @@ if [ -n "$_ref_u" ]; then
     done
 fi
 
-echo "FluxLinux: XFCE4 Customization complete!"
-exit 0
+# Last step. Exit 3 ("partial") when Oh My Zsh ended up missing (OMZ_OK=0): everything
+# else above has run, and the app finishes the install with a warning. 0 only when it is
+# there. A hard failure exits 1 earlier (handle_error).
+_flux_customization_finish() {
+    if [ "${FLUX_CUSTOMIZE_DESKTOP:-1}" != 0 ]; then
+        _flux_done_what="XFCE4 Customization"
+    else
+        _flux_done_what="shell customization"
+    fi
+    if [ "${OMZ_OK:-0}" = 1 ]; then
+        echo "FluxLinux: $_flux_done_what complete!"
+        exit 0
+    fi
+    echo "FluxLinux: WARNING: $_flux_done_what finished without Oh My Zsh (partial, exit 3)"
+    exit 3
+}
+_flux_customization_finish
