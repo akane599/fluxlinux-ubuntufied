@@ -26,6 +26,14 @@
     <!-- Hold wakelock: keeps the CPU awake with the screen off while sessions run (Termux parity). -->
     <string name="terminal_wakelock_hold">Hold wakelock</string>
     <string name="terminal_wakelock_release">Release wakelock</string>
+    <string name="terminal_notification_title">AkaTerminal</string>
+    <plurals name="terminal_notification_sessions">
+        <item quantity="one">%d terminal session running</item>
+        <item quantity="other">%d terminal sessions running</item>
+    </plurals>
+    <string name="terminal_notification_exit">Exit</string>
+    <string name="terminal_notification_channel">Terminal sessions</string>
+    <string name="terminal_notification_channel_desc">Shows while terminal sessions stay alive in the background</string>
     <string name="terminal_notification_wakelock_held">%1$s · wakelock held</string>
     <string name="terminal_drawer_wakelock">Hold wakelock</string>
     <string name="terminal_drawer_wakelock_sub">Stays awake with the screen off</string>

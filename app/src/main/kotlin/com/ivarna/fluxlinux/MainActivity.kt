@@ -1,5 +1,7 @@
 package com.ivarna.fluxlinux
 
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import android.Manifest
 import com.ivarna.fluxlinux.core.gpu.DriverRelease
 import com.ivarna.fluxlinux.core.gpu.GpuDriverInstaller
@@ -12,8 +14,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.sharp.ArrowBack
+import androidx.compose.material.icons.sharp.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -466,6 +468,10 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Notification "Exit": sessions and desktop are already stopped; close the task.
+        lifecycleScope.launch {
+            com.ivarna.fluxlinux.core.service.AppExit.finishRequests.collect { finishAndRemoveTask() }
+        }
         GpuDriverInstaller.onPending = { runOnUiThread { armDriverResume() } }
         armDriverResume()
         if (savedInstanceState == null) {
@@ -505,7 +511,7 @@ class MainActivity : ComponentActivity() {
                         text = {
                             Text(
                                 "Your v1.x distros live in the Termux app and were not removed by this update. " +
-                                    "FluxLinux 2 uses its own runtime; reinstall distros here.\n\n" +
+                                    "AkaTerminal uses its own runtime; reinstall distros here.\n\n" +
                                     "Old data is still in Termux. Back up with `proot-distro backup <name>` " +
                                     "in Termux, or delete it in Settings -> Legacy Termux."
                             )
@@ -702,7 +708,7 @@ class MainActivity : ComponentActivity() {
                                         navigationIcon = {
                                             IconButton(onClick = { currentTab = BottomTab.TERMINAL }) {
                                                 Icon(
-                                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                                    Icons.AutoMirrored.Sharp.ArrowBack,
                                                     contentDescription = stringResource(R.string.home_top_back)
                                                 )
                                             }
@@ -710,7 +716,7 @@ class MainActivity : ComponentActivity() {
                                         actions = {
                                             IconButton(onClick = { openSettings(BottomTab.HOME) }) {
                                                 Icon(
-                                                    Icons.Default.Settings,
+                                                    Icons.Sharp.Settings,
                                                     contentDescription = stringResource(R.string.home_top_settings)
                                                 )
                                             }

@@ -21,7 +21,8 @@ import com.ivarna.fluxlinux.core.terminal.TerminalWakeLock
  * Foreground service keeping in-app terminal sessions alive while the app is
  * backgrounded. Mirrors termux-lib `AppTerminalService` (specialUse subtype).
  * Its notification carries the "Hold wakelock" toggle ([TerminalWakeLock]), which never
- * outlives the sessions: the lock is released with the last one.
+ * outlives the sessions (the lock is released with the last one), and "Exit" ([AppExit]),
+ * which closes the sessions, stops the desktop and closes the app.
  */
 class AppTerminalService : Service() {
 
@@ -31,6 +32,13 @@ class AppTerminalService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_EXIT) {
+            AppExit.exitAll(this)
+            TerminalWakeLock.release()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val count = if (intent?.action == ACTION_TOGGLE_WAKELOCK) {
             // The live count, not the last update's: if a background startForegroundService was
             // refused, sessions run without this service, and the drawer's toggle (app in the
@@ -97,10 +105,15 @@ class AppTerminalService : Service() {
             Intent(this, AppTerminalService::class.java).setAction(ACTION_TOGGLE_WAKELOCK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val sessions = if (count == 1) "1 terminal session running" else "$count terminal sessions running"
+        val exit = PendingIntent.getService(
+            this, NOTIF_ID + 2,
+            Intent(this, AppTerminalService::class.java).setAction(ACTION_EXIT),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val sessions = resources.getQuantityString(R.plurals.terminal_notification_sessions, count, count)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("FluxLinux — Terminal")
+            .setContentTitle(getString(R.string.terminal_notification_title))
             .setContentText(
                 if (held) getString(R.string.terminal_notification_wakelock_held, sessions) else sessions
             )
@@ -109,6 +122,7 @@ class AppTerminalService : Service() {
                 getString(if (held) R.string.terminal_wakelock_release else R.string.terminal_wakelock_hold),
                 toggleWakeLock
             )
+            .addAction(0, getString(R.string.terminal_notification_exit), exit)
             .setSmallIcon(R.drawable.ic_stat_flux)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -124,10 +138,10 @@ class AppTerminalService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "FluxLinux Terminal Sessions",
+                getString(R.string.terminal_notification_channel),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Shows while in-app terminal sessions stay alive in the background"
+                description = getString(R.string.terminal_notification_channel_desc)
                 setShowBadge(false)
             }
             getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
@@ -137,6 +151,7 @@ class AppTerminalService : Service() {
     companion object {
         private const val TAG = "AppTerminalService"
         const val ACTION_TOGGLE_WAKELOCK = "com.ivarna.fluxlinux.action.TOGGLE_WAKELOCK"
+        const val ACTION_EXIT = "com.ivarna.fluxlinux.action.EXIT"
 
         // New id: IMPORTANCE is immutable once a channel exists on device
         const val CHANNEL_ID = "FluxLinuxAppTerminalServiceChannel_v2"
