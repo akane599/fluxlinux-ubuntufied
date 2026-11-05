@@ -9,7 +9,12 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** The long-running install job behind [InstallController] ([OnboardingInstallRunner] in production). */
 interface InstallEngine {
-    fun start(distroId: String, theme: String, onProgress: (OnboardingInstallRunner.Progress) -> Unit)
+    fun start(
+        distroId: String,
+        theme: String,
+        kind: InstallKind,
+        onProgress: (OnboardingInstallRunner.Progress) -> Unit,
+    )
     fun cancel()
 }
 
@@ -37,6 +42,8 @@ class InstallController internal constructor(
         val runId: Int = 0,
         val distroId: String? = null,
         val theme: String = "dark",
+        /** What the run sets up (as requested by [start]). */
+        val kind: InstallKind = InstallKind.TERMINAL,
         val status: Status = Status.Idle,
         val percent: Int = 0,
         /** Blank until the first progress update; screens show a "Starting" label. */
@@ -58,17 +65,19 @@ class InstallController internal constructor(
     private val acceptedRun = AtomicInteger(0)
 
     /**
-     * Start (or restart) an install. A previous run is superseded (the engine cancels it).
-     * Refused (false, state [Status.Failed] with the reason) while an uninstall is deleting
-     * a container or the proot-distro tree the install would run in (H2).
+     * Start (or restart) an install of [kind] (terminal only by default; the desktop is
+     * opt-in or a later [InstallKind.DESKTOP_ADD_ON]). A previous run is superseded (the
+     * engine cancels it). Refused (false, state [Status.Failed] with the reason) while an
+     * uninstall is deleting a container or the proot-distro tree the install would run in (H2).
      */
-    fun start(distroId: String, theme: String): Boolean {
+    fun start(distroId: String, theme: String, kind: InstallKind = InstallKind.TERMINAL): Boolean {
         if (uninstallInProgress()) {
             if (!_state.value.isRunning) {
                 _state.value = State(
                     runId = acceptedRun.incrementAndGet(),
                     distroId = distroId,
                     theme = theme,
+                    kind = kind,
                     status = Status.Failed,
                     errorMessage = uninstallBusyMessage(),
                 )
@@ -80,9 +89,10 @@ class InstallController internal constructor(
             runId = runId,
             distroId = distroId,
             theme = theme,
+            kind = kind,
             status = Status.Running,
         )
-        engine.start(distroId, theme) { p -> onProgress(runId, p) }
+        engine.start(distroId, theme, kind) { p -> onProgress(runId, p) }
         return true
     }
 

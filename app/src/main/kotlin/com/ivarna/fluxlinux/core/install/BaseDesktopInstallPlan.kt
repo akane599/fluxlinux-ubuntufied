@@ -9,8 +9,8 @@ import com.ivarna.fluxlinux.core.root.GuestUsers
 import java.io.File
 
 /**
- * Minimal base desktop install: rootfs + family (XFCE) + customization.
- * Distro-specific paths come from [DistroInstallProfile].
+ * Base install plan: rootfs + family setup + customization, with the XFCE desktop optional
+ * ([InstallKind]). Distro-specific paths come from [DistroInstallProfile].
  */
 object BaseDesktopInstallPlan {
 
@@ -29,27 +29,93 @@ object BaseDesktopInstallPlan {
     fun profileFor(distroId: String): DistroInstallProfile? =
         DistroInstallProfile.forId(distroId)
 
+    /** The terminal + desktop plan (what every install ran before the desktop became optional). */
     fun phasesFor(method: String, displayName: String = "Debian"): List<Phase> =
-        if (method == "chroot") {
-            listOf(
-                Phase("R0", "Checking root access…", 5),
-                Phase("HOST", "Preparing host (may download bootstrap from GitHub)…", 15),
-                Phase("DL", "Downloading $displayName rootfs…", 10),
-                Phase("ROOTFS", "Installing $displayName chroot rootfs…", 30),
-                Phase("XFCE", "Installing XFCE desktop…", 25),
-                Phase("CUSTOM", "Applying Flux customization…", 15),
-            )
-        } else {
-            listOf(
-                Phase("HOST", "Preparing host (may download bootstrap from GitHub)…", 20),
-                Phase("DL", "Downloading $displayName rootfs…", 15),
-                Phase("ROOTFS", "Installing $displayName rootfs + XFCE…", 35),
-                Phase("CUSTOM", "Applying Flux customization…", 30),
-            )
-        }
+        phasesFor(method, displayName, InstallKind.TERMINAL_AND_DESKTOP)
 
     /** Back-compat overload used by existing tests. */
     fun phasesFor(method: String): List<Phase> = phasesFor(method, "Debian")
+
+    /**
+     * Phases of a [kind] run. Weights sum to 100. The runner looks phases up by id
+     * ([familyPhaseId] is where the family script runs), never by index.
+     */
+    fun phasesFor(method: String, displayName: String, kind: InstallKind): List<Phase> {
+        val chroot = method == "chroot"
+        val r0 = Phase("R0", "Checking root access…", 5)
+        val hostLabel = "Preparing host (may download bootstrap from GitHub)…"
+        val dl = "Downloading $displayName rootfs…"
+        return when (kind) {
+            InstallKind.TERMINAL -> if (chroot) {
+                listOf(
+                    r0,
+                    Phase("HOST", hostLabel, 15),
+                    Phase("DL", dl, 15),
+                    Phase("ROOTFS", "Installing $displayName chroot rootfs…", 30),
+                    Phase("BASE", "Installing base packages…", 15),
+                    Phase("CUSTOM", TERMINAL_CUSTOM_LABEL, 20),
+                )
+            } else {
+                listOf(
+                    Phase("HOST", hostLabel, 20),
+                    Phase("DL", dl, 20),
+                    Phase("ROOTFS", "Installing $displayName…", 35),
+                    Phase("CUSTOM", TERMINAL_CUSTOM_LABEL, 25),
+                )
+            }
+            InstallKind.TERMINAL_AND_DESKTOP -> if (chroot) {
+                listOf(
+                    r0,
+                    Phase("HOST", hostLabel, 15),
+                    Phase("DL", dl, 10),
+                    Phase("ROOTFS", "Installing $displayName chroot rootfs…", 30),
+                    Phase("XFCE", XFCE_LABEL, 25),
+                    Phase("CUSTOM", DESKTOP_CUSTOM_LABEL, 15),
+                )
+            } else {
+                listOf(
+                    Phase("HOST", hostLabel, 20),
+                    Phase("DL", dl, 15),
+                    Phase("ROOTFS", "Installing $displayName rootfs + XFCE…", 35),
+                    Phase("CUSTOM", DESKTOP_CUSTOM_LABEL, 30),
+                )
+            }
+            InstallKind.DESKTOP_ADD_ON -> if (chroot) {
+                listOf(
+                    r0,
+                    Phase("HOST", hostLabel, 10),
+                    Phase("XFCE", XFCE_LABEL, 55),
+                    Phase("CUSTOM", DESKTOP_CUSTOM_LABEL, 30),
+                )
+            } else {
+                listOf(
+                    Phase("HOST", hostLabel, 10),
+                    Phase("XFCE", XFCE_LABEL, 60),
+                    Phase("CUSTOM", DESKTOP_CUSTOM_LABEL, 30),
+                )
+            }
+        }
+    }
+
+    /** Id of the phase in which the family setup script runs for [method] / [kind]. */
+    fun familyPhaseId(method: String, kind: InstallKind): String = when {
+        kind == InstallKind.DESKTOP_ADD_ON -> "XFCE"
+        method != "chroot" -> "ROOTFS"
+        kind == InstallKind.TERMINAL -> "BASE"
+        else -> "XFCE"
+    }
+
+    private const val XFCE_LABEL = "Installing XFCE desktop…"
+    private const val DESKTOP_CUSTOM_LABEL = "Applying Flux customization…"
+    private const val TERMINAL_CUSTOM_LABEL = "Setting up zsh and Oh My Zsh…"
+
+    /** `export FLUX_INSTALL_DESKTOP='1|0'` for the family payload (scripts default to 1). */
+    internal fun installDesktopExport(installDesktop: Boolean): String =
+        "export FLUX_INSTALL_DESKTOP='${if (installDesktop) 1 else 0}'\n"
+
+    /** `export FLUX_CUSTOMIZE_DESKTOP='1|0'` for the customization payload (scripts default to 1). */
+    internal fun customizeDesktopExport(customizeDesktop: Boolean): String =
+        "export FLUX_CUSTOMIZE_DESKTOP='${if (customizeDesktop) 1 else 0}'\n"
 
     /**
      * `export K='V'` lines for [GuestUsers.scriptEnv] of [profile]: chroot guests get their
@@ -70,7 +136,16 @@ object BaseDesktopInstallPlan {
             ProotXfceAssetInstaller.prootRootfs(ctx, profile.prootName)
         }
 
-    fun familySetupPayload(ctx: Context, theme: String, distroId: String = "debian"): String {
+    /**
+     * Family setup payload. [installDesktop] false exports `FLUX_INSTALL_DESKTOP=0`, which
+     * the Ubuntu family script reads to skip XFCE (terminal-only install).
+     */
+    fun familySetupPayload(
+        ctx: Context,
+        theme: String,
+        distroId: String = "debian",
+        installDesktop: Boolean = true,
+    ): String {
         val profile = DistroInstallProfile.forId(distroId)
             ?: DistroInstallProfile.require("debian")
         val sm = ScriptManager(ctx)
@@ -81,6 +156,7 @@ object BaseDesktopInstallPlan {
         return buildString {
             append("export FLUX_THEME='").append(theme).append("'\n")
             append("export FLUX_DESKTOP_ENV='xfce'\n")
+            append(installDesktopExport(installDesktop))
             append(guestEnvExports(profile, prootScriptRootfs(ctx, profile)))
             append("export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n\n")
             if (common.isNotBlank()) {
@@ -90,18 +166,33 @@ object BaseDesktopInstallPlan {
         }
     }
 
-    fun familySetupB64(ctx: Context, theme: String, distroId: String = "debian"): String =
+    fun familySetupB64(
+        ctx: Context,
+        theme: String,
+        distroId: String = "debian",
+        installDesktop: Boolean = true,
+    ): String =
         Base64.encodeToString(
-            familySetupPayload(ctx, theme, distroId).toByteArray(Charsets.UTF_8),
+            familySetupPayload(ctx, theme, distroId, installDesktop).toByteArray(Charsets.UTF_8),
             Base64.NO_WRAP
         )
 
-    fun customizationPayload(ctx: Context, theme: String, distroId: String = "debian"): String {
+    /**
+     * Customization payload. [customizeDesktop] false exports `FLUX_CUSTOMIZE_DESKTOP=0`:
+     * only the shell part (Oh My Zsh, plugins, .zshrc, fastfetch) runs.
+     */
+    fun customizationPayload(
+        ctx: Context,
+        theme: String,
+        distroId: String = "debian",
+        customizeDesktop: Boolean = true,
+    ): String {
         val profile = DistroInstallProfile.forId(distroId)
             ?: DistroInstallProfile.require("debian")
         val body = ScriptManager(ctx).getScriptContent(profile.customizationScript)
         return buildString {
             append("export FLUX_THEME='").append(theme).append("'\n")
+            append(customizeDesktopExport(customizeDesktop))
             append(guestEnvExports(profile, prootScriptRootfs(ctx, profile)))
             // Guest installs pokemon (60s budget). Host never ships it.
             append("export FLUX_SKIP_POKEMON='0'\n")

@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.ivarna.fluxlinux.R
+import com.ivarna.fluxlinux.core.desktop.UbuntuDesktop
 import com.ivarna.fluxlinux.core.files.UbuntuFiles
 import com.ivarna.fluxlinux.core.gpu.GpuDriverInstaller
 import com.ivarna.fluxlinux.core.root.BusyBoxPaths
@@ -28,6 +30,14 @@ import java.util.concurrent.atomic.AtomicReference
  * Runs the simplified onboarding / base install with phase progress + live log.
  * Proot: prepareHost → flux_install (family) → customization via proot-distro.
  * Chroot: root check → prepareHost → setup_*_chroot → family → customization in chroot.
+ *
+ * [InstallKind] picks what runs (phases from [BaseDesktopInstallPlan.phasesFor]):
+ * - TERMINAL: family with `FLUX_INSTALL_DESKTOP=0`, host Oh My Zsh staging, customization
+ *   with `FLUX_CUSTOMIZE_DESKTOP=0`. No XFCE assets, no startxfce4 check, no hw-accel, and
+ *   no desktop component flags.
+ * - TERMINAL_AND_DESKTOP: the full install (XFCE, theme assets, customization, hw-accel).
+ * - DESKTOP_ADD_ON: needs the rootfs installed already; no download or extraction, then the
+ *   desktop part of TERMINAL_AND_DESKTOP (PRoot via flux_install.sh, which skips extraction).
  *
  * Distro identity from [DistroInstallProfile] (Debian + Alpine).
  *
@@ -62,6 +72,8 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
     @Volatile private var lastNotifLabel: String = ""
     /** Last overall percent from real phase updates (log lines must not thrash). */
     @Volatile private var lastOverallPercent: Int = 0
+    /** FGS text when a progress update has no detail: what this run installs. */
+    @Volatile private var notifFallbackText: String = ""
 
     override fun cancel() {
         cancelled.set(true)
@@ -84,6 +96,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
     override fun start(
         distroId: String,
         theme: String,
+        kind: InstallKind,
         onProgress: (Progress) -> Unit
     ) {
         // Invalidate any in-flight job before resetting cancel flag
@@ -122,7 +135,9 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             return
         }
         val method = profile.method
-        val phases = BaseDesktopInstallPlan.phasesFor(method, profile.displayName)
+        val runKind = InstallKind.effective(distroId, kind)
+        val phases = BaseDesktopInstallPlan.phasesFor(method, profile.displayName, runKind)
+        notifFallbackText = notificationText(runKind, profile.displayName)
         busy.set(true)
         lastNotifPercent = -1
         lastNotifLabel = ""
@@ -130,8 +145,8 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         try {
             BaseInstallService.start(
                 appCtx,
-                title = "FluxLinux — Installing",
-                text = "${profile.displayName} base desktop",
+                title = appCtx.getString(R.string.install_notif_title),
+                text = notifFallbackText,
                 percent = 0
             )
         } catch (e: Exception) {
@@ -144,9 +159,9 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                     return@execute
                 }
                 if (method == "chroot") {
-                    runChroot(distroId, theme, phases, guarded, gen)
+                    runChroot(distroId, theme, runKind, phases, guarded, gen)
                 } else {
-                    runProot(distroId, theme, phases, guarded, gen)
+                    runProot(distroId, theme, runKind, phases, guarded, gen)
                 }
             } catch (e: Exception) {
                 if (!isStale(gen)) {
@@ -186,13 +201,15 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
     private fun runProot(
         distroId: String,
         theme: String,
+        kind: InstallKind,
         phases: List<BaseDesktopInstallPlan.Phase>,
         onProgress: (Progress) -> Unit,
         gen: Int
     ) {
+        val desktop = kind.installsDesktop
+        val addOn = kind == InstallKind.DESKTOP_ADD_ON
         val hostIdx = phaseIdx(phases, "HOST")
-        val dlIdx = phaseIdx(phases, "DL")
-        val rootfsIdx = phaseIdx(phases, "ROOTFS")
+        val familyIdx = phaseIdx(phases, BaseDesktopInstallPlan.familyPhaseId("proot", kind))
         val customIdx = phaseIdx(phases, "CUSTOM")
 
         enter(phases, hostIdx, onProgress, "Extracting bootstrap + deploying scripts…")
@@ -215,40 +232,56 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         completePhase(phases, hostIdx, onProgress, "Host ready")
 
         val profile = DistroInstallProfile.require(distroId)
-        enter(phases, dlIdx, onProgress, "Downloading ${profile.displayName} rootfs…")
-        if (abortIfCancelled(gen, phases, onProgress)) return
-        val destDir = TermuxHostPaths.homeDir(appCtx)
-        val dlOk = RootfsDownloader.ensurePresent(
-            destDir, profile, RootfsDownloader.defaultClient,
-            isCancelled = { isStale(gen) }
-        ) { p ->
-            if (isStale(gen)) return@ensurePresent
-            val frac = if (p.totalBytes > 0) p.downloadedBytes.toFloat() / p.totalBytes else 0f
-            updateFraction(
-                phases, dlIdx, frac, onProgress,
-                "Downloaded ${p.downloadedBytes / 1_048_576} / " +
-                    "${p.totalBytes.coerceAtLeast(0) / 1_048_576} MiB"
-            )
+        if (addOn) {
+            // The add-on only adds XFCE: it never downloads or extracts a rootfs.
+            if (!TerminalLauncher.isProotInstalled(appCtx, profile.prootName)) {
+                postFail(
+                    onProgress, phases,
+                    appCtx.getString(R.string.install_addon_needs_rootfs, profile.displayName),
+                )
+                return
+            }
+        } else {
+            val dlIdx = phaseIdx(phases, "DL")
+            enter(phases, dlIdx, onProgress, "Downloading ${profile.displayName} rootfs…")
+            if (abortIfCancelled(gen, phases, onProgress)) return
+            val destDir = TermuxHostPaths.homeDir(appCtx)
+            val dlOk = RootfsDownloader.ensurePresent(
+                destDir, profile, RootfsDownloader.defaultClient,
+                isCancelled = { isStale(gen) }
+            ) { p ->
+                if (isStale(gen)) return@ensurePresent
+                val frac = if (p.totalBytes > 0) p.downloadedBytes.toFloat() / p.totalBytes else 0f
+                updateFraction(
+                    phases, dlIdx, frac, onProgress,
+                    "Downloaded ${p.downloadedBytes / 1_048_576} / " +
+                        "${p.totalBytes.coerceAtLeast(0) / 1_048_576} MiB"
+                )
+            }
+            if (abortIfCancelled(gen, phases, onProgress)) return
+            if (!dlOk) {
+                postFail(
+                    onProgress, phases,
+                    "Rootfs download failed — place ${profile.rootfsFileName} in the app " +
+                        "home directory (${TermuxHostPaths.HOME}) or retry online"
+                )
+                return
+            }
+            completePhase(phases, dlIdx, onProgress, "Rootfs ready (${profile.rootfsFileName})")
         }
-        if (abortIfCancelled(gen, phases, onProgress)) return
-        if (!dlOk) {
-            postFail(
-                onProgress, phases,
-                "Rootfs download failed — place ${profile.rootfsFileName} in the app " +
-                    "home directory (${TermuxHostPaths.HOME}) or retry online"
-            )
-            return
-        }
-        completePhase(phases, dlIdx, onProgress, "Rootfs ready (${profile.rootfsFileName})")
 
-        enter(phases, rootfsIdx, onProgress, "Installing ${profile.displayName} via proot-distro…")
+        enter(
+            phases, familyIdx, onProgress,
+            if (addOn) "Installing XFCE via proot-distro…" else "Installing ${profile.displayName} via proot-distro…",
+        )
         if (abortIfCancelled(gen, phases, onProgress)) return
         // Re-running setup over an Ubuntu PRoot created as flux: rename it to akane first, or
         // the family setup (FLUX_GUEST_USER=akane) would add a second user next to flux.
         GuestUserMigration.migrateIfNeeded(appCtx, distroId)
         val bash = TermuxHostPaths.libBash(appCtx).absolutePath
         val installScript = TermuxHostPaths.hostScript(appCtx, "flux_install.sh").absolutePath
-        val setupB64 = BaseDesktopInstallPlan.familySetupB64(appCtx, theme, distroId)
+        // An installed rootfs is never re-extracted (flux_install.sh skips to the setup payload).
+        val setupB64 = BaseDesktopInstallPlan.familySetupB64(appCtx, theme, distroId, installDesktop = desktop)
         val env = HostCommandBuilder.envMap(appCtx, forceHostSetup = false, includeTerm = false).apply {
             put("PYTHONUNBUFFERED", "1")
             put("FLUX_ROOTFS_PATH", "${TermuxHostPaths.HOME}/${profile.rootfsFileName}")
@@ -265,38 +298,53 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             env,
             processHolder = activeProcess,
             onLine = { line ->
-                if (!isStale(gen) && line.isNotBlank()) log(phases, rootfsIdx, onProgress, line)
+                if (!isStale(gen) && line.isNotBlank()) log(phases, familyIdx, onProgress, line)
             }
         )
         if (abortIfCancelled(gen, phases, onProgress)) return
         if (exitInstall != 0) {
-            postFail(onProgress, phases, "${profile.displayName} install failed (exit $exitInstall)")
+            postFail(
+                onProgress, phases,
+                if (addOn) "XFCE setup failed (exit $exitInstall)"
+                else "${profile.displayName} install failed (exit $exitInstall)",
+            )
             return
         }
         if (!TerminalLauncher.isProotInstalled(appCtx, profile.prootName)) {
             postFail(onProgress, phases, "${profile.displayName} rootfs missing after install")
             return
         }
-        if (!isProotXfceInstalled(appCtx, profile.prootName)) {
+        if (desktop && !isProotXfceInstalled(appCtx, profile.prootName)) {
             postFail(
                 onProgress, phases,
                 "XFCE not found after install (startxfce4 missing). Retry setup."
             )
             return
         }
-        completePhase(phases, rootfsIdx, onProgress, "${profile.displayName} + XFCE installed")
+        completePhase(
+            phases, familyIdx, onProgress,
+            when {
+                addOn -> "XFCE installed"
+                desktop -> "${profile.displayName} + XFCE installed"
+                else -> "${profile.displayName} installed"
+            },
+        )
 
-        enter(phases, customIdx, onProgress, "Themes, wallpapers, fonts…")
+        enter(phases, customIdx, onProgress, if (desktop) "Themes, wallpapers, fonts…" else "zsh, Oh My Zsh, plugins…")
         if (abortIfCancelled(gen, phases, onProgress)) return
-        // Native host extract into proot rootfs (avoids proot thrashing on Papirus).
-        // Skip guest re-extract when this succeeds or assets are already present.
-        log(phases, customIdx, onProgress, "Staging XFCE theme/icons on host (native tar)…")
-        val hostThemeOk = try {
-            ProotXfceAssetInstaller.install(appCtx, theme, profile.prootName) { line ->
-                if (!isStale(gen) && line.isNotBlank()) log(phases, customIdx, onProgress, line)
+        val hostThemeOk = if (desktop) {
+            // Native host extract into proot rootfs (avoids proot thrashing on Papirus).
+            // Skip guest re-extract when this succeeds or assets are already present.
+            log(phases, customIdx, onProgress, "Staging XFCE theme/icons on host (native tar)…")
+            try {
+                ProotXfceAssetInstaller.install(appCtx, theme, profile.prootName) { line ->
+                    if (!isStale(gen) && line.isNotBlank()) log(phases, customIdx, onProgress, line)
+                }
+            } catch (e: Exception) {
+                log(phases, customIdx, onProgress, "Host theme stage error: ${e.message}")
+                false
             }
-        } catch (e: Exception) {
-            log(phases, customIdx, onProgress, "Host theme stage error: ${e.message}")
+        } else {
             false
         }
         if (abortIfCancelled(gen, phases, onProgress)) return
@@ -317,6 +365,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             prootName = profile.prootName,
             scriptAssetPath = profile.customizationScript,
             envPrefix = "FLUX_THEME=$theme " +
+                "FLUX_CUSTOMIZE_DESKTOP=${if (desktop) "1" else "0"} " +
                 "FLUX_SKIP_THEME_ICONS=$skipAssets " +
                 "FLUX_SKIP_OMZ=$skipOmz " +
                 "FLUX_SKIP_POKEMON=0 " +
@@ -330,7 +379,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         }
 
         if (abortIfCancelled(gen, phases, onProgress)) return
-        val hwOk = runHwAccelIfPresent(
+        val hwOk = desktop && runHwAccelIfPresent(
             profile, method = "proot", phases, customIdx, onProgress, gen, chrootPath = null
         )
 
@@ -342,13 +391,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         // The Ubuntu file-manager roots appear once the rootfs exists; make DocumentsUI re-query.
         runCatching { UbuntuFiles.notifyRootsChanged(appCtx) }
         StateManager.setDistroInstalled(appCtx, distroId, true)
-        StateManager.setComponentInstalled(appCtx, distroId, "xfce4_desktop", true)
-        if (hwOk) {
-            StateManager.setComponentInstalled(appCtx, distroId, "hw_accel", true)
-        }
-        if (customOk) {
-            StateManager.setComponentInstalled(appCtx, distroId, "customization", true)
-        }
+        markDesktopComponents(distroId, desktop, customOk = customOk, hwOk = hwOk)
         // Persist here, not from Done-page buttons: Back, rotation or process death
         // after a successful install must not re-run onboarding (M4).
         StateManager.setOnboardingComplete(appCtx, true)
@@ -359,15 +402,16 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
     private fun runChroot(
         distroId: String,
         theme: String,
+        kind: InstallKind,
         phases: List<BaseDesktopInstallPlan.Phase>,
         onProgress: (Progress) -> Unit,
         gen: Int
     ) {
+        val desktop = kind.installsDesktop
+        val addOn = kind == InstallKind.DESKTOP_ADD_ON
         val r0Idx = phaseIdx(phases, "R0")
         val hostIdx = phaseIdx(phases, "HOST")
-        val dlIdx = phaseIdx(phases, "DL")
-        val rootfsIdx = phaseIdx(phases, "ROOTFS")
-        val xfceIdx = phaseIdx(phases, "XFCE")
+        val familyIdx = phaseIdx(phases, BaseDesktopInstallPlan.familyPhaseId("chroot", kind))
         val customIdx = phaseIdx(phases, "CUSTOM")
 
         enter(phases, r0Idx, onProgress, "Probing KernelSU / Magisk…")
@@ -403,11 +447,119 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         completePhase(phases, hostIdx, onProgress, "Host ready")
 
         val profile = DistroInstallProfile.require(distroId)
+        val chrootPath = profile.chrootPath
+            ?: com.ivarna.fluxlinux.core.root.ChrootPaths.CHROOT_PATH
+
+        if (addOn) {
+            // The add-on only adds XFCE: it never downloads or extracts a rootfs.
+            TerminalLauncher.invalidateChrootInstalledCache()
+            if (!TerminalLauncher.isChrootInstalled(chrootPath)) {
+                postFail(
+                    onProgress, phases,
+                    appCtx.getString(R.string.install_addon_needs_rootfs, profile.displayName),
+                )
+                return
+            }
+        } else if (!installChrootRootfs(profile, chrootPath, resolvedBb, phases, onProgress, gen)) {
+            return
+        }
+
+        enter(
+            phases, familyIdx, onProgress,
+            if (desktop) "Installing XFCE packages…" else "Installing base packages…",
+        )
+        if (abortIfCancelled(gen, phases, onProgress)) return
+        val familyPayload =
+            BaseDesktopInstallPlan.familySetupPayload(appCtx, theme, distroId, installDesktop = desktop)
+        val familyExit = runChrootGuestBlocking(
+            familyPayload, user = "root", phases, familyIdx, onProgress, gen, chrootPath
+        )
+        if (abortIfCancelled(gen, phases, onProgress)) return
+        if (familyExit != 0) {
+            postFail(
+                onProgress, phases,
+                if (desktop) "XFCE setup failed (exit $familyExit)" else "Base setup failed (exit $familyExit)",
+            )
+            return
+        }
+        if (desktop && !TerminalLauncher.isChrootXfceInstalled(chrootPath)) {
+            postFail(
+                onProgress, phases,
+                "XFCE not found after family setup (startxfce4 missing). Retry."
+            )
+            return
+        }
+        completePhase(phases, familyIdx, onProgress, if (desktop) "XFCE installed" else "Base packages installed")
+
+        enter(phases, customIdx, onProgress, if (desktop) "Themes, wallpapers, fonts…" else "zsh, Oh My Zsh, plugins…")
+        if (abortIfCancelled(gen, phases, onProgress)) return
+        if (desktop) {
+            // Stage theme/icon/cursor/wallpaper into the chroot guest /tmp (root copy).
+            // The customization script extracts from /tmp/flux_xfce_assets with guest
+            // tar; icons have no download fallback, so this staging is mandatory.
+            log(phases, customIdx, onProgress, "Staging XFCE theme/icons into chroot…")
+            try {
+                com.ivarna.fluxlinux.core.install.ProotXfceAssetInstaller.installToChroot(
+                    appCtx, theme, chrootPath
+                ) { line ->
+                    if (!isStale(gen) && line.isNotBlank()) log(phases, customIdx, onProgress, line)
+                }
+            } catch (e: Exception) {
+                log(phases, customIdx, onProgress, "chroot theme stage error: ${e.message}")
+            }
+        }
+        val customPayload =
+            BaseDesktopInstallPlan.customizationPayload(appCtx, theme, distroId, customizeDesktop = desktop)
+        val customExit = runChrootGuestBlocking(
+            customPayload, user = "root", phases, customIdx, onProgress, gen, chrootPath
+        )
+        if (abortIfCancelled(gen, phases, onProgress)) return
+        if (customExit != 0) {
+            log(phases, customIdx, onProgress, "Customization failed or partial (exit $customExit)")
+        }
+
+        if (abortIfCancelled(gen, phases, onProgress)) return
+        val hwOk = desktop && runHwAccelIfPresent(
+            profile, method = "chroot", phases, customIdx, onProgress, gen, chrootPath = chrootPath
+        )
+
+        completePhase(phases, customIdx, onProgress, "Customization done")
+
+        if (abortIfCancelled(gen, phases, onProgress)) return
+        // Termux-style ~/storage links for the guest user and root (root, in the chroot).
+        runCatching { GuestStorageLinks.ensure(appCtx, distroId) }.getOrNull()?.let {
+            log(phases, customIdx, onProgress, "~/storage links: ${it.created} created, ${it.existing} present")
+        }
+        // The Ubuntu file-manager roots appear once the rootfs exists; make DocumentsUI re-query.
+        runCatching { UbuntuFiles.notifyRootsChanged(appCtx) }
+        StateManager.setDistroInstalled(appCtx, distroId, true)
+        markDesktopComponents(distroId, desktop, customOk = customExit == 0, hwOk = hwOk)
+        // Persist here, not from Done-page buttons: Back, rotation or process death
+        // after a successful install must not re-run onboarding (M4).
+        StateManager.setOnboardingComplete(appCtx, true)
+        StateManager.triggerRefresh()
+        postSuccess(onProgress, phases)
+    }
+
+    /**
+     * DL + ROOTFS phases of a chroot install: download the pinned archive, then extract it with
+     * the verified setup script as root and re-probe. False after posting the failure.
+     */
+    private fun installChrootRootfs(
+        profile: DistroInstallProfile,
+        chrootPath: String,
+        resolvedBb: String?,
+        phases: List<BaseDesktopInstallPlan.Phase>,
+        onProgress: (Progress) -> Unit,
+        gen: Int,
+    ): Boolean {
+        val dlIdx = phaseIdx(phases, "DL")
+        val rootfsIdx = phaseIdx(phases, "ROOTFS")
 
         // DL after HOST only — R0 stays first so non-rooted devices fail
         // before any download (R6).
         enter(phases, dlIdx, onProgress, "Downloading ${profile.displayName} rootfs…")
-        if (abortIfCancelled(gen, phases, onProgress)) return
+        if (abortIfCancelled(gen, phases, onProgress)) return false
         val destDir = TermuxHostPaths.homeDir(appCtx)
         val dlOk = RootfsDownloader.ensurePresent(
             destDir, profile, RootfsDownloader.defaultClient,
@@ -421,25 +573,23 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                     "${p.totalBytes.coerceAtLeast(0) / 1_048_576} MiB"
             )
         }
-        if (abortIfCancelled(gen, phases, onProgress)) return
+        if (abortIfCancelled(gen, phases, onProgress)) return false
         if (!dlOk) {
             postFail(
                 onProgress, phases,
                 "Rootfs download failed — place ${profile.rootfsFileName} in the app " +
                     "home directory (${TermuxHostPaths.HOME}) or retry online"
             )
-            return
+            return false
         }
         completePhase(phases, dlIdx, onProgress, "Rootfs ready (${profile.rootfsFileName})")
 
-        val chrootPath = profile.chrootPath
-            ?: com.ivarna.fluxlinux.core.root.ChrootPaths.CHROOT_PATH
         val setupAsset = profile.chrootSetupAsset
             ?: "scripts/chroot/setup_debian13_chroot.sh"
         val setupName = File(setupAsset).name
 
         enter(phases, rootfsIdx, onProgress, "Extracting chroot rootfs (may take several minutes)…")
-        if (abortIfCancelled(gen, phases, onProgress)) return
+        if (abortIfCancelled(gen, phases, onProgress)) return false
         // M14: root runs the setup script only from the root-only verified stage, next to
         // its verified resolve_bb.sh sidecar (never app-writable filesDir/staged_scripts).
         val stagedSetup = ChrootSetupCommand.stagedPath(setupName)
@@ -447,7 +597,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             !RootShell.stageVerified(appCtx, setupAsset, stagedSetup)
         ) {
             postFail(onProgress, phases, "Could not stage $setupName as root (verify failed)")
-            return
+            return false
         }
         // Do not wrap with $PREFIX/bin/stdbuf — host W^X denies exec from app data.
         val rootCmd = ChrootSetupCommand.build(
@@ -468,10 +618,10 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             },
             processHolder = activeProcess
         )
-        if (abortIfCancelled(gen, phases, onProgress)) return
+        if (abortIfCancelled(gen, phases, onProgress)) return false
         if (rootResult.exitCode != 0) {
             postFail(onProgress, phases, "Chroot install failed (exit ${rootResult.exitCode})")
-            return
+            return false
         }
         // App SELinux cannot see /data/local/tmp — always re-probe as root after install.
         TerminalLauncher.invalidateChrootInstalledCache()
@@ -482,82 +632,27 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                 onProgress, phases,
                 "Chroot rootfs missing after install (check root grant + $chrootPath)"
             )
-            return
+            return false
         }
         log(phases, rootfsIdx, onProgress, "Chroot rootfs verified (root probe)")
         completePhase(phases, rootfsIdx, onProgress, "Chroot rootfs ready")
+        return true
+    }
 
-        enter(phases, xfceIdx, onProgress, "Installing XFCE packages…")
-        if (abortIfCancelled(gen, phases, onProgress)) return
-        val familyPayload = BaseDesktopInstallPlan.familySetupPayload(appCtx, theme, distroId)
-        val familyExit = runChrootGuestBlocking(
-            familyPayload, user = "root", phases, xfceIdx, onProgress, gen, chrootPath
-        )
-        if (abortIfCancelled(gen, phases, onProgress)) return
-        if (familyExit != 0) {
-            postFail(onProgress, phases, "XFCE setup failed (exit $familyExit)")
-            return
-        }
-        if (!TerminalLauncher.isChrootXfceInstalled(chrootPath)) {
-            postFail(
-                onProgress, phases,
-                "XFCE not found after family setup (startxfce4 missing). Retry."
-            )
-            return
-        }
-        completePhase(phases, xfceIdx, onProgress, "XFCE installed")
-
-        enter(phases, customIdx, onProgress, "Themes, wallpapers, fonts…")
-        if (abortIfCancelled(gen, phases, onProgress)) return
-        // Stage theme/icon/cursor/wallpaper into the chroot guest /tmp (root copy).
-        // The customization script extracts from /tmp/flux_xfce_assets with guest
-        // tar; icons have no download fallback, so this staging is mandatory.
-        log(phases, customIdx, onProgress, "Staging XFCE theme/icons into chroot…")
-        try {
-            com.ivarna.fluxlinux.core.install.ProotXfceAssetInstaller.installToChroot(
-                appCtx, theme, chrootPath
-            ) { line ->
-                if (!isStale(gen) && line.isNotBlank()) log(phases, customIdx, onProgress, line)
-            }
-        } catch (e: Exception) {
-            log(phases, customIdx, onProgress, "chroot theme stage error: ${e.message}")
-        }
-        val customPayload = BaseDesktopInstallPlan.customizationPayload(appCtx, theme, distroId)
-        val customExit = runChrootGuestBlocking(
-            customPayload, user = "root", phases, customIdx, onProgress, gen, chrootPath
-        )
-        if (abortIfCancelled(gen, phases, onProgress)) return
-        if (customExit != 0) {
-            log(phases, customIdx, onProgress, "Customization failed or partial (exit $customExit)")
-        }
-
-        if (abortIfCancelled(gen, phases, onProgress)) return
-        val hwOk = runHwAccelIfPresent(
-            profile, method = "chroot", phases, customIdx, onProgress, gen, chrootPath = chrootPath
-        )
-
-        completePhase(phases, customIdx, onProgress, "Customization done")
-
-        if (abortIfCancelled(gen, phases, onProgress)) return
-        // Termux-style ~/storage links for the guest user and root (root, in the chroot).
-        runCatching { GuestStorageLinks.ensure(appCtx, distroId) }.getOrNull()?.let {
-            log(phases, customIdx, onProgress, "~/storage links: ${it.created} created, ${it.existing} present")
-        }
-        // The Ubuntu file-manager roots appear once the rootfs exists; make DocumentsUI re-query.
-        runCatching { UbuntuFiles.notifyRootsChanged(appCtx) }
-        StateManager.setDistroInstalled(appCtx, distroId, true)
-        StateManager.setComponentInstalled(appCtx, distroId, "xfce4_desktop", true)
+    /**
+     * Desktop component flags after a successful run: `xfce4_desktop` (verified by the
+     * startxfce4 check), `customization` and `hw_accel` only when [desktop] ran and they
+     * succeeded. A terminal-only run leaves them as they were.
+     */
+    private fun markDesktopComponents(distroId: String, desktop: Boolean, customOk: Boolean, hwOk: Boolean) {
+        if (!desktop) return
+        StateManager.setComponentInstalled(appCtx, distroId, UbuntuDesktop.COMPONENT_ID, true)
         if (hwOk) {
             StateManager.setComponentInstalled(appCtx, distroId, "hw_accel", true)
         }
-        if (customExit == 0) {
+        if (customOk) {
             StateManager.setComponentInstalled(appCtx, distroId, "customization", true)
         }
-        // Persist here, not from Done-page buttons: Back, rotation or process death
-        // after a successful install must not re-run onboarding (M4).
-        StateManager.setOnboardingComplete(appCtx, true)
-        StateManager.triggerRefresh()
-        postSuccess(onProgress, phases)
     }
 
     /**
@@ -897,7 +992,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             progress.phaseLabel.isNotBlank() -> progress.phaseLabel
             else -> "Installing…"
         }
-        val detail = progress.detail.ifBlank { "Base desktop setup" }
+        val detail = progress.detail.ifBlank { notifFallbackText }
         val percent = progress.overallPercent
         // Avoid spamming NotificationManager on every log line
         if (!progress.finished &&
@@ -921,14 +1016,22 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         }
     }
 
-    private fun isProotXfceInstalled(ctx: Context, prootName: String = "debian"): Boolean {
-        val root = File(ctx.filesDir, "usr/var/lib/proot-distro/containers/$prootName/rootfs")
-        return File(root, "usr/bin/startxfce4").exists() ||
-            File(root, "usr/sbin/startxfce4").exists()
-    }
+    private fun isProotXfceInstalled(ctx: Context, prootName: String = "debian"): Boolean =
+        UbuntuDesktop.hasStartxfce4(ProotXfceAssetInstaller.prootRootfs(ctx, prootName))
+
+    /** FGS text naming what a [kind] run installs. */
+    private fun notificationText(kind: InstallKind, displayName: String): String =
+        appCtx.getString(notificationTextRes(kind), displayName)
 
     companion object {
         private const val TAG = "OnboardingInstall"
+
+        /** String resource (one `%1$s` = distro display name) of the FGS text for [kind]. */
+        internal fun notificationTextRes(kind: InstallKind): Int = when (kind) {
+            InstallKind.TERMINAL -> R.string.install_notif_terminal
+            InstallKind.TERMINAL_AND_DESKTOP -> R.string.install_notif_terminal_desktop
+            InstallKind.DESKTOP_ADD_ON -> R.string.install_notif_desktop_addon
+        }
 
         /**
          * Wraps [sink] so it only fires while [gen] is still the current [generation].

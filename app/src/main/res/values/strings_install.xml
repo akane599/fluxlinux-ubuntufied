@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Install foreground-service notification (OnboardingInstallRunner). %1$s = distro name. -->
+    <string name="install_notif_title">FluxLinux — Installing</string>
+    <string name="install_notif_terminal">%1$s terminal</string>
+    <string name="install_notif_terminal_desktop">%1$s terminal and desktop</string>
+    <string name="install_notif_desktop_addon">%1$s desktop</string>
+
+    <!-- Desktop add-on refused: the rootfs is not installed. %1$s = distro name. -->
+    <string name="install_addon_needs_rootfs">Install %1$s first: the desktop is added to an installed system.</string>
+
+    <!-- DesktopLauncher: Ubuntu without the optional XFCE desktop. -->
+    <string name="desktop_install_first">Install the desktop first (Home → Desktop)</string>
+
+    <!-- Install wizard (InstallConfigScreen, "Re-run Ubuntu setup"). -->
+    <string name="install_cfg_cta_terminal">Set up terminal</string>
+    <string name="install_cfg_cta_terminal_root">Set up terminal (Root)</string>
+    <string name="install_cfg_cta_terminal_desktop">Set up terminal and desktop</string>
+    <string name="install_cfg_cta_terminal_desktop_root">Set up terminal and desktop (Root)</string>
+    <string name="install_cfg_heading_terminal">Terminal only</string>
+    <string name="install_cfg_heading_terminal_desktop">Terminal and desktop</string>
+    <!-- %1$s = distro name. -->
+    <string name="install_cfg_body_terminal">Runs %1$s setup: base packages, your user, zsh and Oh My Zsh. An installed system and its files are kept. The XFCE desktop can be added later from Home.</string>
+    <string name="install_cfg_body_terminal_desktop">Runs %1$s setup: base packages, your user, zsh and Oh My Zsh, the XFCE4 desktop and the Flux desktop theme. An installed system and its files are kept.</string>
+    <string name="install_cfg_bullet_shell">• zsh, Oh My Zsh and plugins</string>
+    <string name="install_cfg_bullet_xfce">• XFCE4 desktop</string>
+    <string name="install_cfg_bullet_theme">• Flux theme / wallpapers / fonts</string>
+    <string name="install_done_terminal">Terminal setup complete</string>
+    <string name="install_done_terminal_desktop">Terminal and desktop setup complete</string>
+</resources>

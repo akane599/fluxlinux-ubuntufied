@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
+import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.data.terminalComponentFor
 import com.ivarna.fluxlinux.core.install.DistroInstallProfile
 import com.ivarna.fluxlinux.core.service.DesktopSessionService
@@ -22,6 +23,7 @@ import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
 import com.ivarna.fluxlinux.core.terminal.TermuxHostPaths
 import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.core.utils.TermuxX11Preferences
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -188,6 +190,9 @@ object DesktopLauncher {
 
             val method = methodFor(distroId)
             val profile = com.ivarna.fluxlinux.core.install.DistroInstallProfile.forId(distroId)
+            // Ubuntu's XFCE is optional: refuse up front instead of running a start script
+            // that can only fail. Other distros always install it.
+            val needsDesktopCheck = UbuntuRuntime.isUbuntuId(distroId)
             // Chroot FS probe may need root (SELinux hides /data/local/tmp from app uid).
             // Never call isChrootInstalled on the main thread without a warm cache.
             if (method == "chroot") {
@@ -199,11 +204,18 @@ object DesktopLauncher {
                     // H4: never start (and re-mount) a rootfs being uninstalled.
                     val installed = !com.ivarna.fluxlinux.core.terminal.UninstallSessionFactory
                         .isChrootUninstalling(path) && TerminalLauncher.isChrootInstalled(path)
+                    // Flag first; the su probe only when it is unset (it also heals the flag).
+                    val desktopOk = !installed || !needsDesktopCheck ||
+                        UbuntuDesktop.isInstalled(app, distroId) || UbuntuDesktop.probe(app, distroId)
                     main.post {
                         if (!installed) {
                             startInFlight = false
                             toast(app, "Chroot not installed. Complete install first.")
                             finishStart(app, distroId, false, "Chroot not installed", onResult)
+                        } else if (!desktopOk) {
+                            val msg = app.getString(R.string.desktop_install_first)
+                            toast(app, msg)
+                            finishStart(app, distroId, false, msg, onResult)
                         } else {
                             continueStart(app, distroId, method, profile, onResult)
                         }
@@ -215,6 +227,12 @@ object DesktopLauncher {
                 if (!TerminalLauncher.isProotInstalled(app, prootName)) {
                     toast(app, "Distro not installed. Complete onboarding first.")
                     finishStart(app, distroId, false, "Distro not installed", onResult)
+                    return@prepareHost
+                }
+                if (needsDesktopCheck && !UbuntuDesktop.isInstalled(app, distroId)) {
+                    val msg = app.getString(R.string.desktop_install_first)
+                    toast(app, msg)
+                    finishStart(app, distroId, false, msg, onResult)
                     return@prepareHost
                 }
             }

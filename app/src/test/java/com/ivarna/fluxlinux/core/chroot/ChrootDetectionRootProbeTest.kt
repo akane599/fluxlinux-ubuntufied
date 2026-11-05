@@ -31,6 +31,17 @@ class ChrootDetectionRootProbeTest {
     }
 
     @Test
+    fun parseXfceProbe_yesNoOrInconclusive() {
+        assertEquals(true, ChrootDetection.parseXfceProbe(0, "YES\n"))
+        assertEquals(false, ChrootDetection.parseXfceProbe(0, "noise\nNO\n"))
+        // su failure / timeout or no answer line: unknown, never "not installed".
+        assertNull(ChrootDetection.parseXfceProbe(-1, ""))
+        assertNull(ChrootDetection.parseXfceProbe(-2, "NO"))
+        assertNull(ChrootDetection.parseXfceProbe(1, "NO"))
+        assertNull(ChrootDetection.parseXfceProbe(0, "Permission denied"))
+    }
+
+    @Test
     fun parseRootProbe_readsFlags() {
         assertEquals(
             ChrootDetection.RootProbeFlags(marker = true, dir = true, shell = false),

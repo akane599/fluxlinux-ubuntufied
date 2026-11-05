@@ -13,15 +13,18 @@ class InstallControllerTest {
 
     private class FakeEngine : InstallEngine {
         val starts = mutableListOf<Pair<String, String>>()
+        val kinds = mutableListOf<InstallKind>()
         val sinks = mutableListOf<(OnboardingInstallRunner.Progress) -> Unit>()
         var cancels = 0
 
         override fun start(
             distroId: String,
             theme: String,
+            kind: InstallKind,
             onProgress: (OnboardingInstallRunner.Progress) -> Unit,
         ) {
             starts += distroId to theme
+            kinds += kind
             sinks += onProgress
         }
 
@@ -67,6 +70,44 @@ class InstallControllerTest {
         assertEquals("Rootfs", s.phaseLabel)
         assertEquals("a\nb\n", s.logText)
         assertEquals(Status.Running, s.status)
+    }
+
+    @Test
+    fun start_defaultsToTerminalOnly_andPassesTheKindToTheEngine() {
+        val engine = FakeEngine()
+        val c = InstallController(engine)
+        c.start("ubuntu", "dark")
+        assertEquals(InstallKind.TERMINAL, c.state.value.kind)
+
+        c.start("ubuntu", "dark", InstallKind.DESKTOP_ADD_ON)
+        assertEquals(InstallKind.DESKTOP_ADD_ON, c.state.value.kind)
+        engine.sinks[1](progress(30))
+        assertEquals("progress keeps the kind", InstallKind.DESKTOP_ADD_ON, c.state.value.kind)
+
+        c.start("ubuntu_chroot", "light", InstallKind.TERMINAL_AND_DESKTOP)
+        assertEquals(
+            listOf(InstallKind.TERMINAL, InstallKind.DESKTOP_ADD_ON, InstallKind.TERMINAL_AND_DESKTOP),
+            engine.kinds,
+        )
+        assertEquals(InstallKind.TERMINAL_AND_DESKTOP, c.state.value.kind)
+    }
+
+    @Test
+    fun refusedStart_recordsTheRequestedKind() {
+        val c = InstallController(FakeEngine(), uninstallInProgress = { true })
+        assertFalse(c.start("ubuntu", "dark", InstallKind.DESKTOP_ADD_ON))
+        assertEquals(InstallKind.DESKTOP_ADD_ON, c.state.value.kind)
+        assertEquals(Status.Failed, c.state.value.status)
+    }
+
+    @Test
+    fun installWizard_rerunsWithTheDesktopOnlyWhenInstalled() {
+        val src = repoFile("src/main/kotlin/com/ivarna/fluxlinux/ui/screens/InstallConfigScreen.kt").readText()
+        assertTrue(src.contains("UbuntuDesktop.isInstalled(appCtx, distro.id)"))
+        assertTrue(src.contains("InstallKind.forRerun(desktopInstalled)"))
+        assertTrue(src.contains("installer.start(distro.id, selectedTheme, kind)"))
+        // The chroot su probe runs off the main thread.
+        assertTrue(src.contains("withContext(Dispatchers.IO) { UbuntuDesktop.probe(appCtx, distro.id) }"))
     }
 
     @Test

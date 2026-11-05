@@ -105,6 +105,110 @@ class BaseDesktopInstallPlanTest {
     }
 
     @Test
+    fun phasesFor_terminal_proot_hasNoDesktopPhase() {
+        val phases = BaseDesktopInstallPlan.phasesFor("proot", "Ubuntu", InstallKind.TERMINAL)
+        assertEquals(listOf("HOST", "DL", "ROOTFS", "CUSTOM"), phases.map { it.id })
+        assertEquals("Installing Ubuntu…", phases.single { it.id == "ROOTFS" }.label)
+        assertEquals("Setting up zsh and Oh My Zsh…", phases.single { it.id == "CUSTOM" }.label)
+        assertFalse(phases.any { it.label.contains("XFCE") })
+        assertTrue(phases.all { it.weight > 0 })
+        assertEquals(100, phases.sumOf { it.weight })
+    }
+
+    @Test
+    fun phasesFor_terminal_chroot_installsBasePackagesInsteadOfXfce() {
+        val phases = BaseDesktopInstallPlan.phasesFor("chroot", "Ubuntu (Rooted)", InstallKind.TERMINAL)
+        assertEquals(listOf("R0", "HOST", "DL", "ROOTFS", "BASE", "CUSTOM"), phases.map { it.id })
+        assertEquals("Installing base packages…", phases.single { it.id == "BASE" }.label)
+        assertEquals("Setting up zsh and Oh My Zsh…", phases.single { it.id == "CUSTOM" }.label)
+        assertFalse(phases.any { it.label.contains("XFCE") })
+        assertTrue(phases.all { it.weight > 0 })
+        assertEquals(100, phases.sumOf { it.weight })
+    }
+
+    @Test
+    fun phasesFor_terminalAndDesktop_isThePreOptionalPlan() {
+        for (method in listOf("proot", "chroot")) {
+            assertEquals(
+                method,
+                BaseDesktopInstallPlan.phasesFor(method, "Ubuntu"),
+                BaseDesktopInstallPlan.phasesFor(method, "Ubuntu", InstallKind.TERMINAL_AND_DESKTOP),
+            )
+        }
+        assertEquals(
+            listOf("R0", "HOST", "DL", "ROOTFS", "XFCE", "CUSTOM"),
+            BaseDesktopInstallPlan.phasesFor("chroot", "Ubuntu", InstallKind.TERMINAL_AND_DESKTOP).map { it.id },
+        )
+    }
+
+    @Test
+    fun phasesFor_desktopAddOn_neverDownloadsOrExtracts() {
+        val proot = BaseDesktopInstallPlan.phasesFor("proot", "Ubuntu", InstallKind.DESKTOP_ADD_ON)
+        assertEquals(listOf("HOST", "XFCE", "CUSTOM"), proot.map { it.id })
+        val chroot = BaseDesktopInstallPlan.phasesFor("chroot", "Ubuntu", InstallKind.DESKTOP_ADD_ON)
+        assertEquals(listOf("R0", "HOST", "XFCE", "CUSTOM"), chroot.map { it.id })
+        for (phases in listOf(proot, chroot)) {
+            assertEquals("Installing XFCE desktop…", phases.single { it.id == "XFCE" }.label)
+            assertTrue(phases.all { it.weight > 0 })
+            assertEquals(100, phases.sumOf { it.weight })
+        }
+    }
+
+    @Test
+    fun familyPhaseId_isAPhaseOfEveryPlan() {
+        val expected = mapOf(
+            ("proot" to InstallKind.TERMINAL) to "ROOTFS",
+            ("proot" to InstallKind.TERMINAL_AND_DESKTOP) to "ROOTFS",
+            ("proot" to InstallKind.DESKTOP_ADD_ON) to "XFCE",
+            ("chroot" to InstallKind.TERMINAL) to "BASE",
+            ("chroot" to InstallKind.TERMINAL_AND_DESKTOP) to "XFCE",
+            ("chroot" to InstallKind.DESKTOP_ADD_ON) to "XFCE",
+        )
+        expected.forEach { (key, id) ->
+            val (method, kind) = key
+            assertEquals("$method/$kind", id, BaseDesktopInstallPlan.familyPhaseId(method, kind))
+            val ids = BaseDesktopInstallPlan.phasesFor(method, "Ubuntu", kind).map { it.id }
+            assertTrue("$method/$kind: $ids", id in ids && "HOST" in ids && "CUSTOM" in ids)
+        }
+    }
+
+    @Test
+    fun desktopFlagExports_defaultScriptsToDesktopOn() {
+        assertEquals("export FLUX_INSTALL_DESKTOP='1'\n", BaseDesktopInstallPlan.installDesktopExport(true))
+        assertEquals("export FLUX_INSTALL_DESKTOP='0'\n", BaseDesktopInstallPlan.installDesktopExport(false))
+        assertEquals("export FLUX_CUSTOMIZE_DESKTOP='1'\n", BaseDesktopInstallPlan.customizeDesktopExport(true))
+        assertEquals("export FLUX_CUSTOMIZE_DESKTOP='0'\n", BaseDesktopInstallPlan.customizeDesktopExport(false))
+    }
+
+    @Test
+    fun installKind_terminalOnlyIsUbuntuOnly() {
+        assertEquals(InstallKind.TERMINAL, InstallKind.effective("ubuntu", InstallKind.TERMINAL))
+        assertEquals(InstallKind.TERMINAL, InstallKind.effective("ubuntu_chroot", InstallKind.TERMINAL))
+        // Other family scripts ignore FLUX_INSTALL_DESKTOP and always install XFCE.
+        assertEquals(InstallKind.TERMINAL_AND_DESKTOP, InstallKind.effective("debian", InstallKind.TERMINAL))
+        assertEquals(InstallKind.DESKTOP_ADD_ON, InstallKind.effective("ubuntu", InstallKind.DESKTOP_ADD_ON))
+        assertEquals(
+            InstallKind.TERMINAL_AND_DESKTOP,
+            InstallKind.effective("ubuntu", InstallKind.TERMINAL_AND_DESKTOP),
+        )
+        assertFalse(InstallKind.TERMINAL.installsDesktop)
+        assertTrue(InstallKind.TERMINAL_AND_DESKTOP.installsDesktop)
+        assertTrue(InstallKind.DESKTOP_ADD_ON.installsDesktop)
+    }
+
+    @Test
+    fun installKind_rerunKeepsAnInstalledDesktopAndNeverAddsOne() {
+        assertEquals(InstallKind.TERMINAL_AND_DESKTOP, InstallKind.forRerun(desktopInstalled = true))
+        assertEquals(InstallKind.TERMINAL, InstallKind.forRerun(desktopInstalled = false))
+    }
+
+    @Test
+    fun notificationText_namesWhatEachKindInstalls() {
+        val res = InstallKind.entries.map { OnboardingInstallRunner.notificationTextRes(it) }
+        assertEquals(InstallKind.entries.size, res.toSet().size)
+    }
+
+    @Test
     fun scriptConstants_pointAtDebianFamilyPaths() {
         assertTrue(BaseDesktopInstallPlan.FAMILY_SCRIPT.contains("setup_debian_family"))
         assertTrue(BaseDesktopInstallPlan.CUSTOMIZATION_SCRIPT.contains("setup_customization_debian"))

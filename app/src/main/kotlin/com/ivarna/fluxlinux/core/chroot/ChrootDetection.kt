@@ -204,20 +204,39 @@ object ChrootDetection {
         )
     }
 
-    fun isXfceInstalled(chrootPath: String = ChrootPaths.CHROOT_PATH): Boolean {
+    fun isXfceInstalled(chrootPath: String = ChrootPaths.CHROOT_PATH): Boolean =
+        probeXfce(chrootPath) ?: false
+
+    /**
+     * Whether `startxfce4` exists in the chroot at [chrootPath]: true / false when the app or
+     * root answered, null when it could not tell (no root, su failed or timed out, or the
+     * main thread, which never blocks on su). Blocking (su, up to ~8 s) off the main thread.
+     */
+    fun probeXfce(chrootPath: String = ChrootPaths.CHROOT_PATH): Boolean? {
         val xfce = "$chrootPath/usr/bin/startxfce4"
         val xfceSbin = "$chrootPath/usr/sbin/startxfce4"
         if (File(xfce).exists() || File(xfceSbin).exists()) return true
-        if (!RootShell.isRootAvailable()) return false
+        if (!RootShell.isRootAvailable()) return null
         // Avoid blocking main thread
-        if (Looper.myLooper() == Looper.getMainLooper()) return false
+        if (Looper.myLooper() == Looper.getMainLooper()) return null
         return try {
-            RootShell.capture(
+            val cap = RootShell.captureResult(
                 "if [ -e '$xfce' ] || [ -e '$xfceSbin' ]; then echo YES; else echo NO; fi",
                 timeoutMs = 8_000L
-            ).contains("YES")
+            )
+            parseXfceProbe(cap.exitCode, cap.stdout)
         } catch (_: Exception) {
-            false
+            null
+        }
+    }
+
+    /** YES / NO line of the [probeXfce] root command; null when it did not run cleanly. */
+    internal fun parseXfceProbe(exitCode: Int, out: String): Boolean? {
+        if (exitCode != 0) return null
+        return when (out.lineSequence().map { it.trim() }.lastOrNull { it == "YES" || it == "NO" }) {
+            "YES" -> true
+            "NO" -> false
+            else -> null
         }
     }
 

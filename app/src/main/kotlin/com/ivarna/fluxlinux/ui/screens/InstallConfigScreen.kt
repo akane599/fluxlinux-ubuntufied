@@ -44,8 +44,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.data.Distro
+import com.ivarna.fluxlinux.core.desktop.UbuntuDesktop
 import com.ivarna.fluxlinux.core.install.DistroInstallProfile
 import com.ivarna.fluxlinux.core.install.InstallController
+import com.ivarna.fluxlinux.core.install.InstallKind
+import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import com.ivarna.fluxlinux.ui.components.GlassScaffold
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
 import com.ivarna.fluxlinux.ui.install.InstallThemePickRow
@@ -53,10 +56,13 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeChild
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
- * Thin install wizard: XFCE + customization only (no feature modules).
- * Uses the process-scoped [InstallController] for both proot and chroot.
+ * Thin install wizard (no feature modules). On Ubuntu it re-runs setup with the desktop
+ * only when the desktop is installed ([InstallKind.forRerun]); other distros always get
+ * XFCE. Uses the process-scoped [InstallController] for both proot and chroot.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -76,6 +82,16 @@ fun InstallConfigScreen(
     val install by installer.state.collectAsState()
     var selectedTheme by rememberSaveable { mutableStateOf("dark") }
     var showLog by rememberSaveable { mutableStateOf(true) }
+    // Re-running setup keeps an installed desktop and never adds one (that is Home's add-on).
+    var desktopInstalled by remember(distro.id) { mutableStateOf(UbuntuDesktop.isInstalled(appCtx, distro.id)) }
+    LaunchedEffect(distro.id) {
+        // A chroot rootfs is root-only: without the flag, ask root (off main; heals the flag).
+        if (!desktopInstalled && UbuntuRuntime.isChrootId(distro.id)) {
+            desktopInstalled = withContext(Dispatchers.IO) { UbuntuDesktop.probe(appCtx, distro.id) }
+        }
+    }
+    val kind = InstallKind.effective(distro.id, InstallKind.forRerun(desktopInstalled))
+    val withDesktop = kind.installsDesktop
     val mine = install.isActiveFor(distro.id)
     val failed = mine && install.status == InstallController.Status.Failed
     val phase = when {
@@ -89,13 +105,18 @@ fun InstallConfigScreen(
     LaunchedEffect(install.runId, install.status) {
         if (phase == InstallPhase.DONE && toastedRun != install.runId) {
             toastedRun = install.runId
-            Toast.makeText(context, context.getString(R.string.install_base_desktop_done), Toast.LENGTH_SHORT).show()
+            val done = if (install.kind.installsDesktop) {
+                R.string.install_done_terminal_desktop
+            } else {
+                R.string.install_done_terminal
+            }
+            Toast.makeText(context, context.getString(done), Toast.LENGTH_SHORT).show()
         }
     }
 
     fun startInstall() {
         // One process-wide install at a time; a new start supersedes the previous run.
-        installer.start(distro.id, selectedTheme)
+        installer.start(distro.id, selectedTheme, kind)
     }
 
     GlassScaffold(
@@ -157,11 +178,14 @@ fun InstallConfigScreen(
                         ),
                         shape = RoundedCornerShape(28.dp)
                     ) {
+                        val root = distro.id.contains("chroot")
                         val cta = when {
-                            distro.id.contains("chroot") -> "Install base desktop (Root)"
-                            else -> "Install base desktop"
+                            withDesktop && root -> R.string.install_cfg_cta_terminal_desktop_root
+                            withDesktop -> R.string.install_cfg_cta_terminal_desktop
+                            root -> R.string.install_cfg_cta_terminal_root
+                            else -> R.string.install_cfg_cta_terminal
                         }
-                        Text(cta, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(stringResource(cta), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
             }
@@ -176,13 +200,28 @@ fun InstallConfigScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    "Base desktop only",
+                    stringResource(
+                        if (withDesktop) {
+                            R.string.install_cfg_heading_terminal_desktop
+                        } else {
+                            R.string.install_cfg_heading_terminal
+                        }
+                    ),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.secondary,
                     fontWeight = FontWeight.Bold
                 )
                 val profile = DistroInstallProfile.forId(distro.id)
+                val displayName = profile?.displayName ?: distro.name
                 val rootfsLine = when {
+                    UbuntuRuntime.isUbuntuId(distro.id) -> stringResource(
+                        if (withDesktop) {
+                            R.string.install_cfg_body_terminal_desktop
+                        } else {
+                            R.string.install_cfg_body_terminal
+                        },
+                        displayName,
+                    ) + " "
                     distro.id.startsWith("alpine") ->
                         "Installs Alpine 3.24 minirootfs, XFCE4 (apk), and Flux customization. "
                     distro.id.startsWith("fedora") ->
@@ -192,7 +231,7 @@ fun InstallConfigScreen(
                     distro.id.startsWith("opensuse") ->
                         "Installs openSUSE Tumbleweed rootfs, XFCE4 (zypper), Mesa, and Flux customization. "
                     else ->
-                        "Installs ${profile?.displayName ?: distro.name} rootfs, XFCE4, and Flux customization. "
+                        "Installs $displayName rootfs, XFCE4, and Flux customization. "
                 }
                 Text(
                     rootfsLine +
@@ -200,26 +239,29 @@ fun InstallConfigScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                    "Appearance theme",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.Bold
-                )
-                InstallThemePickRow(
-                    id = "dark",
-                    title = "Dark",
-                    desc = "Sleek default",
-                    selected = selectedTheme == "dark",
-                    onSelect = { selectedTheme = "dark" }
-                )
-                InstallThemePickRow(
-                    id = "light",
-                    title = "Light",
-                    desc = "Bright desktop",
-                    selected = selectedTheme == "light",
-                    onSelect = { selectedTheme = "light" }
-                )
+                // The theme only styles the desktop; a terminal-only run has nothing to theme.
+                if (withDesktop) {
+                    Text(
+                        "Appearance theme",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    InstallThemePickRow(
+                        id = "dark",
+                        title = "Dark",
+                        desc = "Sleek default",
+                        selected = selectedTheme == "dark",
+                        onSelect = { selectedTheme = "dark" }
+                    )
+                    InstallThemePickRow(
+                        id = "light",
+                        title = "Light",
+                        desc = "Bright desktop",
+                        selected = selectedTheme == "light",
+                        onSelect = { selectedTheme = "light" }
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -248,12 +290,15 @@ fun InstallConfigScreen(
                                 distro.id.startsWith("opensuse") ->
                                     "• openSUSE Tumbleweed rootfs"
                                 else ->
-                                    "• ${profile?.displayName ?: distro.name} rootfs"
+                                    "• $displayName rootfs"
                             },
                             fontSize = 13.sp,
                             color = bulletColor
                         )
-                        Text("• XFCE4 desktop", fontSize = 13.sp, color = bulletColor)
+                        Text(stringResource(R.string.install_cfg_bullet_shell), fontSize = 13.sp, color = bulletColor)
+                        if (withDesktop) {
+                            Text(stringResource(R.string.install_cfg_bullet_xfce), fontSize = 13.sp, color = bulletColor)
+                        }
                         if (distro.id.startsWith("fedora") || distro.id.startsWith("void") ||
                             distro.id.startsWith("opensuse")
                         ) {
@@ -263,7 +308,9 @@ fun InstallConfigScreen(
                                 color = bulletColor
                             )
                         }
-                        Text("• Flux theme / wallpapers / fonts", fontSize = 13.sp, color = bulletColor)
+                        if (withDesktop) {
+                            Text(stringResource(R.string.install_cfg_bullet_theme), fontSize = 13.sp, color = bulletColor)
+                        }
                         if (distro.id.contains("chroot")) {
                             Text("• Requires root (KernelSU / Magisk)", fontSize = 13.sp, color = bulletColor)
                         }
