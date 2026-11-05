@@ -27,6 +27,8 @@
     <string name="aka_install_sub_running">Downloading and configuring packages</string>
     <string name="aka_install_sub_failed">Setup stopped with an error. The output shows where.</string>
     <string name="aka_install_sub_done">Everything is installed</string>
+    <!-- A finished run with InstallController.State.warning (customization failed or was partial). -->
+    <string name="aka_install_sub_done_warning">Installed, but part of the setup didn\'t finish</string>
     <string name="aka_install_working">Working…</string>
     <string name="aka_install_output">Output</string>
     <string name="aka_install_show_log">Show log</string>

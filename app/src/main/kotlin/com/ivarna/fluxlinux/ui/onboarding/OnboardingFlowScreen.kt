@@ -110,7 +110,9 @@ import com.ivarna.fluxlinux.ui.components.aka.StatusMark
 import com.ivarna.fluxlinux.ui.components.aka.markColor
 import com.ivarna.fluxlinux.ui.components.aka.akaSelection
 import com.ivarna.fluxlinux.ui.components.aka.akaTile
+import com.ivarna.fluxlinux.ui.install.InstallLogWell
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
+import com.ivarna.fluxlinux.ui.install.InstallWarningNote
 import com.ivarna.fluxlinux.ui.theme.AkaTheme
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.DesktopThemeSwatchDark
@@ -185,6 +187,8 @@ fun OnboardingFlowScreen(
     // during a run, it follows that run, so Retry and the Done page keep the user's choice.
     var installDesktop by rememberSaveable { mutableStateOf(onboardingInstallsDesktop(installer.state.value)) }
     var showLog by rememberSaveable { mutableStateOf(true) }
+    // The Done page's log (only offered after a warning) starts folded: the result comes first.
+    var showDoneLog by rememberSaveable { mutableStateOf(false) }
     // PRoot unless the user picks chroot on a rooted phone. A running install keeps its id.
     var runtime by rememberSaveable {
         mutableStateOf(
@@ -305,7 +309,12 @@ fun OnboardingFlowScreen(
                 } else {
                     null
                 },
-                runtime = runtime
+                runtime = runtime,
+                // The finished run stays in the controller until leaveDone clears it.
+                warning = install.warning,
+                logText = install.logText,
+                showLog = showDoneLog,
+                onToggleLog = { showDoneLog = !showDoneLog },
             )
         }
     }
@@ -988,13 +997,19 @@ private fun ThemeOption(
 
 /**
  * Stateless completion page (also rendered by the onboarding screenshot previews). The terminal
- * is the primary action; [onDesktop] is null when setup installed no desktop.
+ * is the primary action; [onDesktop] is null when setup installed no desktop. A run that
+ * finished with a [warning] ([InstallController.State.warning]) says so under the result, with
+ * where to re-run setup and the install log ([logText], shown while [showLog]).
  */
 @Composable
 internal fun DonePage(
     onTerminal: () -> Unit,
     onDesktop: (() -> Unit)?,
-    runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT
+    runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT,
+    warning: String? = null,
+    logText: String = "",
+    showLog: Boolean = false,
+    onToggleLog: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     val inks = AkaTheme.inks
@@ -1071,6 +1086,34 @@ internal fun DonePage(
                     style = MaterialTheme.typography.labelLarge,
                     color = colors.secondary
                 )
+
+                if (warning != null) {
+                    // Ubuntu works, but part of its setup didn't: say what, where to retry, and
+                    // offer the log that shows why.
+                    Spacer(Modifier.height(FluxSpacing.xl))
+                    InstallWarningNote(
+                        warning = warning,
+                        hint = stringResource(R.string.onboarding_done_warning_hint),
+                    )
+                    Spacer(Modifier.height(FluxSpacing.md))
+                    AkaButton(
+                        text = stringResource(
+                            if (showLog) R.string.aka_install_hide_log else R.string.aka_install_show_log
+                        ),
+                        onClick = onToggleLog,
+                        kind = AkaButtonKind.SECONDARY,
+                        contentPadding = PaddingValues(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+                    )
+                    if (showLog) {
+                        Spacer(Modifier.height(FluxSpacing.sm))
+                        InstallLogWell(
+                            logText = logText,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(DoneLogHeight)
+                        )
+                    }
+                }
             }
         }
 
@@ -1096,6 +1139,9 @@ internal fun DonePage(
         }
     }
 }
+
+/** The Done page's install log well: a few screens of apt output, scrolling on its own. */
+private val DoneLogHeight = 200.dp
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Storage access (shown only while shared storage access is supported but not granted)

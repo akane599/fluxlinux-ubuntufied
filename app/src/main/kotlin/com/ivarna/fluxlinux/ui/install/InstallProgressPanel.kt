@@ -57,8 +57,10 @@ import com.ivarna.fluxlinux.ui.theme.FluxSpacing
  * Shared install progress UI for onboarding + Distros [InstallConfigScreen].
  *
  * Honest state: the header's mark says working (dashed, turning), failed (struck) or done
- * (filled) by form first and ink second; a failure keeps its ink until the user acts. The
- * live log sits in the deepest well, set in the code face.
+ * (filled) by form first and ink second; a failure keeps its ink until the user acts. A done
+ * run with a [warning] ([com.ivarna.fluxlinux.core.install.InstallController.State.warning])
+ * says so under the progress, with [warningHint] (where to re-run setup). The live log sits in
+ * the deepest well, set in the code face.
  */
 @Composable
 fun InstallProgressPanel(
@@ -74,16 +76,12 @@ fun InstallProgressPanel(
     onBack: (() -> Unit)? = null,
     onDone: (() -> Unit)? = null,
     isDone: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    warning: String? = null,
+    warningHint: String? = null,
 ) {
-    val logScroll = rememberScrollState()
-    LaunchedEffect(logText) {
-        if (logText.isNotEmpty()) {
-            logScroll.animateScrollTo(logScroll.maxValue)
-        }
-    }
-
     val colors = MaterialTheme.colorScheme
+    val doneWarning = warning?.takeIf { isDone && !failed }
     val mark = when {
         failed -> MarkState.FAILED
         isDone -> MarkState.RUNNING
@@ -121,6 +119,7 @@ fun InstallProgressPanel(
                     text = stringResource(
                         when {
                             failed -> R.string.aka_install_sub_failed
+                            doneWarning != null -> R.string.aka_install_sub_done_warning
                             isDone -> R.string.aka_install_sub_done
                             else -> R.string.aka_install_sub_running
                         }
@@ -193,6 +192,11 @@ fun InstallProgressPanel(
             }
         }
 
+        if (doneWarning != null) {
+            Spacer(Modifier.height(FluxSpacing.md))
+            InstallWarningNote(warning = doneWarning, hint = warningHint)
+        }
+
         Spacer(Modifier.height(FluxSpacing.md))
 
         // Log toggle
@@ -226,25 +230,7 @@ fun InstallProgressPanel(
             visible = showLog,
             modifier = Modifier.weight(1f)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(MaterialTheme.shapes.medium)
-                    .background(colors.surfaceContainerLowest)
-                    .padding(FluxSpacing.md)
-                    .verticalScroll(logScroll)
-            ) {
-                // The code face at label size: long apt lines wrap less on a phone.
-                val logStyle = CodeStyle.copy(
-                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                    lineHeight = MaterialTheme.typography.labelSmall.lineHeight
-                )
-                Text(
-                    text = logText.ifBlank { stringResource(R.string.aka_install_log_waiting) },
-                    style = logStyle,
-                    color = if (logText.isBlank()) colors.onSurfaceVariant else colors.onSurface
-                )
-            }
+            InstallLogWell(logText = logText, modifier = Modifier.fillMaxSize())
         }
 
         if (!showLog) {
@@ -280,6 +266,67 @@ fun InstallProgressPanel(
                     onClick = onDone,
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+        }
+    }
+}
+
+/**
+ * The install log in the deepest well, in the code face at label size (long apt lines wrap
+ * less on a phone). Follows new output. Callers bound its height.
+ */
+@Composable
+fun InstallLogWell(logText: String, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val scroll = rememberScrollState()
+    LaunchedEffect(logText) {
+        if (logText.isNotEmpty()) {
+            scroll.animateScrollTo(scroll.maxValue)
+        }
+    }
+    Box(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(colors.surfaceContainerLowest)
+            .padding(FluxSpacing.md)
+            .verticalScroll(scroll)
+    ) {
+        val logStyle = CodeStyle.copy(
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
+            lineHeight = MaterialTheme.typography.labelSmall.lineHeight
+        )
+        Text(
+            text = logText.ifBlank { stringResource(R.string.aka_install_log_waiting) },
+            style = logStyle,
+            color = if (logText.isBlank()) colors.onSurfaceVariant else colors.onSurface
+        )
+    }
+}
+
+/**
+ * A finished install's warning: the system works, but part of its setup failed or was partial.
+ * The struck mark (form first) in the failed ink, the [warning] in the text ink (the install
+ * itself succeeded), then [hint], where to re-run setup, in the muted ink.
+ */
+@Composable
+fun InstallWarningNote(warning: String, modifier: Modifier = Modifier, hint: String? = null) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.Top
+    ) {
+        StatusMark(
+            state = MarkState.FAILED,
+            size = FluxSpacing.md,
+            modifier = Modifier.padding(top = FluxSpacing.xs)
+        )
+        Spacer(Modifier.width(FluxSpacing.sm))
+        Column(verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)) {
+            Text(text = warning, style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
+            if (hint != null) {
+                Text(text = hint, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             }
         }
     }

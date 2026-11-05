@@ -13,6 +13,7 @@ import com.ivarna.fluxlinux.ui.onboarding.DonePage
 import com.ivarna.fluxlinux.ui.onboarding.OptionsPage
 import com.ivarna.fluxlinux.ui.onboarding.StorageAccessContent
 import com.ivarna.fluxlinux.ui.onboarding.WelcomePage
+import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
 import androidx.compose.material3.MaterialTheme
 import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
 
@@ -129,5 +130,48 @@ fun OnboardingOptionsChrootPreview() {
 fun OnboardingDoneChrootPreview() {
     OnboardingPreviewHost {
         DonePage(onTerminal = {}, onDesktop = null, runtime = UbuntuRuntimeMode.CHROOT)
+    }
+}
+
+private const val FakeShellWarning = "Ubuntu 26.04 is installed, but its shell setup didn't finish, so zsh, " +
+    "Oh My Zsh or its plugins may be missing. Re-run setup to try again."
+
+private const val FakeInstallLog = "Setting up zsh (5.9-8) ...\n" +
+    "Cloning Oh My Zsh...\n" +
+    "fatal: unable to access 'https://github.com/ohmyzsh/ohmyzsh.git/': Could not resolve host\n" +
+    "Customization partial: Oh My Zsh is missing (exit 3)\n" +
+    "WARNING: $FakeShellWarning\n"
+
+// Terminal-only setup that finished with a warning (shell setup partial), the log folded.
+@PreviewTest
+@Preview(name = "OnboardingDoneWarning", showBackground = true, widthDp = 360, heightDp = 800)
+@Composable
+fun OnboardingDoneWarningPreview() {
+    OnboardingPreviewHost {
+        DonePage(onTerminal = {}, onDesktop = null, warning = FakeShellWarning, logText = FakeInstallLog)
+    }
+}
+
+// The install wizard (Re-run Ubuntu setup) done with the same warning, its log open.
+@PreviewTest
+@Preview(name = "InstallDoneWarning", showBackground = true, widthDp = 360, heightDp = 800)
+@Composable
+fun InstallDoneWarningPreview() {
+    OnboardingPreviewHost {
+        InstallProgressPanel(
+            percent = 100,
+            phaseLabel = "Complete",
+            detail = "Environment ready",
+            logText = FakeInstallLog,
+            failed = false,
+            errorMessage = null,
+            showLog = true,
+            onToggleLog = {},
+            onRetry = {},
+            onDone = {},
+            isDone = true,
+            warning = FakeShellWarning,
+            warningHint = "To try again, tap Re-run Ubuntu setup under Recovery on the Ubuntu page.",
+        )
     }
 }

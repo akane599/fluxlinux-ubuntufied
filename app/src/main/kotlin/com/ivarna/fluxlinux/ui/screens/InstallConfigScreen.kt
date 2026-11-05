@@ -1,6 +1,7 @@
 package com.ivarna.fluxlinux.ui.screens
 
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,11 +108,7 @@ fun InstallConfigScreen(
     LaunchedEffect(install.runId, install.status) {
         if (phase == InstallPhase.DONE && toastedRun != install.runId) {
             toastedRun = install.runId
-            val done = if (install.kind.installsDesktop) {
-                R.string.install_done_terminal_desktop
-            } else {
-                R.string.install_done_terminal
-            }
+            val done = installDoneToastRes(install.kind, install.warning)
             Toast.makeText(context, context.getString(done), Toast.LENGTH_SHORT).show()
         }
     }
@@ -310,7 +307,14 @@ fun InstallConfigScreen(
                     onInstallComplete()
                 },
                 isDone = phase == InstallPhase.DONE,
-                modifier = Modifier.padding(padding)
+                modifier = Modifier.padding(padding),
+                warning = install.warning,
+                // Continue leads to the Ubuntu page; other distros re-run from Distro settings.
+                warningHint = if (UbuntuRuntime.isUbuntuId(distro.id)) {
+                    stringResource(R.string.install_cfg_warning_hint)
+                } else {
+                    null
+                },
             )
         }
     }
@@ -345,3 +349,15 @@ private fun BulletLine(text: String) {
 }
 
 private enum class InstallPhase { OPTIONS, RUNNING, DONE }
+
+/**
+ * The success toast of a finished run of [kind]: what it set up, and a warning variant when it
+ * finished with [warning] ([InstallController.State.warning]) instead of "complete".
+ */
+@StringRes
+internal fun installDoneToastRes(kind: InstallKind, warning: String?): Int = when {
+    warning != null && kind.installsDesktop -> R.string.install_done_terminal_desktop_warning
+    warning != null -> R.string.install_done_terminal_warning
+    kind.installsDesktop -> R.string.install_done_terminal_desktop
+    else -> R.string.install_done_terminal
+}

@@ -62,6 +62,9 @@
     <string name="onboarding_done_start_desktop">Start desktop</string>
     <string name="onboarding_done_open_terminal">Open terminal</string>
     <string name="onboarding_done_icon_desc">Ubuntu installed</string>
+    <!-- Under a finished run's warning: where the user re-runs setup (the drawer item and the
+         Ubuntu page's Recovery row, by their names in the UI). -->
+    <string name="onboarding_done_warning_hint">To try again later, open the Ubuntu page from the terminal drawer and tap Re-run Ubuntu setup under Recovery.</string>
     <string name="onboarding_notice_body">The Linux host tools ship inside the app. To provide a complete Linux environment, AkaTerminal downloads the Ubuntu rootfs directly from GitHub Releases when you continue. It is not bundled in the F-Droid APK:</string>
     <string name="onboarding_notice_chip_host">Host tools</string>
     <string name="onboarding_notice_chip_host_size">Included</string>

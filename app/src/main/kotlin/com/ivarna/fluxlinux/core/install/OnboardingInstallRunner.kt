@@ -938,13 +938,11 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
     }
 
     private fun updateInstallNotification(progress: Progress) {
-        val label = when {
-            progress.failed -> "Install failed"
-            progress.finished -> "Install complete"
-            progress.phaseLabel.isNotBlank() -> progress.phaseLabel
-            else -> "Installing…"
-        }
-        val detail = progress.detail.ifBlank { notifFallbackText }
+        val (label, detail) = notificationContent(
+            progress,
+            fallbackText = notifFallbackText,
+            warningLabel = appCtx.getString(R.string.install_notif_done_warning),
+        )
         val percent = progress.overallPercent
         // Avoid spamming NotificationManager on every log line
         if (!progress.finished &&
@@ -977,6 +975,27 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
 
     companion object {
         private const val TAG = "OnboardingInstall"
+
+        /**
+         * FGS title label and text for [progress]. A run that finished with a warning
+         * ([Progress.warning]) gets [warningLabel] instead of "Install complete", and the
+         * warning as its text; otherwise the text is the detail, or [fallbackText].
+         */
+        internal fun notificationContent(
+            progress: Progress,
+            fallbackText: String,
+            warningLabel: String,
+        ): Pair<String, String> {
+            val warning = progress.warning?.takeIf { progress.finished && !progress.failed }
+            val label = when {
+                progress.failed -> "Install failed"
+                warning != null -> warningLabel
+                progress.finished -> "Install complete"
+                progress.phaseLabel.isNotBlank() -> progress.phaseLabel
+                else -> "Installing…"
+            }
+            return label to (warning ?: progress.detail.ifBlank { fallbackText })
+        }
 
         /** String resource (one `%1$s` = distro display name) of the FGS text for [kind]. */
         internal fun notificationTextRes(kind: InstallKind): Int = when (kind) {

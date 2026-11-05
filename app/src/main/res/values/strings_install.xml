@@ -5,6 +5,8 @@
     <string name="install_notif_terminal">%1$s terminal</string>
     <string name="install_notif_terminal_desktop">%1$s terminal and desktop</string>
     <string name="install_notif_desktop_addon">%1$s desktop</string>
+    <!-- Title label of a run that finished with a warning; the text is the warning itself. -->
+    <string name="install_notif_done_warning">Install complete, with a warning</string>
 
     <!-- InstallController: a desktop add-on never replaces a running install. -->
     <string name="install_blocked_running">Another install is running. Try again when it finishes.</string>
@@ -40,4 +42,9 @@
     <string name="install_cfg_bullet_theme">Desktop theme, wallpapers and fonts</string>
     <string name="install_done_terminal">Terminal setup complete</string>
     <string name="install_done_terminal_desktop">Terminal and desktop setup complete</string>
+    <!-- The same, for a run that finished with a warning (InstallController.State.warning). -->
+    <string name="install_done_terminal_warning">Terminal setup finished with a warning</string>
+    <string name="install_done_terminal_desktop_warning">Terminal and desktop setup finished with a warning</string>
+    <!-- Under a finished run's warning; Continue leads to the Ubuntu page. -->
+    <string name="install_cfg_warning_hint">To try again, tap Re-run Ubuntu setup under Recovery on the Ubuntu page.</string>
 </resources>
