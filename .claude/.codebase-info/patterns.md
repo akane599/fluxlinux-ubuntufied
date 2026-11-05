@@ -13,7 +13,7 @@
   - `flux_legacy_termux_prefs` (`LegacyTermuxStore`), `flux_v1_notice`, `TermuxX11Preferences`, `GuestRepairCache`.
 - **Errors/logging:** `runCatching` and Boolean/Pair results, with `Log.w/e/i` and a per-object `TAG`. File logs come from `GuiDesktopLog` and `PulseHost` (cacheDir).
 - **File trees:** never use `File.deleteRecursively`, `copyRecursively`, `walkTopDown` or `walk()`. Use `core/system/SafeFiles`. Tests that create links must point them at temp dirs only, and clean up with `SafeFiles.deleteTree`.
-- **UI:** the custom "Glass" design system in `ui/components/` (`GlassCard`, `GlassScaffold`, `GlassBottomNavigation`), with haze blur. There are many literal colors outside `ui/theme/`.
+- **UI:** the risograph design system (DESIGN.md): inks in `ui/theme/Color.kt` (`Riso`) and `Theme.kt` (`AkaInks` via `AkaTheme.inks`, Material schemes), type in `Type.kt`, motion and the misregistration/grain modifiers in `Riso.kt`, primitives in `ui/components/aka/` (`PlatedButton`, `StatusMark`, `AkaWordmark`, `SectionLabel`, `AkaRow`) and `FluxSwitch`. Settings screens share `SettingsPage*` rows from `SettingsScreen.kt`. The `Glass*` names survive only as plain wrappers (no blur). Previews load fonts from disk in inspection mode (`usePreviewFontFiles`).
 
 ## Testing
 - JVM JUnit4 only: `app/src/test/java/com/ivarna/fluxlinux/{core/*,ui/*,scripts}` plus a second root `app/src/test/kotlin/com/ivarna/fluxlinux/{core/install,ui/screens}`, with `unitTests.isReturnDefaultValues = true`. There is no Robolectric, mockk or instrumented tests.

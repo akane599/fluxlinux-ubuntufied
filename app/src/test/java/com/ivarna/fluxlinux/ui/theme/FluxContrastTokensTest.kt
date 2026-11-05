@@ -48,7 +48,6 @@ class FluxContrastTokensTest {
         assertContrast("ink on red", Riso.InkText, Riso.Red, 4.5)
         assertContrast("hairline on dark stock", Riso.FederalLine, Riso.Stock, 3.0)
         assertContrast("hairline on light stock", Riso.FederalLineDeep, Riso.StockLight, 3.0)
-        assertContrast("ink on vermilion", Riso.InkText, Riso.Vermilion, 4.5)
         assertContrast("ink on yellow", Riso.InkText, Riso.Yellow, 4.5)
     }
 

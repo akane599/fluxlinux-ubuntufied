@@ -4,7 +4,7 @@
 ## Toolchain and versions (`gradle/libs.versions.toml`, `app/build.gradle.kts`)
 - Gradle 8.14, AGP 8.7.3, Kotlin 2.0.20, JDK target 17. compileSdk/targetSdk 36, minSdk 26. NDK 29.0.14206865, arm64-v8a only.
 - Compose BOM 2024.02.00 (material3, icons-extended), activity-compose 1.8.2, lifecycle 2.7.0, core-ktx 1.12.0.
-- haze 1.1.0 (glass blur), accompanist-permissions 0.34.0, okhttp 4.12.0 (+ mockwebserver), Shizuku 13.1.5, termux terminal-view 0.118.0 (jitpack).
+- haze 1.1.0 (still a dependency; the redesign no longer blurs), accompanist-permissions 0.34.0, okhttp 4.12.0 (+ mockwebserver), Shizuku 13.1.5, termux terminal-view 0.118.0 (jitpack).
 - Tests: junit 4.13.2, org.json. Espresso/ui-test are declared but there is no `androidTest` source.
 - Screenshot testing uses plugin `com.android.compose.screenshot` and `screenshot-validation-api` 0.0.1-alpha10. It is pinned there because alpha11+ need Kotlin ≥2.2.
 - `gradle.properties`: `-Xmx4096m`, nonTransitiveRClass, `android.suppressUnsupportedCompileSdk=36`, `android.experimental.enableScreenshotTest=true`.

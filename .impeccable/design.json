@@ -1,0 +1,801 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-05T14:04:43+00:00",
+  "title": "Design System: AkaTerminal",
+  "extensions": {
+    "colorMeta": {
+      "stock": {
+        "role": "neutral",
+        "displayName": "Dark Stock",
+        "canonical": "#0F1326",
+        "oklch": "oklch(19.4% 0.039 273.3)",
+        "tonalRamp": [
+          "#0A0D1C",
+          "#0F1326",
+          "#131830",
+          "#171D38",
+          "#1D2443",
+          "#242C50",
+          "#2B3460",
+          "#2E3760"
+        ]
+      },
+      "stock-deep": {
+        "role": "neutral",
+        "displayName": "Deep Stock",
+        "canonical": "#0A0D1C",
+        "oklch": "oklch(16.5% 0.032 273.8)",
+        "tonalRamp": [
+          "#0A0D1C",
+          "#0F1326",
+          "#131830",
+          "#171D38",
+          "#1D2443",
+          "#242C50",
+          "#2B3460",
+          "#2E3760"
+        ]
+      },
+      "surface-container-low": {
+        "role": "neutral",
+        "displayName": "Printed Tint 1",
+        "canonical": "#131830",
+        "oklch": "oklch(21.8% 0.048 273.0)",
+        "tonalRamp": [
+          "#0A0D1C",
+          "#0F1326",
+          "#131830",
+          "#171D38",
+          "#1D2443",
+          "#242C50",
+          "#2B3460",
+          "#2E3760"
+        ]
+      },
+      "surface-container": {
+        "role": "neutral",
+        "displayName": "Printed Tint 2",
+        "canonical": "#171D38",
+        "oklch": "oklch(24.0% 0.052 272.5)",
+        "tonalRamp": [
+          "#0A0D1C",
+          "#0F1326",
+          "#131830",
+          "#171D38",
+          "#1D2443",
+          "#242C50",
+          "#2B3460",
+          "#2E3760"
+        ]
+      },
+      "surface-container-high": {
+        "role": "neutral",
+        "displayName": "Printed Tint 3",
+        "canonical": "#1D2443",
+        "oklch": "oklch(27.1% 0.058 272.4)",
+        "tonalRamp": [
+          "#0A0D1C",
+          "#0F1326",
+          "#131830",
+          "#171D38",
+          "#1D2443",
+          "#242C50",
+          "#2B3460",
+          "#2E3760"
+        ]
+      },
+      "surface-container-highest": {
+        "role": "neutral",
+        "displayName": "Printed Tint 4",
+        "canonical": "#242C50",
+        "oklch": "oklch(30.5% 0.066 272.5)",
+        "tonalRamp": [
+          "#0A0D1C",
+          "#0F1326",
+          "#131830",
+          "#171D38",
+          "#1D2443",
+          "#242C50",
+          "#2B3460",
+          "#2E3760"
+        ]
+      },
+      "surface-bright": {
+        "role": "neutral",
+        "displayName": "Printed Tint 5",
+        "canonical": "#2B3460",
+        "oklch": "oklch(34.0% 0.078 272.9)",
+        "tonalRamp": [
+          "#0A0D1C",
+          "#0F1326",
+          "#131830",
+          "#171D38",
+          "#1D2443",
+          "#242C50",
+          "#2B3460",
+          "#2E3760"
+        ]
+      },
+      "outline-variant": {
+        "role": "neutral",
+        "displayName": "Quiet Divider",
+        "canonical": "#2E3760",
+        "oklch": "oklch(35.0% 0.072 272.8)",
+        "tonalRamp": [
+          "#06091C",
+          "#1D233D",
+          "#374061",
+          "#545F88",
+          "#7480AC",
+          "#98A3CB",
+          "#BEC8EB",
+          "#E5EDFF"
+        ]
+      },
+      "federal": {
+        "role": "secondary",
+        "displayName": "Federal Blue",
+        "canonical": "#3255A4",
+        "oklch": "oklch(46.7% 0.134 264.0)",
+        "tonalRamp": [
+          "#00062A",
+          "#0D2151",
+          "#233E7B",
+          "#3C5DA8",
+          "#5B80CD",
+          "#82A4EA",
+          "#ABC9FF",
+          "#D5EFFF"
+        ]
+      },
+      "federal-field": {
+        "role": "secondary",
+        "displayName": "Federal Field",
+        "canonical": "#1B2A5C",
+        "oklch": "oklch(30.3% 0.092 268.0)",
+        "tonalRamp": [
+          "#040921",
+          "#182343",
+          "#31406A",
+          "#4C5F92",
+          "#6C80B6",
+          "#91A4D5",
+          "#B7C8F3",
+          "#E0EEFF"
+        ]
+      },
+      "federal-field-high": {
+        "role": "secondary",
+        "displayName": "Federal Field High",
+        "canonical": "#243670",
+        "oklch": "oklch(35.2% 0.103 267.9)",
+        "tonalRamp": [
+          "#030823",
+          "#162247",
+          "#2F3F6E",
+          "#495E98",
+          "#6980BC",
+          "#8EA4DA",
+          "#B5C8F8",
+          "#DEEEFF"
+        ]
+      },
+      "federal-tint": {
+        "role": "secondary",
+        "displayName": "Federal Tint",
+        "canonical": "#A9BCF2",
+        "oklch": "oklch(80.0% 0.080 269.5)",
+        "tonalRamp": [
+          "#05091E",
+          "#1A2340",
+          "#344065",
+          "#505F8C",
+          "#7081B0",
+          "#95A4CF",
+          "#BBC8EE",
+          "#E2EEFF"
+        ]
+      },
+      "federal-line": {
+        "role": "secondary",
+        "displayName": "Federal Line",
+        "canonical": "#5D78C4",
+        "oklch": "oklch(58.6% 0.121 267.8)",
+        "tonalRamp": [
+          "#030627",
+          "#14214D",
+          "#2B3E76",
+          "#455DA1",
+          "#657FC6",
+          "#8AA3E3",
+          "#B2C8FF",
+          "#DBEEFF"
+        ]
+      },
+      "red": {
+        "role": "primary",
+        "displayName": "Bright Red (aka)",
+        "canonical": "#F15060",
+        "oklch": "oklch(65.7% 0.196 18.8)",
+        "tonalRamp": [
+          "#2B0000",
+          "#550007",
+          "#82001D",
+          "#B21835",
+          "#DA4655",
+          "#F9767D",
+          "#FFA4A6",
+          "#FFD1D1"
+        ]
+      },
+      "red-deep": {
+        "role": "primary",
+        "displayName": "Deep Red",
+        "canonical": "#C62E3F",
+        "oklch": "oklch(54.6% 0.187 20.4)",
+        "tonalRamp": [
+          "#2A0000",
+          "#530006",
+          "#80001C",
+          "#AF2134",
+          "#D74B54",
+          "#F57A7C",
+          "#FFA6A6",
+          "#FFD2D1"
+        ]
+      },
+      "overprint": {
+        "role": "primary",
+        "displayName": "Overprint Plum",
+        "canonical": "#4A2150",
+        "oklch": "oklch(32.6% 0.093 322.4)",
+        "tonalRamp": [
+          "#150318",
+          "#331937",
+          "#55335A",
+          "#79507E",
+          "#9B70A1",
+          "#BC95C1",
+          "#DEBCE2",
+          "#FFE3FF"
+        ]
+      },
+      "on-overprint-container": {
+        "role": "primary",
+        "displayName": "Overprint Text",
+        "canonical": "#FFD9DD",
+        "oklch": "oklch(91.8% 0.043 10.8)",
+        "tonalRamp": [
+          "#140709",
+          "#321F22",
+          "#533A3D",
+          "#76585C",
+          "#99797C",
+          "#BA9DA0",
+          "#DBC2C4",
+          "#FEE8EA"
+        ]
+      },
+      "yellow": {
+        "role": "tertiary",
+        "displayName": "Riso Yellow",
+        "canonical": "#FFE800",
+        "oklch": "oklch(92.1% 0.193 102.2)",
+        "tonalRamp": [
+          "#150800",
+          "#332300",
+          "#544100",
+          "#776000",
+          "#998300",
+          "#B9A700",
+          "#DACC5D",
+          "#FDF29A"
+        ]
+      },
+      "tertiary-container": {
+        "role": "tertiary",
+        "displayName": "Held Container",
+        "canonical": "#3D3A12",
+        "oklch": "oklch(34.2% 0.058 105.0)",
+        "tonalRamp": [
+          "#0D0C00",
+          "#28260D",
+          "#464325",
+          "#66633E",
+          "#87855E",
+          "#A9A785",
+          "#CDCBAD",
+          "#F1F0D7"
+        ]
+      },
+      "green-tint": {
+        "role": "tertiary",
+        "displayName": "Green Tint (running)",
+        "canonical": "#3FD98A",
+        "oklch": "oklch(78.7% 0.170 156.0)",
+        "tonalRamp": [
+          "#001400",
+          "#003307",
+          "#00551E",
+          "#007A37",
+          "#009D57",
+          "#4DBE80",
+          "#86E0A9",
+          "#BAFFD4"
+        ]
+      },
+      "pink": {
+        "role": "tertiary",
+        "displayName": "Fluorescent Pink (failed)",
+        "canonical": "#FF48B0",
+        "oklch": "oklch(69.3% 0.236 350.2)",
+        "tonalRamp": [
+          "#2B0012",
+          "#55002F",
+          "#82004F",
+          "#B20072",
+          "#DB3094",
+          "#F969B5",
+          "#FF9AD8",
+          "#FFC9FB"
+        ]
+      },
+      "pink-deep": {
+        "role": "tertiary",
+        "displayName": "Deep Pink",
+        "canonical": "#C2186B",
+        "oklch": "oklch(53.6% 0.206 358.9)",
+        "tonalRamp": [
+          "#29000A",
+          "#530024",
+          "#7F0040",
+          "#AE0F5F",
+          "#D74180",
+          "#F572A3",
+          "#FFA0C7",
+          "#FFCEED"
+        ]
+      },
+      "error-container": {
+        "role": "tertiary",
+        "displayName": "Failed Container",
+        "canonical": "#55123F",
+        "oklch": "oklch(31.5% 0.110 344.1)",
+        "tonalRamp": [
+          "#1B0011",
+          "#3D132E",
+          "#622C4D",
+          "#89476F",
+          "#AE6891",
+          "#CE8EB3",
+          "#EEB6D5",
+          "#FFDFF9"
+        ]
+      },
+      "on-error-container": {
+        "role": "tertiary",
+        "displayName": "Failed Container Text",
+        "canonical": "#FFD6EA",
+        "oklch": "oklch(91.6% 0.052 347.2)",
+        "tonalRamp": [
+          "#14060D",
+          "#321E28",
+          "#533946",
+          "#775666",
+          "#997788",
+          "#BA9BAA",
+          "#DCC0CE",
+          "#FFE7F2"
+        ]
+      },
+      "bone": {
+        "role": "neutral",
+        "displayName": "Cool Bone",
+        "canonical": "#E9ECF2",
+        "oklch": "oklch(94.3% 0.009 264.5)",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#242528",
+          "#404246",
+          "#5F6166",
+          "#808287",
+          "#A3A5AA",
+          "#C7C9CD",
+          "#EDEEF2"
+        ]
+      },
+      "bone-muted": {
+        "role": "neutral",
+        "displayName": "Bone Muted",
+        "canonical": "#B4BCD3",
+        "oklch": "oklch(79.6% 0.034 270.4)",
+        "tonalRamp": [
+          "#080B13",
+          "#212531",
+          "#3C4151",
+          "#5A6174",
+          "#7B8296",
+          "#9EA5B7",
+          "#C3C9D9",
+          "#E9EEFC"
+        ]
+      },
+      "bone-on-field": {
+        "role": "neutral",
+        "displayName": "Bone on Field",
+        "canonical": "#C3CDEB",
+        "oklch": "oklch(85.0% 0.043 270.9)",
+        "tonalRamp": [
+          "#070A15",
+          "#202434",
+          "#3B4155",
+          "#586079",
+          "#79829B",
+          "#9DA4BC",
+          "#C2C9DD",
+          "#E8EEFF"
+        ]
+      },
+      "ink-text": {
+        "role": "neutral",
+        "displayName": "Ink Text",
+        "canonical": "#14193A",
+        "oklch": "oklch(22.9% 0.063 273.8)",
+        "tonalRamp": [
+          "#07091A",
+          "#1E233A",
+          "#39405E",
+          "#565F83",
+          "#7780A7",
+          "#9AA3C6",
+          "#C0C8E6",
+          "#E7EDFF"
+        ]
+      },
+      "stock-light": {
+        "role": "neutral",
+        "displayName": "Light Stock",
+        "canonical": "#EFF1F5",
+        "oklch": "oklch(95.8% 0.006 264.5)",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#242527",
+          "#414245",
+          "#606164",
+          "#818286",
+          "#A3A5A8",
+          "#C8C9CC",
+          "#EDEEF1"
+        ]
+      },
+      "federal-line-deep": {
+        "role": "secondary",
+        "displayName": "Federal Line Deep",
+        "canonical": "#3F5AA8",
+        "oklch": "oklch(48.7% 0.129 267.2)",
+        "tonalRamp": [
+          "#020629",
+          "#12204F",
+          "#293D79",
+          "#425CA5",
+          "#627FCB",
+          "#88A3E7",
+          "#AFC8FF",
+          "#D9EEFF"
+        ]
+      },
+      "federal-field-light": {
+        "role": "secondary",
+        "displayName": "Light Federal Field",
+        "canonical": "#2A4A94",
+        "oklch": "oklch(42.7% 0.128 264.1)",
+        "tonalRamp": [
+          "#010729",
+          "#0E214F",
+          "#253F79",
+          "#3E5EA5",
+          "#5D80CA",
+          "#84A4E7",
+          "#ACC9FF",
+          "#D6EFFF"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display-large": {
+        "displayName": "Display Large",
+        "purpose": "The onboarding welcome wordmark (Archivo Expanded ExtraBold)."
+      },
+      "display-small": {
+        "displayName": "Display Small",
+        "purpose": "AkaWordmark default size (drawer header)."
+      },
+      "headline-large": {
+        "displayName": "Headline Large",
+        "purpose": "Rare page heads."
+      },
+      "headline-medium": {
+        "displayName": "Headline Medium",
+        "purpose": "Printed-sheet heads and empty-state heads (\"Ubuntu 26.04\", \"Ubuntu terminal\")."
+      },
+      "headline-small": {
+        "displayName": "Headline Small",
+        "purpose": "Top bar and step heads."
+      },
+      "title-large": {
+        "displayName": "Title Large",
+        "purpose": "Dialog titles (Archivo SemiExpanded)."
+      },
+      "title-medium": {
+        "displayName": "Title Medium",
+        "purpose": "Sub-heads; single-glyph key caps take it in the mono face."
+      },
+      "title-small": {
+        "displayName": "Title Small",
+        "purpose": "Every row title."
+      },
+      "body-large": {
+        "displayName": "Body Large",
+        "purpose": "Lead explanations."
+      },
+      "body-medium": {
+        "displayName": "Body Medium",
+        "purpose": "Explanations and dialog text."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "Row supporting text; the most used role."
+      },
+      "label-large": {
+        "displayName": "Label Large",
+        "purpose": "Buttons and section labels, sentence case."
+      },
+      "label-medium": {
+        "displayName": "Label Medium",
+        "purpose": "Word key caps (ESC, CTRL) and chips."
+      },
+      "label-small": {
+        "displayName": "Label Small",
+        "purpose": "Compact key caps and fine print."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Commands, paths, versions (JetBrains Mono, CodeStyle)."
+      }
+    },
+    "units": "Android density-independent units: px in tokens means dp for size and sp for type.",
+    "shadows": [],
+    "plates": [
+      {
+        "name": "plate-offset",
+        "value": "2px",
+        "purpose": "How far the second plate rests out of register on primary and selected elements (AkaMotion.PlateOffset). Plate A top-start, plate B bottom-end; 0 while pressed."
+      },
+      {
+        "name": "primary-plates",
+        "value": "fill {colors.red}, plate A {colors.red}, plate B {colors.federal}",
+        "purpose": "PlatedButton, New session (dark scheme)."
+      },
+      {
+        "name": "selection-plates",
+        "value": "fill {colors.overprint}, plate A {colors.red}, plate B {colors.federal}",
+        "purpose": "Active session, latched modifiers, chosen options (dark scheme)."
+      },
+      {
+        "name": "wordmark-underplate",
+        "value": "1.5px down-end, {colors.federal}",
+        "purpose": "AkaWordmark resting misregistration."
+      },
+      {
+        "name": "grain",
+        "value": "128px tiled speckle, seed 0x414B41, alpha 0.07 dark / 0.06 light",
+        "purpose": "Large printed fields only, under the content."
+      },
+      {
+        "name": "hairline",
+        "value": "1px",
+        "purpose": "The one border weight (Federal Line on stock, translucent Federal Tint #A9BCF2 at 25% on the field)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "quick",
+        "value": "120ms",
+        "purpose": "Small state flips."
+      },
+      {
+        "name": "standard",
+        "value": "220ms cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "Routine state changes: switch track colour, sheet content size."
+      },
+      {
+        "name": "emphasized",
+        "value": "360ms",
+        "purpose": "Larger transitions."
+      },
+      {
+        "name": "print",
+        "value": "640ms",
+        "purpose": "Budget for the wordmark's first two-pass print."
+      },
+      {
+        "name": "decelerate",
+        "value": "cubic-bezier(0.05, 0.7, 0.1, 1)",
+        "purpose": "Entrances."
+      },
+      {
+        "name": "register",
+        "value": "spring(dampingRatio 0.42, stiffness 650)",
+        "purpose": "Plates settling into register: one visible overshoot, about 300ms. The signature motion."
+      },
+      {
+        "name": "settle",
+        "value": "spring(dampingRatio 1.0, stiffness 520)",
+        "purpose": "The same settle without overshoot: switch thumb, large moves."
+      },
+      {
+        "name": "working-spin",
+        "value": "1400ms linear per turn",
+        "purpose": "The working StatusMark's dashed ring."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "ANIMATOR_DURATION_SCALE == 0",
+        "purpose": "Plates and wordmark cut straight to register, switches snap, the working mark stops turning."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Plated Button",
+      "kind": "button",
+      "refersTo": "plated-button-primary",
+      "description": "The primary action of a region: a red plate whose Federal second plate rests 2px out of register and settles on press.",
+      "html": "<button class=\"ds-plated\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 5v14l11-7z\" fill=\"currentColor\"/></svg>Set up Ubuntu</button>",
+      "css": ".ds-plated { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; min-width: 64px; padding: 12px 24px; background: #F15060; color: #14193A; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; border: none; border-radius: 4px; box-shadow: -2px -2px 0 0 #F15060, 2px 2px 0 0 #3255A4; transition: box-shadow 300ms cubic-bezier(0.34, 1.56, 0.64, 1); cursor: pointer; } .ds-plated:hover { box-shadow: -1px -1px 0 0 #F15060, 1px 1px 0 0 #3255A4; } .ds-plated:active { box-shadow: 0 0 0 0 #F15060, 0 0 0 0 #3255A4; } .ds-plated:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 4px; } .ds-plated:disabled { background: #1B2A5C; color: rgba(195,205,235,0.6); box-shadow: none; }"
+    },
+    {
+      "name": "Text Button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Secondary action: red label on the stock, no fill.",
+      "html": "<button class=\"ds-btn-text\">Settings</button>",
+      "css": ".ds-btn-text { min-height: 48px; padding: 10px 12px; background: transparent; color: #F15060; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; border: none; border-radius: 4px; cursor: pointer; } .ds-btn-text:hover { background: rgba(241,80,96,0.08); } .ds-btn-text:active { background: rgba(241,80,96,0.14); } .ds-btn-text:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 2px; }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Explicit destructive action in Settings: Fluorescent Pink fill, Ink Text.",
+      "html": "<button class=\"ds-btn-danger\">Remove Ubuntu</button>",
+      "css": ".ds-btn-danger { min-height: 48px; padding: 10px 24px; background: #FF48B0; color: #14193A; font: 600 14px/20px Archivo, sans-serif; border: none; border-radius: 4px; cursor: pointer; } .ds-btn-danger:hover { filter: brightness(1.05); } .ds-btn-danger:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 2px; }"
+    },
+    {
+      "name": "Session Row (selection plate)",
+      "kind": "nav",
+      "refersTo": "selection-plate",
+      "description": "Drawer session rows on the Federal field; the active one is the overprint with red and Federal fringes.",
+      "html": "<div class=\"ds-drawer\"><button class=\"ds-session ds-session-on\"><span class=\"ds-dot\"></span>Session 1</button><button class=\"ds-session\"><span class=\"ds-ring\"></span>Session 2</button></div>",
+      "css": ".ds-drawer { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px; background: #1B2A5C; width: 300px; } .ds-session { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 4px 0 16px; background: transparent; color: #C3CDEB; font: 600 14px/20px Archivo, sans-serif; border: none; border-radius: 4px; text-align: left; cursor: pointer; } .ds-session:hover { background: #243670; } .ds-session:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 2px; } .ds-session-on { background: #4A2150; color: #E9ECF2; box-shadow: -2px -2px 0 0 #F15060, 2px 2px 0 0 #3255A4; transition: box-shadow 300ms cubic-bezier(0.34, 1.56, 0.64, 1); } .ds-session-on:hover { background: #4A2150; } .ds-session-on:active { box-shadow: 0 0 0 0 #F15060, 0 0 0 0 #3255A4; } .ds-dot { width: 10px; height: 10px; border-radius: 50%; background: #3FD98A; } .ds-ring { width: 6px; height: 6px; border-radius: 50%; border: 2px solid #C3CDEB; }"
+    },
+    {
+      "name": "Extra Keys",
+      "kind": "custom",
+      "refersTo": "key-cap",
+      "description": "Key caps on the Federal field: flat at rest, one tint up when pressed, latched modifiers as the selection plate.",
+      "html": "<div class=\"ds-keys\"><button class=\"ds-key\">ESC</button><button class=\"ds-key ds-key-latched\">CTRL</button><button class=\"ds-key\">ALT</button><button class=\"ds-key ds-key-glyph\">↑</button><button class=\"ds-key\">TAB</button></div>",
+      "css": ".ds-keys { display: flex; gap: 4px; padding: 4px; background: #1B2A5C; } .ds-key { min-width: 48px; height: 48px; background: transparent; color: #E9ECF2; font: 600 12px/16px Archivo, sans-serif; letter-spacing: 0.3px; border: none; border-radius: 2px; cursor: pointer; } .ds-key:active { background: #243670; } .ds-key:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 1px; } .ds-key-glyph { font: 600 16px/22px 'JetBrains Mono', monospace; } .ds-key-latched { background: #4A2150; box-shadow: -2px -2px 0 0 #F15060, 2px 2px 0 0 #3255A4; } .ds-key-latched:active { box-shadow: none; }"
+    },
+    {
+      "name": "Settings Row",
+      "kind": "card",
+      "refersTo": "list-row",
+      "description": "Full-width row on the stock under a section label; the whole row is the target.",
+      "html": "<div class=\"ds-list\"><div class=\"ds-section\">Recovery</div><button class=\"ds-row\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 6h12v12H6z\" fill=\"currentColor\"/></svg><span class=\"ds-row-text\"><span class=\"ds-row-title\">Stop everything</span><span class=\"ds-row-sub\">Close terminals and stop the desktop</span></span><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z\" fill=\"currentColor\"/></svg></button></div>",
+      "css": ".ds-list { background: #0F1326; width: 360px; } .ds-section { padding: 24px 16px 8px; color: #A9BCF2; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; } .ds-row { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 12px 16px; background: transparent; color: #B4BCD3; border: none; text-align: left; cursor: pointer; } .ds-row:hover { background: #131830; } .ds-row:focus-visible { outline: 2px solid #A9BCF2; outline-offset: -2px; } .ds-row-text { display: flex; flex-direction: column; flex: 1; } .ds-row-title { color: #E9ECF2; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; } .ds-row-sub { color: #B4BCD3; font: 400 12px/17px Archivo, sans-serif; letter-spacing: 0.2px; }"
+    },
+    {
+      "name": "Printed Field",
+      "kind": "card",
+      "refersTo": "printed-field",
+      "description": "The Ubuntu status sheet and onboarding plates: Federal field with grain, a state mark in words, one plated primary.",
+      "html": "<section class=\"ds-field\"><h2 class=\"ds-field-head\">Ubuntu 26.04</h2><p class=\"ds-field-state\"><span class=\"ds-field-ring\"></span>Not installed</p><p class=\"ds-field-body\">Ubuntu isn't set up on this device yet.</p></section>",
+      "css": ".ds-field { width: 340px; padding: 16px; background: #1B2A5C; color: #E9ECF2; border-radius: 10px; } .ds-field-head { margin: 0 0 8px; font: 800 23px/29px 'Archivo Expanded', Archivo, sans-serif; letter-spacing: -0.3px; } .ds-field-state { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font: 600 14px/20px Archivo, sans-serif; } .ds-field-ring { width: 6px; height: 6px; border-radius: 50%; border: 2px solid #C3CDEB; } .ds-field-body { margin: 0; color: #C3CDEB; font: 400 14px/20px Archivo, sans-serif; letter-spacing: 0.15px; }"
+    },
+    {
+      "name": "Switch",
+      "kind": "input",
+      "refersTo": "switch-on",
+      "description": "FluxSwitch: squared track and thumb, red when on, Federal hairline when off.",
+      "html": "<label class=\"ds-switch\"><input type=\"checkbox\" checked><span class=\"ds-track\"><span class=\"ds-thumb\"></span></span></label>",
+      "css": ".ds-switch { display: inline-flex; padding: 8px; cursor: pointer; } .ds-switch input { position: absolute; opacity: 0; } .ds-track { position: relative; width: 52px; height: 32px; box-sizing: border-box; background: #242C50; border: 1px solid #5D78C4; border-radius: 4px; transition: background 220ms cubic-bezier(0.2, 0, 0, 1), border-color 220ms; } .ds-thumb { position: absolute; top: 7px; left: 8px; width: 16px; height: 16px; background: #5D78C4; border-radius: 2px; transition: all 260ms cubic-bezier(0.2, 0, 0, 1); } .ds-switch input:checked + .ds-track { background: #F15060; border-color: #F15060; } .ds-switch input:checked + .ds-track .ds-thumb { top: 4px; left: 24px; width: 22px; height: 22px; background: #14193A; } .ds-switch input:focus-visible + .ds-track { outline: 2px solid #A9BCF2; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Marks",
+      "kind": "chip",
+      "refersTo": "list-row",
+      "description": "State told by form first: filled disc running, ring idle, dashed ring working, half disc held, struck ring failed.",
+      "html": "<div class=\"ds-marks\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Running\"><circle cx=\"5\" cy=\"5\" r=\"5\" fill=\"#3FD98A\"/></svg><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Idle\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#B4BCD3\" stroke-width=\"2\"/></svg><svg class=\"ds-working\" width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Working\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#A9BCF2\" stroke-width=\"2\" stroke-dasharray=\"3.6 2.4\"/></svg><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Held\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#FFE800\" stroke-width=\"2\"/><path d=\"M5 0a5 5 0 0 0 0 10z\" fill=\"#FFE800\"/></svg><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Failed\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#FF48B0\" stroke-width=\"2\"/><path d=\"M2 8 8 2\" stroke=\"#FF48B0\" stroke-width=\"2\"/></svg></div>",
+      "css": ".ds-marks { display: flex; gap: 16px; padding: 16px; background: #0F1326; } .ds-working { animation: ds-spin 1400ms linear infinite; } @keyframes ds-spin { to { transform: rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .ds-working { animation: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Two-Ink Zine",
+    "overview": "AkaTerminal is printed, not rendered. Every colour on screen is a risograph spot ink or the stock it is printed on: a blue-black dark stock, a Federal Blue field for the shell, Bright Red (aka) for the one primary action, and the plum overprint where red lands on blue to mark what is selected. Hierarchy comes from tone and ink, not from light and shadow. The terminal sits full bleed on the stock, so the terminal and the chrome read as one sheet.\n\nThe density is that of a tool used one-handed at night for long sessions. Rows are full width on the stock and grouped by small labels, not boxed in cards. Large printed fields (the drawer header, the Ubuntu status sheet, onboarding plates) carry a faint fixed-seed grain; nothing else does. The one signature motion is misregistration that registers: primary and selected elements rest with their second plate 2dp out of register, and a press settles the plates together with one damped overshoot. Reduced motion cuts instantly.\n\nThe system is Material 3 underneath (drawer, dialogs, radio buttons, progress, snackbars, system Back) restyled with the inks, a cut-paper shape scale and one type family. It ships dark only; the light scheme (cool white stock, deepened inks) is kept in the tokens so a later switch stays cheap. Dynamic (wallpaper) colour is off: the inks are fixed.",
+    "keyCharacteristics": [
+      "Spot inks on dark stock; no greys, no gradients, no glass.",
+      "One primary ink (Red) and one selection ink (overprint plum), both printed as misregistered plates.",
+      "State told by mark form first, hue second.",
+      "One family, Archivo, ranked by width and weight; JetBrains Mono only for code, paths and key caps.",
+      "Cut-paper corners (2 to 14px), one hairline weight, no shadows.",
+      "Sharp Material icons."
+    ],
+    "rules": [
+      {
+        "name": "The Spot Ink Rule",
+        "body": "Every colour is one of the inks or the stock. New colours enter `Riso` and the schemes, never as a raw value in a screen. Screens read `MaterialTheme.colorScheme` or `AkaTheme.inks`.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Red Rule",
+        "body": "Red is the action ink. One plated primary per screen region; secondary actions are outlined or text buttons.",
+        "section": "colors"
+      },
+      {
+        "name": "The Form-First Rule",
+        "body": "A state ink (green, yellow, pink) never appears without its mark form or its words. Hue is the second signal.",
+        "section": "colors"
+      },
+      {
+        "name": "The Night Rule",
+        "body": "The chrome never outshines the terminal text: fields stay dark blue, grain stays at 0.07 alpha or less, and no ink is used as a large bright fill except the one red primary.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Family Rule",
+        "body": "Archivo by width and weight, JetBrains Mono for code. No third face.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sentence Case Rule",
+        "body": "Labels and section heads are sentence case at their role's tracking. No uppercase tracked labels above headings.",
+        "section": "typography"
+      },
+      {
+        "name": "The Printed Depth Rule",
+        "body": "Lift a surface by changing its ink or tint step, never with a shadow or a glow.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Two-Plate Rule",
+        "body": "Misregistration belongs to primary and selected elements only: plate A peeks top-start and plate B bottom-end, both 2px, and they register (offset 0) on press with the `register` spring. It is never a decorative offset shadow on cards, rows or text.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Grain Rule",
+        "body": "Grain (fixed seed, 0.07 alpha dark, 0.06 light) prints only on large fields, under the content, never behind small body text.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take every colour from `MaterialTheme.colorScheme` or `AkaTheme.inks`; new inks go into `Riso` first.",
+      "Do print the main action of a region as one PlatedButton and keep the rest outlined or text.",
+      "Do pair every state ink with a StatusMark form or plain words.",
+      "Do group settings and actions as full-width AkaRows under SectionLabels on the stock.",
+      "Do use the shape scale (2, 4, 6, 10, 14) and `FluxSpacing`, never raw dp for padding.",
+      "Do honour reduced motion: plates and wordmark cut to register, switches snap.",
+      "Do set code, paths and commands in JetBrains Mono (`CodeStyle`)."
+    ],
+    "donts": [
+      "Don't use drop shadows, glows, gradients, glass or tonal elevation tints.",
+      "Don't put the misregistered offset on anything that is not a primary or selected element.",
+      "Don't set Federal (#3255A4) as text on stock; use Federal Tint.",
+      "Don't use white text on Red, Yellow or Pink fills; use Ink Text.",
+      "Don't add uppercase tracked kickers or eyebrows above headings.",
+      "Don't print grain behind small body text or across the terminal.",
+      "Don't use Rounded or Outlined icon sets, emoji or text glyphs as icons outside key caps.",
+      "Don't turn on dynamic (wallpaper) colour."
+    ]
+  }
+}

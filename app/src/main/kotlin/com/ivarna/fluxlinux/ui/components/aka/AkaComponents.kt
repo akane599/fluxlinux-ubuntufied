@@ -61,7 +61,7 @@ import com.ivarna.fluxlinux.ui.theme.rememberReducedMotion
 
 /** Which plates an element is printed with. */
 enum class PlateKind {
-    /** Primary action: vermilion overprint, red and yellow fringes. */
+    /** Primary action: Bright Red fill over a Federal second plate (the wordmark's pair). */
     PRIMARY,
 
     /** Selected / current item: plum overprint, red and Federal fringes. */

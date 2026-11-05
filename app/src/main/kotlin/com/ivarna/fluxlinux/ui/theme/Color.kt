@@ -1,7 +1,5 @@
 package com.ivarna.fluxlinux.ui.theme
 
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 // ─── Riso inks ────────────────────────────────────────────────────────────────
@@ -39,11 +37,8 @@ object Riso {
 
     /** Red over Federal Blue: the overprint that marks selection. */
     val Overprint = Color(0xFF4A2150)
-    /** Red over Yellow: the overprint of primary buttons. */
-    val Vermilion = Color(0xFFF25C3C)
 
     val Yellow = Color(0xFFFFE800)
-    val Green = Color(0xFF00A95C)
     val GreenTint = Color(0xFF3FD98A)
     val Pink = Color(0xFFFF48B0)
     val PinkDeep = Color(0xFFC2186B)
@@ -54,7 +49,7 @@ object Riso {
     val BoneMuted = Color(0xFFB4BCD3)
     /** Secondary text on the Federal field (≥ 4.5:1 on [FederalField]). */
     val BoneOnField = Color(0xFFC3CDEB)
-    /** Ink-black text on light stock and on Red / Yellow / Vermilion. */
+    /** Ink-black text on light stock and on Red / Yellow. */
     val InkText = Color(0xFF14193A)
 }
 
@@ -65,21 +60,9 @@ val TerminalBackground = Riso.Stock
 // Older screens still import these; they now resolve to the riso inks so nothing drifts
 // back to the old cream/neon look. New code reads MaterialTheme.colorScheme / AkaTheme.inks.
 
-val FluxSuccess = Riso.GreenTint
 val FluxAccentCyan = Riso.FederalTint
 val FluxAccentMagenta = Riso.Pink
-val FluxBackgroundStart = Riso.Stock
-val FluxBackgroundMid = Riso.Stock
-val FluxBackgroundEnd = Riso.Stock
-val Seed = Riso.Red
-val FluxBodyMuted = Riso.BoneMuted
-val FluxHairline = Color(0x33A9BCF2)
-val FluxCardFill = Color(0xFF171D38)
-val FluxDanger = Riso.Pink
 val FluxSwitchUncheckedTrack = Color(0xFF242C50)
-
-@Composable
-fun fluxMutedText(): Color = MaterialTheme.colorScheme.onSurfaceVariant
 
 /** Swatches previewing the XFCE desktop themes in setup: content, not app chrome. */
 val DesktopThemeSwatchDark = Color(0xFF1E1E24)

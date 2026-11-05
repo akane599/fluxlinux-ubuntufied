@@ -9,9 +9,9 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
   - `01ed6ae`: notification Exit (closes terminals, the desktop, the wakelock and the UI; `AppExit`).
   - `c55b3d2`: rename to AkaTerminal; the upstream author's contact lines removed from scripts, store metadata and privacy policy. Download URLs (rootfs, assets) still point at upstream, by the user's choice.
   - `1069821`: risograph redesign (direction in `.impeccable/surfaces/…ui.md`, PRODUCT.md); 961 unit tests, lint, assemble and screenshot validation pass.
+  - `404efab`: the finish review's 8 fixes (verdict ship); DESIGN.md + `.impeccable/design.json` written from the shipped code.
   - Emulator captures for the finish review are in `.impeccable/review/` (akane-linux, pixel-api35 over Tailscale SSH; host binaries can't run there, so live-shell states come from previews).
 - **Next:**
-  - [ ] Finish review verdict, its fixes, then DESIGN.md + `.impeccable/design.json` (impeccable documenter).
   - [ ] Check on the phone (signed release): the welcome wordmark print, plate registration on press, the notification Exit, the drawer with live sessions.
   - [ ] Still unverified on the device from the terminal-first work: links open in the browser (also in Claude Code and Codex), the Paste key and More… menu, Hold wakelock (`dumpsys power | grep AkaTerminal`), an existing XFCE install's Start/Open/Stop and the add-on Installing row, a PRoot flux → akane migration from v2.1.8.
   - [ ] Merge PR #1, then PR #2; release v2.2.0 (`.claude/rules/release.md`); its notes tell v2.1.x users to uninstall once (signing key changed).
@@ -77,7 +77,7 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 |---|---|---|---|
 | Repository audit | 2026-10-20 | 4 high, 23 medium, 33 low (AUDIT_REPORT.md) | `/full-repo-audit` |
 | Audit fixes | 2026-10-20 | 57 fixed, M14/L8 partial, L29 blocked; device-unverified | `/audit-remediate` |
-| UI / design | 2026-11-05 | risograph redesign; impeccable finish review in progress | `/impeccable` + screenshot and emulator review |
+| UI / design | 2026-11-05 | risograph redesign; impeccable finish review: ship (8 fixes resolved); live-shell, drawer-with-sessions and light scheme only checked in previews | `/impeccable` + screenshot and emulator review |
 | Lint | 2026-10-20 | 0 errors | `./gradlew :app:lintIvarnaDebug -q` |
 | Device QA | 2026-10-20 | SM-S938B (Android 17): v2.1.4 fresh install OK, customization in about 2.5 min, bundled Papirus-Dark passes the icon check; desktop start not checked | adb + debug run-as |
 
