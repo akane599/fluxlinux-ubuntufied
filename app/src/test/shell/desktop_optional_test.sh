@@ -119,11 +119,18 @@ has "$T/pulse.off" "xfce4-pulseaudio-plugin" && fail "pulse off: panel plugin re
 run_pulse on
 grep -qx "libpulse0 pulseaudio-utils xfce4-pulseaudio-plugin" "$T/pulse.on" \
     || fail "pulse desktop: plugin not requested, got: $(cat "$T/pulse.on")"
-run_pulse addon PACTL=/usr/bin/pactl DPKG_STATUS="unknown ok not-installed"
+# pactl present: only an explicit FLUX_INSTALL_DESKTOP=1 (the app's desktop runs export it)
+# adds the panel plugin. Unset is Audio Settings → Repair guests (setup_pulse_guest.sh via
+# repair_pulse_guests.sh, which never exports the flag): on a terminal-only install it must
+# not pull xfce4-panel and its X/GTK stack.
+run_pulse addon PACTL=/usr/bin/pactl DPKG_STATUS="unknown ok not-installed" FLUX_INSTALL_DESKTOP=1
 grep -qx "xfce4-pulseaudio-plugin" "$T/pulse.addon" \
     || fail "pulse add-on: plugin not added next to an existing pactl: $(cat "$T/pulse.addon")"
-run_pulse addon_have PACTL=/usr/bin/pactl DPKG_STATUS="install ok installed"
+run_pulse addon_have PACTL=/usr/bin/pactl DPKG_STATUS="install ok installed" FLUX_INSTALL_DESKTOP=1
 [ -s "$T/pulse.addon_have" ] && fail "pulse add-on: reinstalled a present plugin"
+run_pulse repair_unset PACTL=/usr/bin/pactl DPKG_STATUS="unknown ok not-installed"
+[ -s "$T/pulse.repair_unset" ] \
+    && fail "pulse repair (flag unset): installed with pactl present: $(cat "$T/pulse.repair_unset")"
 run_pulse present_off PACTL=/usr/bin/pactl FLUX_INSTALL_DESKTOP=0
 [ -s "$T/pulse.present_off" ] && fail "pulse off: installed with pactl present: $(cat "$T/pulse.present_off")"
 
