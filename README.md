@@ -41,6 +41,65 @@ By [akane599](https://github.com/akane599) · GPLv3 · Android 8.0+ (arm64-v8a)
   Ubuntu can't reach your shared storage through `~/storage`. Upgrades keep your installed
   system and home folder.
 
+## How it differs from FluxLinux
+
+AkaTerminal started as a fork of [FluxLinux](https://github.com/abhay-byte/fluxlinux) v2.0.1
+and has since gone its own way.
+
+### What changed
+
+- **Ubuntu only.** FluxLinux offers 12 distros. AkaTerminal sets up Ubuntu 26.04 only. The other
+  distros' code is still there, and an existing install of one is left alone, but they aren't
+  in the main UI.
+- **Terminal instead of desktop.** FluxLinux is built around the desktop. AkaTerminal opens on
+  its terminal, installs a terminal-only Ubuntu by default and never starts the desktop on its
+  own.
+- **Chroot as a first-class runtime.** On a rooted phone you choose PRoot or chroot during setup
+  and can switch later in Settings. Both installs are kept.
+- **Own signing key and identity.** Releases are signed with this project's key. The package
+  name is still `com.ivarna.fluxlinux`, so AkaTerminal and FluxLinux's F-Droid/GitHub build
+  can't be installed side by side.
+
+### Improvements
+
+- Session drawer instead of a top bar and tabs, so the terminal gets the full height.
+- Termux's extra-keys layout, with key repeat at Termux's steady speed (or accelerating, in
+  Settings), a Paste key and a clipboard menu.
+- Tap a link in the terminal to open it, also in full-screen apps and in the scrollback.
+- **Hold wakelock** and **Exit** in the notification.
+- The XFCE desktop as an optional add-on, with an "unfinished install" state and a retry
+  instead of a half-installed desktop.
+- Ubuntu's home and filesystem in the Android Files app, and Termux-style `~/storage` links.
+- Oh My Zsh comes with a curated plugin set (fzf, zoxide, fzf-tab, autosuggestions, syntax
+  highlighting, sudo and more). Only plugins that are actually installed get loaded.
+- A smaller APK (about 60 MB instead of 177 MB) and a new design and launcher icon.
+
+### Bug fixes
+
+- **The desktop on Android 17:** the X server's library loads from the read-only app
+  directory, because Android 17 refuses to load it from a writable copy.
+- **Ubuntu commands after `apt upgrade`:** Ubuntu 26.04's Rust coreutils broke under PRoot
+  (`Security violation …` on every command). Broken installs are repaired on start, and setup
+  switches to GNU coreutils.
+- **Termux helpers in the host shell:** the built-in host environment had no `sh`, so about 30
+  helpers (`am`, `su`, `getprop`, `termux-open` …) failed.
+- **Installs:**
+  - Rotating the screen or pressing Back no longer cancels an install.
+  - Cancel stops `tar` and `apt` too.
+  - A partly extracted Ubuntu isn't treated as installed.
+  - Theme archives no longer stall setup on phones whose `tar` can't unpack `.xz`.
+- **Desktop:**
+  - The desktop is reported ready only once it's running.
+  - Stop followed quickly by Start no longer starts two desktops.
+  - GPU acceleration no longer resets the XFCE theme.
+- **Full-screen CLIs on chroot:** programs like codex no longer freeze, and kitty keyboard
+  sequences no longer leave stray characters behind.
+- **Security and robustness, from a full code audit (57 fixes), among them:**
+  - Root helpers live in a root-only directory and are checksum-verified before they run.
+  - PulseAudio uses a private socket instead of TCP port 4713.
+  - File operations never follow symlinks, so deleting Ubuntu can't reach your shared storage.
+  - Chroot mounts are locked against concurrent starts.
+
 ## Install
 
 Download the APK from [GitHub Releases](https://github.com/akane599/AkaTerminal/releases).
