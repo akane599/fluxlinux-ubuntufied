@@ -98,6 +98,17 @@ class HomeUbuntuStatusTest {
             DesktopAddOnUi.NotInstalled,
             desktopAddOnUi(run(InstallKind.TERMINAL, InstallController.Status.Failed), proot, false),
         )
+        // An unfinished desktop install (failed or cancelled, also after a restart) shows as
+        // failed; a live run and the failed run's own message still win.
+        assertEquals(DesktopAddOnUi.Failed(null), desktopAddOnUi(idle, proot, false, desktopIncomplete = true))
+        assertEquals(
+            DesktopAddOnUi.Failed("exit 100"),
+            desktopAddOnUi(run(InstallKind.DESKTOP_ADD_ON, InstallController.Status.Failed), proot, false, true),
+        )
+        assertEquals(
+            DesktopAddOnUi.Installing(40, "Installing XFCE…", "apt"),
+            desktopAddOnUi(run(InstallKind.DESKTOP_ADD_ON, InstallController.Status.Running), proot, false, true),
+        )
     }
 
     @Test

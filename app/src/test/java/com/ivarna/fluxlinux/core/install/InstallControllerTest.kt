@@ -176,10 +176,9 @@ class InstallControllerTest {
         assertTrue(src.contains("installer.start(distro.id, selectedTheme, runKind)"))
         // Retry repeats the failed run's kind (e.g. Home's desktop add-on), not the rerun default.
         assertTrue(src.contains("onRetry = { startInstall(install.kind) }"))
-        // The rootfs check and the chroot su probe both run off the main thread.
-        val io = src.substringAfter("withContext(Dispatchers.IO) {").substringBefore(".getOrDefault(false)")
-        assertTrue(io.contains("UbuntuDesktop.isInstalled(appCtx, distro.id)"))
-        assertTrue(io.contains("UbuntuDesktop.probe(appCtx, distro.id)"))
+        // The rootfs check and the chroot su probe (UbuntuDesktop.detect) run off the main thread.
+        val io = src.substringAfter("withContext(Dispatchers.IO) {").substringBefore("}.getOrDefault(")
+        assertTrue(io, io.contains("UbuntuDesktop.detect(appCtx, distro.id, mayAskRoot = true)"))
     }
 
     @Test

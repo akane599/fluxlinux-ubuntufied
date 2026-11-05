@@ -30,21 +30,34 @@ class OptionalDesktopRunnerContractTest {
 
     @Test
     fun runBodies_branchOnlyOnTheSteps() {
-        for (name in listOf("runProot", "runChroot", "markDesktopComponents")) {
+        for (name in listOf("runProot", "runChroot")) {
             val body = fn(name)
             assertFalse("$name must not test InstallKind itself", body.contains("InstallKind."))
             assertFalse("$name must not test the kind itself", Regex("""\bkind\b""").containsMatchIn(body))
             assertFalse("$name must not test the method itself", body.contains("\"chroot\""))
+            assertTrue(name, body.contains("installDesktop = steps.installDesktop"))
+            assertTrue(name, body.contains("customizeDesktop = steps.customizeDesktop"))
+            // Desktop state is written only through the two unit-tested recorders
+            // (UbuntuDesktopTest runs them for failed, cancelled and successful runs).
+            assertFalse(name, body.contains("\"xfce4_desktop\""))
+            assertFalse(name, body.contains("\"hw_accel\""))
+            assertFalse(name, body.contains("UbuntuDesktop.mark"))
+            val marker = body.indexOf("beforeFamilyStep(appCtx, distroId, steps)")
+            val record = body.indexOf("recordDesktopComponents(appCtx, distroId, steps,")
+            val success = body.indexOf("postSuccess(onProgress")
+            assertTrue("$name: marker before the family step, record on the success path", marker in 0 until record)
+            assertTrue(name, record < success)
         }
-        assertTrue(fn("runProot").contains("installDesktop = steps.installDesktop"))
-        assertTrue(fn("runProot").contains("customizeDesktop = steps.customizeDesktop"))
-        assertTrue(fn("runChroot").contains("installDesktop = steps.installDesktop"))
-        assertTrue(fn("runChroot").contains("customizeDesktop = steps.customizeDesktop"))
-        assertTrue(fn("markDesktopComponents").contains("if (!steps.markDesktopComponents) return"))
-        // Desktop flags are written only through markDesktopComponents.
-        for (name in listOf("runProot", "runChroot")) {
-            assertFalse(name, fn(name).contains("\"xfce4_desktop\""))
-            assertFalse(name, fn(name).contains("\"hw_accel\""))
-        }
+        // Chroot: the marker is set right before the family script runs, after its payload.
+        val chroot = fn("runChroot")
+        assertTrue(
+            chroot.indexOf("beforeFamilyStep(appCtx, distroId, steps)") <
+                chroot.indexOf("runChrootGuestBlocking(familyPayload"),
+        )
+        val proot = fn("runProot")
+        assertTrue(
+            proot.indexOf("beforeFamilyStep(appCtx, distroId, steps)") <
+                proot.indexOf("arrayOf(bash, installScript, profile.prootName, setupB64)"),
+        )
     }
 }

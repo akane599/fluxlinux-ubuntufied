@@ -172,6 +172,8 @@ object StateManager {
         }
         
         editor.apply()
+        // An unfinished desktop install of the removed rootfs says nothing about the next one.
+        com.ivarna.fluxlinux.core.desktop.UbuntuDesktop.clearIncomplete(context, distroId)
         // proot-opt-01: invalidate versioned guest-repair flags so a fresh
         // install re-runs the zshrc / apk-db repair pass for this distro.
         com.ivarna.fluxlinux.core.terminal.GuestRepairCache.clearDistro(context, distroId)

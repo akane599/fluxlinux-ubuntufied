@@ -1,6 +1,7 @@
 package com.ivarna.fluxlinux.core.chroot
 
 import com.ivarna.fluxlinux.core.root.RootShell
+import com.ivarna.fluxlinux.core.system.SafeFiles
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,6 +12,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.nio.file.Files
 
 /** L4: a failed / timed-out root probe must not read as "not installed". */
 class ChrootDetectionRootProbeTest {
@@ -96,6 +98,38 @@ class ChrootDetectionRootProbeTest {
         File(dir, "usr/bin").mkdirs()
         File(dir, "usr/bin/startxfce4").writeText("#!")
         assertTrue(ChrootDetection.probe(forceRoot = true, path = dir.absolutePath).installed)
+    }
+
+    /** The root side of [ChrootDetection.probeXfce], run by /bin/sh (probeXfce itself is off-main only). */
+    private fun xfceProbe(chroot: File): Boolean? {
+        val p = ProcessBuilder("/bin/sh", "-c", ChrootDetection.xfceProbeCommand(chroot.absolutePath))
+            .redirectErrorStream(true)
+            .start()
+        val out = p.inputStream.bufferedReader().readText()
+        return ChrootDetection.parseXfceProbe(p.waitFor(), out)
+    }
+
+    @Test
+    fun xfceProbeCommand_answersNo_andCountsADanglingLink() {
+        assumeTrue(File("/bin/sh").canExecute())
+        val dir = Files.createTempDirectory("flux-chroot-xfce").toFile()
+        try {
+            assertEquals(false, xfceProbe(dir))
+            File(dir, "usr/bin").mkdirs()
+            File(dir, "usr/bin/startxfce4").writeText("#!")
+            assertEquals(true, xfceProbe(dir))
+            assertTrue(File(dir, "usr/bin/startxfce4").delete())
+            // An absolute guest link (alternatives) dangles on the host. A "NO" clears the
+            // stored desktop flag, so the link must still read as installed.
+            File(dir, "usr/sbin").mkdirs()
+            Files.createSymbolicLink(
+                File(dir, "usr/sbin/startxfce4").toPath(),
+                File(dir, "missing-target").toPath(),
+            )
+            assertEquals(true, xfceProbe(dir))
+        } finally {
+            SafeFiles.deleteTree(dir)
+        }
     }
 
     @Test

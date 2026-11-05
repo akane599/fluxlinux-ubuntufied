@@ -49,7 +49,6 @@ import com.ivarna.fluxlinux.core.desktop.UbuntuDesktop
 import com.ivarna.fluxlinux.core.install.DistroInstallProfile
 import com.ivarna.fluxlinux.core.install.InstallController
 import com.ivarna.fluxlinux.core.install.InstallKind
-import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import com.ivarna.fluxlinux.ui.components.aka.AkaButton
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
@@ -80,19 +79,17 @@ fun InstallConfigScreen(
     val install by installer.state.collectAsState()
     var selectedTheme by rememberSaveable { mutableStateOf("dark") }
     var showLog by rememberSaveable { mutableStateOf(true) }
-    // Re-running setup keeps an installed desktop and never adds one (that is Home's add-on).
-    // Starts from the stored flag; the rootfs check runs off main, and a chroot rootfs is
-    // root-only, so without the flag it asks root (which also heals the flag).
+    // Re-running setup keeps an installed desktop and never adds one (that is Home's add-on;
+    // an unfinished one counts as not installed). Starts from the stored state, then verifies
+    // off main: the rootfs file check, or root for a chroot (this re-run needs root anyway).
     var desktopInstalled by remember(distro.id) {
-        mutableStateOf(StateManager.isComponentInstalled(appCtx, distro.id, UbuntuDesktop.COMPONENT_ID))
+        mutableStateOf(UbuntuDesktop.storedDetection(appCtx, distro.id).isInstalled)
     }
     LaunchedEffect(distro.id) {
-        if (desktopInstalled) return@LaunchedEffect
         desktopInstalled = withContext(Dispatchers.IO) {
             runCatching {
-                UbuntuDesktop.isInstalled(appCtx, distro.id) ||
-                    (UbuntuRuntime.isChrootId(distro.id) && UbuntuDesktop.probe(appCtx, distro.id))
-            }.getOrDefault(false)
+                UbuntuDesktop.detect(appCtx, distro.id, mayAskRoot = true).isInstalled
+            }.getOrDefault(desktopInstalled)
         }
     }
     val kind = InstallKind.effective(distro.id, InstallKind.forRerun(desktopInstalled))

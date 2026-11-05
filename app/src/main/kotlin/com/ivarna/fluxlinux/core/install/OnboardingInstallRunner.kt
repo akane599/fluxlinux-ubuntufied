@@ -246,6 +246,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             put("FLUX_ROOTFS_SHA256", profile.rootfsSha256)
             put("FLUX_ROOTFS_URL", profile.rootfsUrl)
         }
+        beforeFamilyStep(appCtx, distroId, steps)
         // Never exec $PREFIX/bin/* as argv0 — W^X (targetSdk 36) only allows
         // nativeLibraryDir (libbash.so / libproot.so). stdbuf lives under PREFIX
         // and fails with EACCES (error 13). Stream lines as the pipe delivers them.
@@ -337,7 +338,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         // The Ubuntu file-manager roots appear once the rootfs exists; make DocumentsUI re-query.
         runCatching { UbuntuFiles.notifyRootsChanged(appCtx) }
         StateManager.setDistroInstalled(appCtx, distroId, true)
-        markDesktopComponents(distroId, steps, customOk = customOk, hwOk = hwOk)
+        recordDesktopComponents(appCtx, distroId, steps, customOk = customOk, hwOk = hwOk)
         // Persist here, not from Done-page buttons: Back, rotation or process death
         // after a successful install must not re-run onboarding (M4).
         StateManager.setOnboardingComplete(appCtx, true)
@@ -400,6 +401,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         if (abortIfCancelled(gen, phases, onProgress)) return
         val familyPayload =
             BaseDesktopInstallPlan.familySetupPayload(appCtx, theme, distroId, installDesktop = steps.installDesktop)
+        beforeFamilyStep(appCtx, distroId, steps)
         val familyExit = runChrootGuestBlocking(familyPayload, chrootPath, phases, familyIdx, onProgress, gen)
         if (abortIfCancelled(gen, phases, onProgress)) return
         if (familyExit != 0) {
@@ -461,7 +463,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         // The Ubuntu file-manager roots appear once the rootfs exists; make DocumentsUI re-query.
         runCatching { UbuntuFiles.notifyRootsChanged(appCtx) }
         StateManager.setDistroInstalled(appCtx, distroId, true)
-        markDesktopComponents(distroId, steps, customOk = customExit == 0, hwOk = hwOk)
+        recordDesktopComponents(appCtx, distroId, steps, customOk = customExit == 0, hwOk = hwOk)
         // Persist here, not from Done-page buttons: Back, rotation or process death
         // after a successful install must not re-run onboarding (M4).
         StateManager.setOnboardingComplete(appCtx, true)
@@ -603,23 +605,6 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         log(phases, rootfsIdx, onProgress, "Chroot rootfs verified (root probe)")
         completePhase(phases, rootfsIdx, onProgress, "Chroot rootfs ready")
         return true
-    }
-
-    /**
-     * Desktop component flags after a successful run that installed the desktop
-     * ([InstallSteps.markDesktopComponents]): `xfce4_desktop` (verified by the startxfce4
-     * check), plus `customization` and `hw_accel` when they succeeded. A terminal-only run
-     * leaves them as they were.
-     */
-    private fun markDesktopComponents(distroId: String, steps: InstallSteps, customOk: Boolean, hwOk: Boolean) {
-        if (!steps.markDesktopComponents) return
-        StateManager.setComponentInstalled(appCtx, distroId, UbuntuDesktop.COMPONENT_ID, true)
-        if (hwOk) {
-            StateManager.setComponentInstalled(appCtx, distroId, "hw_accel", true)
-        }
-        if (customOk) {
-            StateManager.setComponentInstalled(appCtx, distroId, "customization", true)
-        }
     }
 
     /**
@@ -972,6 +957,38 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             InstallKind.TERMINAL -> R.string.install_notif_terminal
             InstallKind.TERMINAL_AND_DESKTOP -> R.string.install_notif_terminal_desktop
             InstallKind.DESKTOP_ADD_ON -> R.string.install_notif_desktop_addon
+        }
+
+        /**
+         * Right before the family step: a run that installs the desktop marks it incomplete
+         * ([UbuntuDesktop.markIncomplete]). Only [recordDesktopComponents] clears that, so a
+         * run that fails after dpkg unpacked startxfce4, is cancelled or dies stays incomplete.
+         */
+        internal fun beforeFamilyStep(ctx: Context, distroId: String, steps: InstallSteps) {
+            if (steps.markDesktopIncomplete) UbuntuDesktop.markIncomplete(ctx, distroId)
+        }
+
+        /**
+         * Desktop component flags after a successful run that installed the desktop
+         * ([InstallSteps.markDesktopComponents]): `xfce4_desktop` (verified by the startxfce4
+         * check; clears the incomplete marker), plus `customization` and `hw_accel` when they
+         * succeeded. A terminal-only run leaves them as they were.
+         */
+        internal fun recordDesktopComponents(
+            ctx: Context,
+            distroId: String,
+            steps: InstallSteps,
+            customOk: Boolean,
+            hwOk: Boolean,
+        ) {
+            if (!steps.markDesktopComponents) return
+            UbuntuDesktop.markInstalled(ctx, distroId)
+            if (hwOk) {
+                StateManager.setComponentInstalled(ctx, distroId, "hw_accel", true)
+            }
+            if (customOk) {
+                StateManager.setComponentInstalled(ctx, distroId, "customization", true)
+            }
         }
 
         /** CUSTOM phase detail: desktop theming, or the shell setup of a terminal-only run. */

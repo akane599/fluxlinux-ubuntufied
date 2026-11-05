@@ -204,16 +204,20 @@ object DesktopLauncher {
                     // H4: never start (and re-mount) a rootfs being uninstalled.
                     val installed = !com.ivarna.fluxlinux.core.terminal.UninstallSessionFactory
                         .isChrootUninstalling(path) && TerminalLauncher.isChrootInstalled(path)
-                    // Flag first; the su probe only when it is unset (it also heals the flag).
-                    val desktopOk = !installed || !needsDesktopCheck ||
-                        UbuntuDesktop.isInstalled(app, distroId) || UbuntuDesktop.probe(app, distroId)
+                    // Root answered the rootfs probe, so the desktop check may ask it too
+                    // (it also heals the stored flag on a conclusive answer).
+                    val desktop = if (installed && needsDesktopCheck) {
+                        UbuntuDesktop.detect(app, distroId, mayAskRoot = true)
+                    } else {
+                        DesktopDetection.INSTALLED
+                    }
                     main.post {
                         if (!installed) {
                             startInFlight = false
                             toast(app, "Chroot not installed. Complete install first.")
                             finishStart(app, distroId, false, "Chroot not installed", onResult)
-                        } else if (!desktopOk) {
-                            val msg = app.getString(R.string.desktop_install_first)
+                        } else if (!desktop.isInstalled) {
+                            val msg = app.getString(desktopMissingMessage(desktop))
                             toast(app, msg)
                             finishStart(app, distroId, false, msg, onResult)
                         } else {
@@ -227,13 +231,17 @@ object DesktopLauncher {
                 // prepareHost answers on main: the rootfs file checks run on a worker thread.
                 Thread {
                     val installed = TerminalLauncher.isProotInstalled(app, prootName)
-                    val desktopOk = !installed || !needsDesktopCheck || UbuntuDesktop.isInstalled(app, distroId)
+                    val desktop = if (installed && needsDesktopCheck) {
+                        UbuntuDesktop.detect(app, distroId, mayAskRoot = false)
+                    } else {
+                        DesktopDetection.INSTALLED
+                    }
                     main.post {
                         if (!installed) {
                             toast(app, "Distro not installed. Complete onboarding first.")
                             finishStart(app, distroId, false, "Distro not installed", onResult)
-                        } else if (!desktopOk) {
-                            val msg = app.getString(R.string.desktop_install_first)
+                        } else if (!desktop.isInstalled) {
+                            val msg = app.getString(desktopMissingMessage(desktop))
                             toast(app, msg)
                             finishStart(app, distroId, false, msg, onResult)
                         } else {
@@ -524,6 +532,11 @@ object DesktopLauncher {
         val t = line.trim()
         return t == GUEST_READY_MARKER || t == "FLUXLINUX_DESKTOP_READY"
     }
+
+    /** Why an Ubuntu desktop start is refused: an unfinished install, or none at all. */
+    internal fun desktopMissingMessage(detection: DesktopDetection): Int =
+        if (detection == DesktopDetection.INCOMPLETE) R.string.desktop_install_incomplete
+        else R.string.desktop_install_first
 
     private fun deliverStartResult(onResult: ((Boolean) -> Unit)?, ok: Boolean) {
         if (startResultDelivered.compareAndSet(false, true)) {

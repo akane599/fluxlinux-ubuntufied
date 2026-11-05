@@ -220,14 +220,23 @@ object ChrootDetection {
         // Avoid blocking main thread
         if (Looper.myLooper() == Looper.getMainLooper()) return null
         return try {
-            val cap = RootShell.captureResult(
-                "if [ -e '$xfce' ] || [ -e '$xfceSbin' ]; then echo YES; else echo NO; fi",
-                timeoutMs = 8_000L
-            )
+            val cap = RootShell.captureResult(xfceProbeCommand(chrootPath), timeoutMs = 8_000L)
             parseXfceProbe(cap.exitCode, cap.stdout)
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * Root command behind [probeXfce]: YES when `startxfce4` is in usr/bin or usr/sbin. A
+     * symlink counts (`-L`): an absolute guest link does not resolve on the host, and a "NO"
+     * clears the stored desktop flag.
+     */
+    internal fun xfceProbeCommand(chrootPath: String): String {
+        val bin = "$chrootPath/usr/bin/startxfce4"
+        val sbin = "$chrootPath/usr/sbin/startxfce4"
+        return "if [ -e '$bin' ] || [ -L '$bin' ] || [ -e '$sbin' ] || [ -L '$sbin' ]; " +
+            "then echo YES; else echo NO; fi"
     }
 
     /** YES / NO line of the [probeXfce] root command; null when it did not run cleanly. */

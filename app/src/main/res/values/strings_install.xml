@@ -14,6 +14,8 @@
 
     <!-- DesktopLauncher: Ubuntu without the optional XFCE desktop. -->
     <string name="desktop_install_first">Install the desktop first (Home → Desktop)</string>
+    <!-- DesktopLauncher: the last desktop install failed or was cancelled before it finished. -->
+    <string name="desktop_install_incomplete">The desktop install didn\'t finish. Retry it from Home → Desktop.</string>
 
     <!-- Install wizard (InstallConfigScreen, "Re-run Ubuntu setup"). -->
     <string name="install_cfg_cta_terminal">Set up terminal</string>
