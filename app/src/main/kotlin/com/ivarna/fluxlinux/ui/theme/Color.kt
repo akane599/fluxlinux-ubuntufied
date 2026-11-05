@@ -10,10 +10,13 @@ import androidx.compose.ui.graphics.Color
 
 /** The spot inks, as printed on dark stock. Light-stock variants live in [LightInks]. */
 object Riso {
-    /** Dark stock: the app ground and the terminal's background. */
-    val Stock = Color(0xFF0F1326)
-    /** One step under the stock: the terminal well and scrims. */
-    val StockDeep = Color(0xFF0A0D1C)
+    /**
+     * Dark stock: black paper (the user's choice on the phone: the blue-black stock read as
+     * blue/green). The inks print on it unchanged; surfaces step up in neutral greys.
+     */
+    val Stock = Color(0xFF000000)
+    /** Under the stock: the same black (kept as a name for wells and scrims). */
+    val StockDeep = Color(0xFF000000)
     /** Light stock (light scheme ground). Cool white, never cream. */
     val StockLight = Color(0xFFEFF1F5)
 
@@ -57,7 +60,7 @@ object Riso {
  * The terminal's own background: pure black (the user's choice), so the shell reads as a
  * screen on OLED rather than as tinted stock. The chrome around it keeps the stock.
  */
-val TerminalBackground = Color(0xFF000000)
+val TerminalBackground = Riso.Stock
 
 // ─── Legacy names ─────────────────────────────────────────────────────────────
 // Older screens still import these; they now resolve to the riso inks so nothing drifts
@@ -65,7 +68,7 @@ val TerminalBackground = Color(0xFF000000)
 
 val FluxAccentCyan = Riso.FederalTint
 val FluxAccentMagenta = Riso.Pink
-val FluxSwitchUncheckedTrack = Color(0xFF242C50)
+val FluxSwitchUncheckedTrack = Color(0xFF24262B)
 
 /** Swatches previewing the XFCE desktop themes in setup: content, not app chrome. */
 val DesktopThemeSwatchDark = Color(0xFF1E1E24)

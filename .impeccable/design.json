@@ -7,119 +7,119 @@
       "stock": {
         "role": "neutral",
         "displayName": "Dark Stock",
-        "canonical": "#0F1326",
+        "canonical": "#000000",
         "oklch": "oklch(19.4% 0.039 273.3)",
         "tonalRamp": [
-          "#0A0D1C",
-          "#0F1326",
-          "#131830",
-          "#171D38",
-          "#1D2443",
-          "#242C50",
-          "#2B3460",
-          "#2E3760"
+          "#000000",
+          "#000000",
+          "#0F1012",
+          "#151619",
+          "#1C1D21",
+          "#24262B",
+          "#2D2F35",
+          "#2A2C33"
         ]
       },
       "stock-deep": {
         "role": "neutral",
         "displayName": "Deep Stock",
-        "canonical": "#0A0D1C",
+        "canonical": "#000000",
         "oklch": "oklch(16.5% 0.032 273.8)",
         "tonalRamp": [
-          "#0A0D1C",
-          "#0F1326",
-          "#131830",
-          "#171D38",
-          "#1D2443",
-          "#242C50",
-          "#2B3460",
-          "#2E3760"
+          "#000000",
+          "#000000",
+          "#0F1012",
+          "#151619",
+          "#1C1D21",
+          "#24262B",
+          "#2D2F35",
+          "#2A2C33"
         ]
       },
       "surface-container-low": {
         "role": "neutral",
         "displayName": "Printed Tint 1",
-        "canonical": "#131830",
+        "canonical": "#0F1012",
         "oklch": "oklch(21.8% 0.048 273.0)",
         "tonalRamp": [
-          "#0A0D1C",
-          "#0F1326",
-          "#131830",
-          "#171D38",
-          "#1D2443",
-          "#242C50",
-          "#2B3460",
-          "#2E3760"
+          "#000000",
+          "#000000",
+          "#0F1012",
+          "#151619",
+          "#1C1D21",
+          "#24262B",
+          "#2D2F35",
+          "#2A2C33"
         ]
       },
       "surface-container": {
         "role": "neutral",
         "displayName": "Printed Tint 2",
-        "canonical": "#171D38",
+        "canonical": "#151619",
         "oklch": "oklch(24.0% 0.052 272.5)",
         "tonalRamp": [
-          "#0A0D1C",
-          "#0F1326",
-          "#131830",
-          "#171D38",
-          "#1D2443",
-          "#242C50",
-          "#2B3460",
-          "#2E3760"
+          "#000000",
+          "#000000",
+          "#0F1012",
+          "#151619",
+          "#1C1D21",
+          "#24262B",
+          "#2D2F35",
+          "#2A2C33"
         ]
       },
       "surface-container-high": {
         "role": "neutral",
         "displayName": "Printed Tint 3",
-        "canonical": "#1D2443",
+        "canonical": "#1C1D21",
         "oklch": "oklch(27.1% 0.058 272.4)",
         "tonalRamp": [
-          "#0A0D1C",
-          "#0F1326",
-          "#131830",
-          "#171D38",
-          "#1D2443",
-          "#242C50",
-          "#2B3460",
-          "#2E3760"
+          "#000000",
+          "#000000",
+          "#0F1012",
+          "#151619",
+          "#1C1D21",
+          "#24262B",
+          "#2D2F35",
+          "#2A2C33"
         ]
       },
       "surface-container-highest": {
         "role": "neutral",
         "displayName": "Printed Tint 4",
-        "canonical": "#242C50",
+        "canonical": "#24262B",
         "oklch": "oklch(30.5% 0.066 272.5)",
         "tonalRamp": [
-          "#0A0D1C",
-          "#0F1326",
-          "#131830",
-          "#171D38",
-          "#1D2443",
-          "#242C50",
-          "#2B3460",
-          "#2E3760"
+          "#000000",
+          "#000000",
+          "#0F1012",
+          "#151619",
+          "#1C1D21",
+          "#24262B",
+          "#2D2F35",
+          "#2A2C33"
         ]
       },
       "surface-bright": {
         "role": "neutral",
         "displayName": "Printed Tint 5",
-        "canonical": "#2B3460",
+        "canonical": "#2D2F35",
         "oklch": "oklch(34.0% 0.078 272.9)",
         "tonalRamp": [
-          "#0A0D1C",
-          "#0F1326",
-          "#131830",
-          "#171D38",
-          "#1D2443",
-          "#242C50",
-          "#2B3460",
-          "#2E3760"
+          "#000000",
+          "#000000",
+          "#0F1012",
+          "#151619",
+          "#1C1D21",
+          "#24262B",
+          "#2D2F35",
+          "#2A2C33"
         ]
       },
       "outline-variant": {
         "role": "neutral",
         "displayName": "Quiet Divider",
-        "canonical": "#2E3760",
+        "canonical": "#2A2C33",
         "oklch": "oklch(35.0% 0.072 272.8)",
         "tonalRamp": [
           "#06091C",
@@ -693,7 +693,7 @@
       "refersTo": "list-row",
       "description": "Full-width row on the stock under a section label; the whole row is the target.",
       "html": "<div class=\"ds-list\"><div class=\"ds-section\">Recovery</div><button class=\"ds-row\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 6h12v12H6z\" fill=\"currentColor\"/></svg><span class=\"ds-row-text\"><span class=\"ds-row-title\">Stop everything</span><span class=\"ds-row-sub\">Close terminals and stop the desktop</span></span><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z\" fill=\"currentColor\"/></svg></button></div>",
-      "css": ".ds-list { background: #0F1326; width: 360px; } .ds-section { padding: 24px 16px 8px; color: #A9BCF2; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; } .ds-row { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 12px 16px; background: transparent; color: #B4BCD3; border: none; text-align: left; cursor: pointer; } .ds-row:hover { background: #131830; } .ds-row:focus-visible { outline: 2px solid #A9BCF2; outline-offset: -2px; } .ds-row-text { display: flex; flex-direction: column; flex: 1; } .ds-row-title { color: #E9ECF2; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; } .ds-row-sub { color: #B4BCD3; font: 400 12px/17px Archivo, sans-serif; letter-spacing: 0.2px; }"
+      "css": ".ds-list { background: #000000; width: 360px; } .ds-section { padding: 24px 16px 8px; color: #A9BCF2; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; } .ds-row { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 12px 16px; background: transparent; color: #B4BCD3; border: none; text-align: left; cursor: pointer; } .ds-row:hover { background: #0F1012; } .ds-row:focus-visible { outline: 2px solid #A9BCF2; outline-offset: -2px; } .ds-row-text { display: flex; flex-direction: column; flex: 1; } .ds-row-title { color: #E9ECF2; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; } .ds-row-sub { color: #B4BCD3; font: 400 12px/17px Archivo, sans-serif; letter-spacing: 0.2px; }"
     },
     {
       "name": "Printed Field",
@@ -709,7 +709,7 @@
       "refersTo": "switch-on",
       "description": "FluxSwitch: squared track and thumb, red when on, Federal hairline when off.",
       "html": "<label class=\"ds-switch\"><input type=\"checkbox\" checked><span class=\"ds-track\"><span class=\"ds-thumb\"></span></span></label>",
-      "css": ".ds-switch { display: inline-flex; padding: 8px; cursor: pointer; } .ds-switch input { position: absolute; opacity: 0; } .ds-track { position: relative; width: 52px; height: 32px; box-sizing: border-box; background: #242C50; border: 1px solid #5D78C4; border-radius: 4px; transition: background 220ms cubic-bezier(0.2, 0, 0, 1), border-color 220ms; } .ds-thumb { position: absolute; top: 7px; left: 8px; width: 16px; height: 16px; background: #5D78C4; border-radius: 2px; transition: all 260ms cubic-bezier(0.2, 0, 0, 1); } .ds-switch input:checked + .ds-track { background: #F15060; border-color: #F15060; } .ds-switch input:checked + .ds-track .ds-thumb { top: 4px; left: 24px; width: 22px; height: 22px; background: #14193A; } .ds-switch input:focus-visible + .ds-track { outline: 2px solid #A9BCF2; outline-offset: 2px; }"
+      "css": ".ds-switch { display: inline-flex; padding: 8px; cursor: pointer; } .ds-switch input { position: absolute; opacity: 0; } .ds-track { position: relative; width: 52px; height: 32px; box-sizing: border-box; background: #24262B; border: 1px solid #5D78C4; border-radius: 4px; transition: background 220ms cubic-bezier(0.2, 0, 0, 1), border-color 220ms; } .ds-thumb { position: absolute; top: 7px; left: 8px; width: 16px; height: 16px; background: #5D78C4; border-radius: 2px; transition: all 260ms cubic-bezier(0.2, 0, 0, 1); } .ds-switch input:checked + .ds-track { background: #F15060; border-color: #F15060; } .ds-switch input:checked + .ds-track .ds-thumb { top: 4px; left: 24px; width: 22px; height: 22px; background: #14193A; } .ds-switch input:focus-visible + .ds-track { outline: 2px solid #A9BCF2; outline-offset: 2px; }"
     },
     {
       "name": "Status Marks",
@@ -717,12 +717,12 @@
       "refersTo": "list-row",
       "description": "State told by form first: filled disc running, ring idle, dashed ring working, half disc held, struck ring failed.",
       "html": "<div class=\"ds-marks\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Running\"><circle cx=\"5\" cy=\"5\" r=\"5\" fill=\"#3FD98A\"/></svg><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Idle\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#B4BCD3\" stroke-width=\"2\"/></svg><svg class=\"ds-working\" width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Working\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#A9BCF2\" stroke-width=\"2\" stroke-dasharray=\"3.6 2.4\"/></svg><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Held\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#FFE800\" stroke-width=\"2\"/><path d=\"M5 0a5 5 0 0 0 0 10z\" fill=\"#FFE800\"/></svg><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Failed\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#FF48B0\" stroke-width=\"2\"/><path d=\"M2 8 8 2\" stroke=\"#FF48B0\" stroke-width=\"2\"/></svg></div>",
-      "css": ".ds-marks { display: flex; gap: 16px; padding: 16px; background: #0F1326; } .ds-working { animation: ds-spin 1400ms linear infinite; } @keyframes ds-spin { to { transform: rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .ds-working { animation: none; } }"
+      "css": ".ds-marks { display: flex; gap: 16px; padding: 16px; background: #000000; } .ds-working { animation: ds-spin 1400ms linear infinite; } @keyframes ds-spin { to { transform: rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .ds-working { animation: none; } }"
     }
   ],
   "narrative": {
     "northStar": "The Two-Ink Zine",
-    "overview": "AkaTerminal is printed, not rendered. Every colour on screen is a risograph spot ink or the stock it is printed on: a blue-black dark stock, a Federal Blue field for the shell, Bright Red (aka) for the one primary action, and the plum overprint where red lands on blue to mark what is selected. Hierarchy comes from tone and ink, not from light and shadow. The terminal sits full bleed on the stock, so the terminal and the chrome read as one sheet.\n\nThe density is that of a tool used one-handed at night for long sessions. Rows are full width on the stock and grouped by small labels, not boxed in cards. Large printed fields (the drawer header, the Ubuntu status sheet, onboarding plates) carry a faint fixed-seed grain; nothing else does. The one signature motion is misregistration that registers: primary and selected elements rest with their second plate 2dp out of register, and a press settles the plates together with one damped overshoot. Reduced motion cuts instantly.\n\nThe system is Material 3 underneath (drawer, dialogs, radio buttons, progress, snackbars, system Back) restyled with the inks, a cut-paper shape scale and one type family. It ships dark only; the light scheme (cool white stock, deepened inks) is kept in the tokens so a later switch stays cheap. Dynamic (wallpaper) colour is off: the inks are fixed.",
+    "overview": "AkaTerminal is printed, not rendered. Every colour on screen is a risograph spot ink or the stock it is printed on: a black stock (black paper, the user's choice), a Federal Blue field for the shell, Bright Red (aka) for the one primary action, and the plum overprint where red lands on blue to mark what is selected. Hierarchy comes from tone and ink, not from light and shadow. The terminal sits full bleed on the stock, so the terminal and the chrome read as one sheet.\n\nThe density is that of a tool used one-handed at night for long sessions. Rows are full width on the stock and grouped by small labels, not boxed in cards. Large printed fields (the drawer header, the Ubuntu status sheet, onboarding plates) carry a faint fixed-seed grain; nothing else does. The one signature motion is misregistration that registers: primary and selected elements rest with their second plate 2dp out of register, and a press settles the plates together with one damped overshoot. Reduced motion cuts instantly.\n\nThe system is Material 3 underneath (drawer, dialogs, radio buttons, progress, snackbars, system Back) restyled with the inks, a cut-paper shape scale and one type family. It ships dark only; the light scheme (cool white stock, deepened inks) is kept in the tokens so a later switch stays cheap. Dynamic (wallpaper) colour is off: the inks are fixed.",
     "keyCharacteristics": [
       "Spot inks on dark stock; no greys, no gradients, no glass.",
       "One primary ink (Red) and one selection ink (overprint plum), both printed as misregistered plates.",

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Android 12+ draws the launch splash from its own attribute, not windowBackground:
-         give it the same blue-black stock (Riso.Stock) so launch doesn't flash pure black. -->
+         give it the black stock (Riso.Stock) so the splash and the first frame match. -->
     <style name="Theme.FluxLinux" parent="android:Theme.Material.NoActionBar">
-        <item name="android:colorBackground">#FF0F1326</item>
-        <item name="android:windowBackground">#FF0F1326</item>
-        <item name="android:windowSplashScreenBackground">#FF0F1326</item>
+        <item name="android:colorBackground">#FF000000</item>
+        <item name="android:windowBackground">#FF000000</item>
+        <item name="android:windowSplashScreenBackground">#FF000000</item>
     </style>
 </resources>

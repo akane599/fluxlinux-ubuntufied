@@ -1,8 +1,5 @@
 package com.ivarna.fluxlinux.ui.screens
 
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.graphics.toArgb
-import android.app.Activity
 import android.content.Context
 import android.graphics.Typeface
 import android.system.Os
@@ -215,23 +212,6 @@ fun TerminalScreen(
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val activeIndex by FluxTerminalSessionManager.activeIndex.collectAsState()
 
-    // Under a live terminal the status bar is black like the terminal itself. Android 15+
-    // draws edge to edge (the column's black shows through); older releases paint the window's
-    // status bar colour, which the theme sets to the stock, so swap it while a session shows.
-    val hostView = LocalView.current
-    val terminalShown = activeIndex >= 0
-    DisposableEffect(terminalShown) {
-        val window = (hostView.context as? Activity)?.window
-        if (!terminalShown || window == null) return@DisposableEffect onDispose {}
-        @Suppress("DEPRECATION")
-        val previous = window.statusBarColor
-        @Suppress("DEPRECATION")
-        window.statusBarColor = TerminalBackground.toArgb()
-        onDispose {
-            @Suppress("DEPRECATION")
-            window.statusBarColor = previous
-        }
-    }
     val sessionRevision by FluxTerminalSessionManager.revision.collectAsState()
     val titles = remember(sessionRevision) { FluxTerminalSessionManager.titles() }
     val sessions = remember(sessionRevision) { FluxTerminalSessionManager.sessions() }

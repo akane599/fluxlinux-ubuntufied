@@ -2,14 +2,14 @@
 name: AkaTerminal
 description: Ubuntu on Android, terminal first, printed as a two-ink risograph sheet.
 colors:
-  stock: "#0F1326"
-  stock-deep: "#0A0D1C"
-  surface-container-low: "#131830"
-  surface-container: "#171D38"
-  surface-container-high: "#1D2443"
-  surface-container-highest: "#242C50"
-  surface-bright: "#2B3460"
-  outline-variant: "#2E3760"
+  stock: "#000000"
+  stock-deep: "#000000"
+  surface-container-low: "#0F1012"
+  surface-container: "#151619"
+  surface-container-high: "#1C1D21"
+  surface-container-highest: "#24262B"
+  surface-bright: "#2D2F35"
+  outline-variant: "#2A2C33"
   federal: "#3255A4"
   federal-field: "#1B2A5C"
   federal-field-high: "#243670"
@@ -216,7 +216,7 @@ components:
 
 **Creative North Star: "The Two-Ink Zine"**
 
-AkaTerminal is printed, not rendered. Every colour on screen is a risograph spot ink or the stock it is printed on: a blue-black dark stock, a Federal Blue field for the shell, Bright Red (aka) for the one primary action, and the plum overprint where red lands on blue to mark what is selected. Hierarchy comes from tone and ink, not from light and shadow. The terminal sits full bleed on pure black (the user's choice: on OLED the shell should read as a screen, not tinted paper); the chrome around it stays on the stock.
+AkaTerminal is printed, not rendered. Every colour on screen is a risograph spot ink or the stock it is printed on: a black stock (black paper, the user's choice), a Federal Blue field for the shell, Bright Red (aka) for the one primary action, and the plum overprint where red lands on blue to mark what is selected. Hierarchy comes from tone and ink, not from light and shadow. The terminal sits full bleed on pure black (the user's choice: on OLED the shell should read as a screen, not tinted paper); the chrome around it stays on the stock.
 
 The density is that of a tool used one-handed at night for long sessions. Rows are full width on the stock and grouped by small labels, not boxed in cards. Large printed fields (the drawer header, the Ubuntu status sheet, onboarding plates) carry a faint fixed-seed grain; nothing else does. The one signature motion is misregistration that registers: primary and selected elements rest with their second plate 2dp out of register, and a press settles the plates together with one damped overshoot. Reduced motion cuts instantly.
 
@@ -232,7 +232,7 @@ The system is Material 3 underneath (drawer, dialogs, radio buttons, progress, s
 
 ## Colors
 
-A two-ink riso sheet: blue-black stock, Federal Blue fields, Bright Red for action, and three state inks that always travel with a drawn mark.
+A two-ink riso sheet: black stock, Federal Blue fields, Bright Red for action, and three state inks that always travel with a drawn mark.
 
 ### Primary
 - **Bright Red, aka** (`red`): the brand ink. Primary action fills (PlatedButton, New session, switch-on track), the "Aka" half of the wordmark, text buttons and links. Text on it is Ink Text, never white.
@@ -254,7 +254,7 @@ A two-ink riso sheet: blue-black stock, Federal Blue fields, Bright Red for acti
 ### Neutral
 - **Dark Stock** (`stock`): the ground of every screen except the terminal itself, which is pure black (`TerminalBackground`).
 - **Deep Stock** (`stock-deep`): one step under the stock: the terminal well, scrims, lowest container.
-- **Printed blue-black tints** (`surface-container-low` through `surface-bright`): surfaces stepping up in tone for dialogs, menus and sheets.
+- **Neutral grey tints** (`surface-container-low` through `surface-bright`): surfaces stepping up in tone for dialogs, menus and sheets.
 - **Outline Variant** (`outline-variant`): quiet dividers on stock.
 - **Cool Bone** (`bone`): body and title text on stock and on the Federal field.
 - **Bone Muted** (`bone-muted`): supporting text on stock (7:1 or better).
@@ -303,7 +303,7 @@ The terminal is full bleed on black; the extra-keys field sits under it at the b
 
 ## Elevation & Depth
 
-Flat. There are no drop shadows and Material's tonal elevation tint is disabled (`surfaceTint` equals the ground). Depth comes from printing: the stock, a printed blue-black tint step for dialogs and menus, and the solid Federal field for the shell. The only offset form is the misregistered second plate, which is ink, not light.
+Flat. There are no drop shadows and Material's tonal elevation tint is disabled (`surfaceTint` equals the ground). Depth comes from printing: the stock, a neutral grey tint step for dialogs and menus, and the solid Federal field for the shell. The only offset form is the misregistered second plate, which is ink, not light.
 
 ### Named Rules
 **The Printed Depth Rule.** Lift a surface by changing its ink or tint step, never with a shadow or a glow.

@@ -18,8 +18,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 /**
- * Dark stock (the scene: a phone at night, long sessions). Surfaces step up in printed
- * blue-black tints, so hierarchy comes from tone. Red is primary, the Federal tint is
+ * Dark stock (the scene: a phone at night, long sessions): black paper. Surfaces step up in
+ * neutral greys, so hierarchy comes from tone and the inks stay the only colour. Red is primary, the Federal tint is
  * secondary (older screens use `secondary` for accent text, so it must read as text),
  * Yellow is tertiary, Fluorescent Pink is error.
  */
@@ -41,7 +41,7 @@ private val DarkColorScheme = darkColorScheme(
     onBackground = Riso.Bone,
     surface = Riso.Stock,
     onSurface = Riso.Bone,
-    surfaceVariant = Color(0xFF1D2443),
+    surfaceVariant = Color(0xFF1C1D21),
     onSurfaceVariant = Riso.BoneMuted,
     surfaceTint = Riso.Stock,
     inverseSurface = Riso.Bone,
@@ -51,15 +51,15 @@ private val DarkColorScheme = darkColorScheme(
     errorContainer = Color(0xFF55123F),
     onErrorContainer = Color(0xFFFFD6EA),
     outline = Riso.FederalLine,
-    outlineVariant = Color(0xFF2E3760),
+    outlineVariant = Color(0xFF2A2C33),
     scrim = Color(0xFF000000),
-    surfaceBright = Color(0xFF2B3460),
+    surfaceBright = Color(0xFF2D2F35),
     surfaceDim = Riso.StockDeep,
     surfaceContainerLowest = Riso.StockDeep,
-    surfaceContainerLow = Color(0xFF131830),
-    surfaceContainer = Color(0xFF171D38),
-    surfaceContainerHigh = Color(0xFF1D2443),
-    surfaceContainerHighest = Color(0xFF242C50),
+    surfaceContainerLow = Color(0xFF0F1012),
+    surfaceContainer = Color(0xFF151619),
+    surfaceContainerHigh = Color(0xFF1C1D21),
+    surfaceContainerHighest = Color(0xFF24262B),
 )
 
 /** Light stock: cool white, the same inks deepened where they carry text. */
