@@ -16,8 +16,8 @@ enum class UbuntuRuntimeMode(val prefValue: String, val distroId: String) {
 }
 
 /**
- * Single source of truth for which Ubuntu install the app's Ubuntu-first surfaces (Home,
- * auto-start, onboarding, terminal default tab, Files) act on.
+ * Single source of truth for which Ubuntu install the app's Ubuntu-first surfaces (the
+ * Ubuntu page, onboarding, the terminal's default session, the desktop, Files) act on.
  *
  * PRoot (`ubuntu`) and chroot (`ubuntu_chroot`) are separate rootfs trees that can coexist;
  * switching the mode never touches either install. Both log in as [UBUNTU_GUEST_USER]; older

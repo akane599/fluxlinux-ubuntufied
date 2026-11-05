@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Android 12+ draws the launch splash from its own attribute, not windowBackground:
-         give it the black stock (Riso.Stock) so the splash and the first frame match. -->
+         give it the same pure black (#000000, TerminalBackground in ui/theme/Color.kt) so
+         the splash and the first frame match. No values-night-v31 copy: both modes use this. -->
     <style name="Theme.FluxLinux" parent="android:Theme.Material.NoActionBar">
         <item name="android:colorBackground">#FF000000</item>
         <item name="android:windowBackground">#FF000000</item>

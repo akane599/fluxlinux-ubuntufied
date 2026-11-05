@@ -5,7 +5,7 @@ import androidx.annotation.WorkerThread
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
 
-/** Install state of one Ubuntu install as the Ubuntu-first surfaces (Home, auto-start) see it. */
+/** Install state of one Ubuntu install as the Ubuntu page (Home tab) sees it. */
 enum class UbuntuInstallCheck {
     /** Chroot mode: the root probe or the chroot detection has not answered yet. */
     CHECKING,

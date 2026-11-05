@@ -33,7 +33,11 @@ object AkaMotion {
     val Decelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
     val Standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
-    /** The horizon rising (drawer opening, a session selected): no overshoot, ~400 ms. */
+    /**
+     * The horizon rising wherever it animates: the current session as the drawer opens, the
+     * selected option ([com.ivarna.fluxlinux.ui.components.aka.akaSelection]) and the Ubuntu
+     * page's header once Ubuntu is ready. No overshoot, ~400 ms.
+     */
     fun <T> rise(): SpringSpec<T> = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 180f)
 
     /** A quicker settle without overshoot (thumbs, sheets). */
@@ -67,7 +71,9 @@ fun rememberReducedMotion(): Boolean {
  * the ends and [glow] (shu) at its brightest point in the middle, with the sunset light
  * fading up from it. [risen] (0..1) grows the line out from the centre and lifts the glow, so
  * animating it reads as the sun's last light coming up. Drawn over the content, inside the
- * bounds; only for the current item (the selected session, the wordmark), never as decoration.
+ * bounds; only on the one current thing in its context, never on idle siblings or as
+ * decoration. DESIGN.md's One Horizon Rule lists where it goes (the wordmark, the current
+ * session, the selected option or segment, the Ubuntu card once ready, the welcome terminal).
  */
 fun Modifier.horizon(
     line: Color,

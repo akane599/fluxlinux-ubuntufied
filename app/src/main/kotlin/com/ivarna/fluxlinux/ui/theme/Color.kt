@@ -9,11 +9,14 @@ import androidx.compose.ui.graphics.Color
 // the one accent, for primary actions and the horizon line; state inks (green, yellow, pink)
 // always come with a mark form.
 
-/** The traditional colours, as dyed for the dark (night) scheme. Light (dawn) values live in [LightInks]. */
+/**
+ * The traditional colours, as dyed for the dark (night) scheme. The light (dawn) values are
+ * the light colour scheme and inks in Theme.kt.
+ */
 object Iro {
     /** 墨 sumi: the ground. Black with an indigo cast; the terminal itself is pure black. */
     val Sumi = Color(0xFF05060B)
-    /** 褐色 kachi-iro: the darkest indigo, the chrome under the terminal (keys bar, drawer). */
+    /** 褐色 kachi-iro: the darkest indigo, the chrome (the drawer sheet, a disabled button). */
     val Kachi = Color(0xFF0B0F1E)
     /** One dye up from kachi: grouped blocks, scrolled bars. */
     val Kachi2 = Color(0xFF0F1528)
@@ -23,7 +26,10 @@ object Iro {
     val Konjo = Color(0xFF1B2852)
     /** 縹 hanada: the quiet edge of a container (rows, cards). */
     val Hanada = Color(0xFF2E4377)
-    /** 藍 ai: the control line (switch tracks, key caps, outlined buttons; ≥ 3:1 on sumi). */
+    /**
+     * 藍 ai: the control line (switch tracks, secondary buttons, selected tiles, pressed key
+     * caps; ≥ 3:1 on sumi). Key caps at rest are edged in [Hanada].
+     */
     val Ai = Color(0xFF4A66AA)
     /** 白藍 shiro-ai: indigo that reads as text (labels, links, progress). */
     val ShiroAi = Color(0xFFA3B8EC)

@@ -16,8 +16,8 @@ object LaunchTargets {
     const val PAGE_TERMINAL = "terminal"
 
     /**
-     * Base-install notification: no navigation (onboarding restores itself), but the tap is
-     * not a plain launch, so it never triggers the desktop auto-start.
+     * Base-install notification: no navigation ([Page.NONE], the same as a plain launch),
+     * because onboarding restores its own screen.
      */
     const val PAGE_INSTALL = "install"
 

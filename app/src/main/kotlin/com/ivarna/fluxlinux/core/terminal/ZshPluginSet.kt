@@ -90,7 +90,11 @@ object ZshPluginSet {
         "command-not-found" to "usr/lib/command-not-found",
     )
 
-    /** Present in every block Flux writes; its presence means "already upgraded". */
+    /**
+     * Present in every block Flux writes; its presence means the profile already has the
+     * managed block, which then only gets its plugin list updated when that list is an
+     * unedited earlier one ([PREVIOUS_PLUGIN_LISTS]).
+     */
     const val MARKER = "# flux-zsh-plugins v1"
 
     /**

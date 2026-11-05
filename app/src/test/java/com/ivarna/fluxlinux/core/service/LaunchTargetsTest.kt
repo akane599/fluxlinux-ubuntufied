@@ -40,7 +40,7 @@ class LaunchTargetsTest {
         assertNull(LaunchTargets.callbackDistroId("base_install", "distro_install_", known))
     }
 
-    /** L15: every keep-alive notification names a target page, so a tap is never a plain launch. */
+    /** L15: every keep-alive notification names a target page, so a tap says where it lands. */
     @Test
     fun serviceNotifications_carryTargetPage() {
         for (name in listOf("AppTerminalService", "DesktopSessionService", "BaseInstallService")) {

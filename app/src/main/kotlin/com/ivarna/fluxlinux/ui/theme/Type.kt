@@ -11,11 +11,15 @@ import com.ivarna.fluxlinux.R
 import java.io.File
 
 /**
- * One family, Archivo, ranked by width and weight: the semi-expanded SemiBold cut is the
- * display voice (headlines, titles, the wordmark), calm rather than shouted at night; the
- * normal width sets body and labels. JetBrains Mono is only for
- * code, paths and key caps. Static instances live in res/font (subset to Latin + Latin
- * Extended); see third_party/fonts/README.md for their provenance.
+ * One family, Archivo, ranked by width and weight: the semi-expanded cut is the display voice
+ * (headlines, titles, the wordmark), calm rather than shouted at night; the normal width sets
+ * body and labels. JetBrains Mono is only for code, paths and key caps. Static instances live
+ * in res/font (subset to Latin + Latin Extended); see third_party/fonts/README.md for their
+ * provenance.
+ *
+ * The display cut is a single wght 650 (wdth 112) instance. It is declared as
+ * [FontWeight.SemiBold] (600) because it is the only weight in its family, so every
+ * SemiBold display or title style resolves to it and renders at 650.
  *
  * The families sit behind one switch: the app loads them from res/font; Compose Preview
  * Screenshot Testing (layoutlib, plugin 0.0.1-alpha10) can't retrieve font resources, so in
@@ -88,7 +92,10 @@ private fun text(f: AkaFamilies, weight: FontWeight, size: Int, line: Int, track
     letterSpacing = tracking.sp,
 )
 
-/** Ratio ≈ 1.2 between steps; display tracking tightens as size grows. */
+/**
+ * Steps of about 1.1 to 1.25 (44, 36, 30, 27, 23, 20, 16, 14, 12, 11); display tracking
+ * tightens as size grows.
+ */
 private fun buildTypography(f: AkaFamilies) = Typography(
     displayLarge = display(f, 44, 48, -1.0),
     displayMedium = display(f, 36, 42, -0.7),

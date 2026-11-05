@@ -107,7 +107,10 @@ private val LightColorScheme = lightColorScheme(
  */
 @Immutable
 data class AkaInks(
-    /** The chrome under and beside the terminal: extra-keys bar, drawer sheet, header cards. */
+    /**
+     * The chrome beside the terminal: the drawer sheet, and the sunken fill of a disabled
+     * button. The extra-keys bar sits on [com.ivarna.fluxlinux.ui.theme.TerminalBackground].
+     */
     val chrome: Color,
     val onChrome: Color,
     val onChromeMuted: Color,
@@ -117,7 +120,10 @@ data class AkaInks(
     val tilePressed: Color,
     /** A container's quiet edge. */
     val tileEdge: Color,
-    /** A control's edge (outlined buttons, key caps, switch tracks): ≥ 3:1 on the ground. */
+    /**
+     * A control's edge (secondary buttons, selected tiles, switch tracks, key caps while
+     * pressed; at rest they take [tileEdge]): ≥ 3:1 on the ground.
+     */
     val controlLine: Color,
     /** Primary fills: akane, its pressed dye and the text on it. */
     val primaryFill: Color,
