@@ -4,16 +4,16 @@ _State of ongoing work (Current effort), baselines, the append-only decision log
 
 ## Current effort: terminal-first app (on top of the Ubuntu chroot runtime)
 _Updated: 2026-11-05 · rewrite this section, don't append_
-- **Goal:** the terminal is the product: the app opens on it, XFCE is optional (setup switch off by default, "Install desktop" later), links open on tap, a Paste key, Hold wakelock, and a refined dark + cream design. Stacked on the chroot work: `feat/ubuntu-chroot` ([PR #1](https://github.com/akane599/fluxlinux-ubuntufied/pull/1)) → `feat/terminal-first` (PR against `feat/ubuntu-chroot`).
-- **Done:** both branches build; on `feat/terminal-first` 947 unit tests, lint (0 errors), screenshots and shell tests are green. Emulator QA (UI only, staged fake rootfs) covered onboarding, terminal-first launch, the empty/failed terminal state, the Ubuntu page and the desktop add-on confirm/failed states.
+- **Goal:** the terminal is the product: the app opens on it, XFCE is optional (setup switch off by default, "Install desktop" later), links open on tap, a Paste key, Hold wakelock, a refined dark + cream design; the chroot Ubuntu (the user's daily runtime, KernelSU) behaves like Termux for full-screen programs. Stacked branches: `feat/ubuntu-chroot` ([PR #1](https://github.com/akane599/fluxlinux-ubuntufied/pull/1), kept as a checkpoint) → `feat/terminal-first` ([PR #2](https://github.com/akane599/fluxlinux-ubuntufied/pull/2), base `feat/ubuntu-chroot`).
+- **Done:** PR #2 is open with the feature commits. Two fixes from the user's phone reports are committed locally and **not pushed** (`9e96e84` scroll vs drawer drag, `add617e` KernelSU `su -W` so codex doesn't freeze until a key press). 947 unit tests, lint 0 errors, screenshots and shell tests green at `add617e`. Debug APK of `add617e` sent to the phone (`akadroid`) via Taildrop for the user to install and test.
 - **Next:**
-  - [ ] On the SM-S938B (user taps, monitor via adb): scrolling up/down with sideways drift keeps scrolling and never opens the drawer, in the chroot Ubuntu `codex` (and htop/vim) open and exit without waiting for a key (`ls -l /proc/$$/fd/0` shows a /dev/pts path, not a KernelSU wrapper), links open in the browser (also inside Claude Code / Codex full screen), Paste key, More… menu, Hold wakelock from the notification and the drawer (`dumpsys power | grep FluxLinux`), an existing XFCE install shows Start/Open/Stop, the add-on Installing row (Show log / Cancel).
-  - [ ] Chroot checks still open from PR #1: grant root in KernelSU, onboarding → Chroot (now terminal-only by default), `whoami` = akane, network, `~/storage`, audio, Files → "Ubuntu"; a PRoot flux → akane migration from a v2.1.8 install.
-  - [ ] Merge PR #1, then the terminal-first PR; release v2.2.0 (`.claude/rules/release.md`).
+  - [ ] Wait for the user's phone result: codex/htop open and exit without a key press in the chroot (`ls -l /proc/$$/fd/0` → a `/dev/pts` path), scroll keeps going with sideways drift, drawer from the edge strip / ☰. On OK: `git push` both commits to PR #2; otherwise collect `logcat` / `~/.codex/log/codex-tui.log` and fix.
+  - [ ] Still unverified on the device: links open in the browser (also inside Claude Code / Codex), Paste key, More… menu, Hold wakelock (`dumpsys power | grep FluxLinux`), an existing XFCE install shows Start/Open/Stop, the add-on Installing row. A PRoot flux → akane migration from a v2.1.8 install.
+  - [ ] Merge PR #1, then PR #2 (GitHub retargets it to `main`); release v2.2.0 (`.claude/rules/release.md`).
 - **Open questions:** none.
 
 ## Baseline
-- 2026-11-05 @ feat/terminal-first (on 43e5253): 947 unit tests, 0 failing; lint 0 errors; screenshots valid; shell tests pass.
+- 2026-11-05 @ add617e (feat/terminal-first): 947 unit tests, 0 failing; lint 0 errors; screenshots valid; shell tests pass.
 - 2026-10-19 @ 7f6e61d: `:app:assembleIvarnaDebug` ok, 402 unit tests (`:app:testIvarnaDebugUnitTest`), 2 failing (pre-existing, not ours):
   - `ui.OnboardingConsentContractTest.optionsPage_requiresDownloadConsentBeforeInstall`: AssertionError (cause not yet investigated)
   - `core.terminal.GuestRootfsShellTest.alpine_absolute_sh_symlink_counts_as_installed`: AssertionError (cause not yet investigated)
