@@ -2,20 +2,19 @@
 
 _State of ongoing work (Current effort), baselines, the append-only decision log, audit status and known issues._
 
-## Current effort: Akane-iro twilight redesign (on top of terminal-first)
+## Current effort: PR #2 review fixes (terminal-first + Akane-iro)
 _Updated: 2026-11-05 · rewrite this section, don't append_
-- **Goal (user request):** after the all-black riso build ("buttons look like text on a flat background"), redo the app from scratch in impeccable's other proposal, Akane-iro · twilight; everything black; every button distinguishable; a new launcher icon to match; Exit before Hold wakelock in the notification. Continues on `feat/terminal-first` (PR #2), no new branch.
-- **Done (pushed earlier):** notification Exit (`01ed6ae`), rename to AkaTerminal (`c55b3d2`), the riso build (`1069821`, `404efab`), black terminal and black stock (`1249a77`, `18fca12`).
-- **Done (this round, local):** `Iro` traditional-colour tokens, `AkaInks` (chrome, tile, tileEdge, controlLine, primary, horizon), soft shapes, Archivo semi-expanded display (expanded ExtraBold font removed), `Horizon.kt` (`AkaMotion.rise`, `Modifier.horizon`), `AkaButton`/`akaTile`/`akaSelection`, tiled `AkaRow`, kon key caps on a black bar, a kachi drawer whose current session's horizon rises as it opens, the new launcher icon (vectors + `scripts/render_launcher_icon.py` for the PNGs), notification Exit first. Direction contract rewritten; emulator captures in `.impeccable/review/akane/`.
+- **Goal (user request):** `/pr-review-toolkit:review-pr` on PR #2 (`feat/terminal-first` → `feat/ubuntu-chroot`), then "fix all": every Important finding and every Suggestion from that review. Same branch, local commits only (nothing pushed).
+- **Done (local, `7835a14` to `3bb7d3e`):** terminal (wrapped link in the scrollback, linear even across the whole transcript; default colours are the Akane-iro tokens; testable service start commands; wake-lock test reset), install (InstallController owns the effective kind and refuses an add-on mid-install; per-kind `InstallSteps`; desktop incomplete marker and `UbuntuDesktop.detect`; customization exit 3 / failure finishes with a warning shown on the Done page, wizard, toast, a dismissible notification and the Desktop panel; chroot add-on precheck no longer reads an unanswered root probe as a missing rootfs; pulse panel plugin only when the desktop is asked for or a panel exists), Ubuntu page (readiness split from the desktop run state; an installed desktop wins over a failed add-on run; logs copied through `TerminalClipboard`), dead glass/haze code and tokens removed, docs and comments corrected, `.claude/scripts/setup-worktree.sh`. Two independent reviews of the fix commits; all 5 of their findings fixed.
 - **Next:**
-  - [x] Finish review (verdict: fix first; 7 of 8 fixes applied, the Sharp-icon arrows skipped because key caps are typographic by contract) and DESIGN.md rewrite; committed locally.
-  - [ ] Install a signed release on the phone when the user asks; check the drawer horizon, key caps and the icon on the real device.
+  - [ ] Ask the user before pushing to PR #2.
+  - [ ] Device checks (signed release on the phone): a link tapped in the scrollback, terminal colours, the idle X11 mark, the warning notification and Desktop panel; customization exit 3 through `proot-distro login` and `captureInChroot`; plus the older list (Paste key and More… menu, Hold wakelock, an existing XFCE install's Start/Open/Stop, a PRoot flux → akane migration from v2.1.8, drawer horizon, key caps and launcher icon).
   - [ ] Secondary screens still use Material `OutlinedButton`/`TextButton` (stadium shape) in dialogs and some settings pages; move them to `AkaButton` if the user wants full consistency.
-  - [ ] Still unverified on the device from the terminal-first work: links open in the browser, the Paste key and More… menu, Hold wakelock, an existing XFCE install's Start/Open/Stop, a PRoot flux → akane migration from v2.1.8.
   - [ ] Merge PR #1, then PR #2; release v2.2.0 (`.claude/rules/release.md`); store screenshots and featureGraphic still show the old look.
 - **Open questions:** should the debug build also be signed with the user's key (so `run-as` diagnosis works on the phone without wiping data)? Not asked yet.
 
 ## Baseline
+- 2026-11-05 @ 3bb7d3e (feat/terminal-first, PR #2 review fixes): 1023 unit tests, 0 failing; lint 0 errors, 124 warnings (was 127); assemble ok; 38 screenshot previews valid; 7 shell tests pass.
 - 2026-11-05 (feat/terminal-first, Akane-iro): 961 unit tests, 0 failing; lint, assemble, screenshots valid; shell tests pass.
 - 2026-11-05 @ 1069821 (feat/terminal-first): 961 unit tests, 0 failing; lint, assemble, screenshots valid; shell tests pass.
 - 2026-11-05 @ 815e552 (feat/terminal-first): 954 unit tests, 0 failing; lint 0 errors; screenshots valid; shell tests pass (scripts unchanged since add617e).
@@ -71,6 +70,12 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 - 2026-11-05: the terminal's own background is pure black #000000 (user's request after the first phone build: the blue-black stock read as blue/green behind the shell). Only the terminal and the status bar above a live session change; the chrome, drawer and extra-keys field keep the riso inks, and the red tones stay.
 - 2026-11-05: the whole app's dark stock is now black #000000 (user's request, right after the black terminal), and surfaces step up in neutral greys (#0F1012 → #2D2F35) instead of blue-black tints. The inks don't change: Red plates, the Federal shell field (extra keys, drawer, Ubuntu card), plum selection. With the stock equal to the terminal's black, the terminal-only status-bar swap was dropped.
 - 2026-11-05: the riso build is replaced by Akane-iro · twilight (user's choice after the all-black riso build made buttons read as text on a flat ground): traditional-colour tokens (`Iro`), sumi ground and a pure-black terminal and key bar, every control in a kon tile with a hanada/ai edge, akane as the one accent, and the horizon line (rises under the wordmark, the current session as the drawer opens, the selected option) as the signature. The launcher icon is redrawn for it (prompt › + akane sun on the horizon); notification actions are Exit, then Hold wakelock. A zero-width gradient in the horizon's first frame crashed the swiftshader emulator, so `horizon` draws nothing under 1px.
+- 2026-11-05: a run that installs the desktop sets a per-distro "desktop install incomplete" marker before the family step and clears it only on verified success, because dpkg unpacks `startxfce4` early and a failed or cancelled run looked installed. `UbuntuDesktop.detect` (INSTALLED / NOT_INSTALLED / INCOMPLETE) heals the `xfce4_desktop` flag both ways; an INCOMPLETE desktop offers a retry, not Start.
+- 2026-11-05: a customization that fails or exits 3 (Oh My Zsh missing, e.g. offline) finishes the install with a warning instead of failing it, because the terminal works and failing would block onboarding offline. The review asked fail-vs-warn; the user didn't answer, so this was my call. Distro Settings no longer marks `customization` installed on exit 3.
+- 2026-11-05: repair and setup add the XFCE panel's pulse plugin next to an existing `pactl` only when `FLUX_INSTALL_DESKTOP=1`, or when it is unset and `xfce4-panel` is installed, because the earlier fix dropped it for legacy callers that already had a panel.
+- 2026-11-05: `InstallController` stores the effective kind (`InstallKind.effective`) and returns `StartResult`, refusing a desktop add-on while another install runs, so the UI and the runner can't disagree about what is installing.
+- 2026-11-05: a run that finishes with a warning also posts a dismissible notification (id 4713, cleared by the next install start), because the keep-alive FGS notification is removed right after its last update and the warning flashed by in the background.
+- 2026-11-05: on the Ubuntu page an INSTALLED detection wins over a failed add-on run (a failed run that left `startxfce4` reads INCOMPLETE), so a later verified install from Distro Settings doesn't still show "Install failed".
 
 ## Audit status
 | Area | Last run | Result | How |
@@ -79,6 +84,7 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 | Audit fixes | 2026-10-20 | 57 fixed, M14/L8 partial, L29 blocked; device-unverified | `/audit-remediate` |
 | UI / design | 2026-11-05 | Akane-iro twilight redesign (replaces riso); impeccable finish review: fix first, 7 of 8 fixes applied (typographic key glyphs kept by contract); welcome, onboarding, terminal empty state, Settings and the Ubuntu page checked on the emulator; live shell and drawer with sessions only in previews | `/impeccable` + screenshot and emulator review |
 | Lint | 2026-10-20 | 0 errors | `./gradlew :app:lintIvarnaDebug -q` |
+| PR #2 review | 2026-11-05 | 4 important, suggestions; all fixed, plus 5 from two reviews of the fixes; device-unverified | `/pr-review-toolkit:review-pr` + independent reviews |
 | Device QA | 2026-10-20 | SM-S938B (Android 17): v2.1.4 fresh install OK, customization in about 2.5 min, bundled Papirus-Dark passes the icon check; desktop start not checked | adb + debug run-as |
 
 ## Known issues / to do
@@ -87,6 +93,9 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 - `.agent/workflows/fdroid-update.md` is stale for this fork: wrong repo (`abhay-byte/fluxlinux`), `assembleRelease`, and no debug APK.
 
 - Chroot setup's flux→akane rename (setup_guest_chroot.sh) doesn't take the helper's mount lock, so a desktop start during setup could race it.
+- The haze Gradle dependency is still declared but no code uses it any more; drop it from the catalog and `app/build.gradle.kts`.
+- Other distros' customization scripts now print the desktop-oriented wording added for Ubuntu's partial-customization warning.
+- Chroot desktop start, InstallConfig and the add-on precheck run a su probe each time (up to ~8 s when su doesn't answer).
 - Chroot Files can't open `rw`/`rwt` (random access) through root; editors that open files that way fail on chroot files.
 
 ## Environment notes
