@@ -93,4 +93,3 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 ## Environment notes
 - A fresh checkout needs the termux-x11 submodules and an assembled host bootstrap before any build (see CLAUDE.md Commands). Both were done on this machine on 2026-10-19.
 - AVDs available: pixel-api35, pixel, batstats-api36, batstats16k, screenoff-api37, amber-api23.
-- On the current no-KVM VM, `emulator-5554` is the user's own AVD `pk36` (it also runs signet, software rendering, prone to ANRs). FluxLinux's host setup can't run there: the app process runs arm64 under ndk_translation, so `x86_64Host` is false, and the arm64 `LD_PRELOAD`/`LD_LIBRARY_PATH` break the x86_64 binfmt runner. Check device behaviour on the phone instead (the user's call, 2026-11-05).
