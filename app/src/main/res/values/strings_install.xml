@@ -16,6 +16,9 @@
 
     <!-- Desktop add-on refused: the rootfs is not installed. %1$s = distro name. -->
     <string name="install_addon_needs_rootfs">Install %1$s first: the desktop is added to an installed system.</string>
+    <!-- Chroot desktop add-on refused: root didn't answer (denied, failed or timed out), so the
+         root-only rootfs couldn't be checked. %1$s = distro name. -->
+    <string name="install_addon_root_unverified">Root didn\'t answer, so AkaTerminal couldn\'t check that %1$s is installed. Grant superuser to AkaTerminal, then retry.</string>
 
     <!-- DesktopLauncher: Ubuntu without the optional XFCE desktop. -->
     <string name="desktop_install_first">Install the desktop first (Home → Desktop)</string>

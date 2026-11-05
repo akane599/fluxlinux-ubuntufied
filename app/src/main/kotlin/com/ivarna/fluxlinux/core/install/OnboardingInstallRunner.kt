@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.ivarna.fluxlinux.R
+import com.ivarna.fluxlinux.core.chroot.ChrootDetection
 import com.ivarna.fluxlinux.core.desktop.UbuntuDesktop
 import com.ivarna.fluxlinux.core.files.UbuntuFiles
 import com.ivarna.fluxlinux.core.gpu.GpuDriverInstaller
@@ -382,13 +383,13 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         val chrootPath = profile.chrootPath ?: ChrootPaths.CHROOT_PATH
 
         if (steps.needsInstalledRootfs) {
-            // The add-on never downloads or extracts a rootfs: it needs an installed one.
-            TerminalLauncher.invalidateChrootInstalledCache()
-            if (!TerminalLauncher.isChrootInstalled(chrootPath)) {
-                postFail(
-                    onProgress, phases,
-                    appCtx.getString(R.string.install_addon_needs_rootfs, profile.displayName),
-                )
+            // The add-on never downloads or extracts a rootfs: it needs an installed one, which
+            // only a fresh root probe can confirm (the app can't read /data/local/tmp).
+            ChrootDetection.invalidate(chrootPath)
+            val refusal = chrootAddOnRefusal(ChrootDetection.probe(forceRoot = true, path = chrootPath))
+            if (abortIfCancelled(gen, phases, onProgress)) return
+            if (refusal != null) {
+                postFail(onProgress, phases, appCtx.getString(refusal, profile.displayName))
                 return
             }
         }
@@ -1012,6 +1013,18 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             if (customOk) {
                 StateManager.setComponentInstalled(ctx, distroId, "customization", true)
             }
+        }
+
+        /**
+         * Why a chroot desktop add-on can't run on [snap] (a `forceRoot` probe), as a string
+         * resource with one `%1$s` = distro display name; null when the rootfs is installed.
+         * Root that failed, timed out or went away ([ChrootDetection.Snapshot.viaRoot] false)
+         * couldn't see the root-only rootfs, so that is never reported as a missing rootfs.
+         */
+        internal fun chrootAddOnRefusal(snap: ChrootDetection.Snapshot): Int? = when {
+            snap.installed -> null
+            !snap.viaRoot -> R.string.install_addon_root_unverified
+            else -> R.string.install_addon_needs_rootfs
         }
 
         /** setup_customization_xfce.sh's exit when it finished without Oh My Zsh. */
