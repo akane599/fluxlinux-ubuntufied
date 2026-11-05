@@ -103,11 +103,14 @@ class InstallControllerTest {
     @Test
     fun installWizard_rerunsWithTheDesktopOnlyWhenInstalled() {
         val src = repoFile("src/main/kotlin/com/ivarna/fluxlinux/ui/screens/InstallConfigScreen.kt").readText()
-        assertTrue(src.contains("UbuntuDesktop.isInstalled(appCtx, distro.id)"))
         assertTrue(src.contains("InstallKind.forRerun(desktopInstalled)"))
-        assertTrue(src.contains("installer.start(distro.id, selectedTheme, kind)"))
-        // The chroot su probe runs off the main thread.
-        assertTrue(src.contains("withContext(Dispatchers.IO) { UbuntuDesktop.probe(appCtx, distro.id) }"))
+        assertTrue(src.contains("installer.start(distro.id, selectedTheme, runKind)"))
+        // Retry repeats the failed run's kind (e.g. Home's desktop add-on), not the rerun default.
+        assertTrue(src.contains("onRetry = { startInstall(install.kind) }"))
+        // The rootfs check and the chroot su probe both run off the main thread.
+        val io = src.substringAfter("withContext(Dispatchers.IO) {").substringBefore(".getOrDefault(false)")
+        assertTrue(io.contains("UbuntuDesktop.isInstalled(appCtx, distro.id)"))
+        assertTrue(io.contains("UbuntuDesktop.probe(appCtx, distro.id)"))
     }
 
     @Test

@@ -5,20 +5,45 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 
-// Brand Colors
-val FluxCream = Color(0xFFFDFCF0) // Soft Cream Background/Surface
-val FluxCreamPrimary = Color(0xFFE6DABf) // Darker Cream for Primary elements? Or maybe a rich Cream #F0E68C (Khaki) -> let's go with a warm beige/cream
-// User said "Primary colors should be cream".
-val BrandCream = Color(0xFFF5E6CA) // Warm Cream
+// ─── Brand ────────────────────────────────────────────────────────────────────
+// FluxLinux is warm cream on warm dark. Cream is the one accent: primary actions,
+// the current selection and active state. Everything else is a warm neutral.
 
-val FluxDarkGrey = Color(0xFF1A1C1E) // Material Dark Grey
-val FluxDarkSurface = Color(0xFF121212)
+/** The brand cream. Primary actions, selection, active modifiers. */
+val BrandCream = Color(0xFFF5E6CA)
+/** Text and icons on cream. */
+val BrandInk = Color(0xFF23201A)
 
-// Legacy / Accents (Keeping for now if needed for specific highlights, but likely replaced by Monet)
+// Warm neutral ramp (dark scheme), lowest → highest.
+val FluxNeutral0 = Color(0xFF0E0D0C)
+val FluxNeutral1 = Color(0xFF131211)
+val FluxNeutral2 = Color(0xFF1A1917)
+val FluxNeutral3 = Color(0xFF1F1E1B)
+val FluxNeutral4 = Color(0xFF282622)
+val FluxNeutral5 = Color(0xFF322F2B)
+val FluxNeutral6 = Color(0xFF3A3732)
+val FluxOutline = Color(0xFF8C857A)
+val FluxOnSurface = Color(0xFFEDE8E0)
+val FluxOnSurfaceVariant = Color(0xFFC9C2B6)
+val FluxCreamContainer = Color(0xFF3A352C)
+val FluxCreamContainerStrong = Color(0xFF4A4235)
+
+/** Status: a running session/desktop. Only for state, never decoration. */
+val FluxSuccess = Color(0xFF8FD6A8)
+
+/** The terminal's own background (TerminalView's renderer paints #000000). */
+val TerminalBackground = Color(0xFF000000)
+
+// ─── Legacy names still referenced by older screens ───────────────────────────
+val FluxCream = Color(0xFFFDFCF0)
+val FluxDarkGrey = Color(0xFF1A1C1E)
+val FluxDarkSurface = FluxNeutral1
+
+/** Legacy accents. Do not use in new or restyled UI: the accent is cream. */
 val FluxAccentCyan = Color(0xFF00E5FF)
 val FluxAccentMagenta = Color(0xFFFF00E6)
 
-// Glass Defaults (Deprecated but kept for compilation until refactor complete)
+// Glass defaults (deprecated, kept for compilation of older screens)
 val FluxBackgroundStart = Color(0xFF0F0C29)
 val FluxBackgroundMid = Color(0xFF302B63)
 val FluxBackgroundEnd = Color(0xFF24243E)
@@ -30,14 +55,14 @@ val TextWhite = Color(0xFFFFFFFF)
 val TextGrey = Color(0xFFDDDDDD)
 val Seed = Color(0xFF00E5FF)
 
-// Contrast-safe on #121212 / #1A1C1E
-val FluxBodyMuted = Color(0xFFC8C8C8)          // ~10:1 on #121212
+// Contrast-safe on the dark ground
+val FluxBodyMuted = FluxOnSurfaceVariant
 val FluxHairline = Color(0x33FFFFFF)
-val FluxCardFill = Color(0xE61A1C1E)           // 90% surface
-val FluxDanger = Color(0xFFC62828)             // white on it ~5.6:1
-val FluxSwitchCheckedTrack = BrandCream        // #F5E6CA
-val FluxSwitchCheckedThumb = FluxDarkGrey
-val FluxSwitchUncheckedTrack = Color(0xFF3A3A3A)
+val FluxCardFill = Color(0xE61A1C1E)
+val FluxDanger = Color(0xFFC62828)
+val FluxSwitchCheckedTrack = BrandCream
+val FluxSwitchCheckedThumb = BrandInk
+val FluxSwitchUncheckedTrack = FluxNeutral5
 val FluxSwitchUncheckedThumb = Color(0xFFE8E8E8)
 val FluxSwitchUncheckedBorder = Color(0xFF6B6B6B)
 
@@ -50,3 +75,6 @@ fun fluxMutedText(): Color {
     }
 }
 
+/** Swatches previewing the XFCE desktop themes in setup: content, not app chrome. */
+val DesktopThemeSwatchDark = Color(0xFF1E1E24)
+val DesktopThemeSwatchLight = Color(0xFFE8EAF6)

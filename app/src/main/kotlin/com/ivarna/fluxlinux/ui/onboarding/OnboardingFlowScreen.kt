@@ -58,6 +58,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
@@ -86,6 +87,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
@@ -98,6 +100,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.install.InstallController
+import com.ivarna.fluxlinux.core.install.InstallKind
 import com.ivarna.fluxlinux.core.root.RootShell
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
@@ -105,17 +108,12 @@ import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
+import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.components.MethodChip
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
-import com.ivarna.fluxlinux.ui.theme.BrandCream
-import com.ivarna.fluxlinux.ui.theme.FluxAccentCyan
-import com.ivarna.fluxlinux.ui.theme.FluxAccentMagenta
-import com.ivarna.fluxlinux.ui.theme.FluxDarkGrey
-import com.ivarna.fluxlinux.ui.theme.FluxDarkSurface
-import com.ivarna.fluxlinux.ui.theme.FluxBodyMuted
-import com.ivarna.fluxlinux.ui.theme.FluxHairline
-import com.ivarna.fluxlinux.ui.theme.FluxSwitchUncheckedTrack
-import com.ivarna.fluxlinux.ui.theme.fluxMutedText
+import com.ivarna.fluxlinux.ui.theme.DesktopThemeSwatchDark
+import com.ivarna.fluxlinux.ui.theme.DesktopThemeSwatchLight
+import com.ivarna.fluxlinux.ui.theme.FluxSuccess
 import kotlin.concurrent.thread
 
 private enum class OnboardStep { Welcome, Consent, HostSetup, Options, Storage, Running, Done }
@@ -123,6 +121,17 @@ private enum class OnboardStep { Welcome, Consent, HostSetup, Options, Storage, 
 /** True while an install of either Ubuntu (PRoot or chroot) runs or just finished. */
 private fun InstallController.State.isUbuntuActive(): Boolean =
     isActiveFor(UbuntuRuntime.PROOT_ID) || isActiveFor(UbuntuRuntime.CHROOT_ID)
+
+/**
+ * The "Also install the XFCE desktop" switch when onboarding opens: off, unless an Ubuntu run
+ * is still active (reopened from the launcher mid-install), whose choice Retry and Done keep.
+ */
+internal fun onboardingInstallsDesktop(state: InstallController.State): Boolean =
+    state.isUbuntuActive() && state.kind.installsDesktop
+
+/** The desktop theme when onboarding opens: an active Ubuntu run's, else dark. */
+internal fun onboardingTheme(state: InstallController.State): String =
+    if (state.isUbuntuActive()) state.theme else "dark"
 
 /**
  * The runtime an onboarding install uses. A retry repeats the failed install's id. Chroot falls
@@ -143,16 +152,15 @@ internal fun onboardingInstallRuntime(
 /** Numbered setup steps shown in [StepHeader]: Consent, Host setup, Options, Storage. */
 private const val ONBOARD_STEP_COUNT = 4
 
-private val OnboardSuccess = Color(0xFF69F0AE)
-
 /**
  * First-run onboarding:
  * Welcome → Disclosure/Consent → Host Setup → Options → Storage access → Progress → Complete.
- * Installs the Ubuntu rootfs + XFCE + customization. An existing Ubuntu rootfs is reused, never wiped.
+ * Installs the Ubuntu rootfs with the terminal setup (zsh, Oh My Zsh); the XFCE desktop and its
+ * theming only when "Also install the XFCE desktop" is on (off by default, addable later from the
+ * Ubuntu page). An existing Ubuntu rootfs is reused, never wiped.
  */
 @Composable
 fun OnboardingFlowScreen(
-    onFinished: () -> Unit,
     onOpenTerminal: () -> Unit = {},
     onStartDesktop: (distroId: String) -> Unit = {}
 ) {
@@ -170,7 +178,10 @@ fun OnboardingFlowScreen(
             if (installer.state.value.isUbuntuActive()) OnboardStep.Running else OnboardStep.Welcome
         )
     }
-    var theme by rememberSaveable { mutableStateOf("dark") }
+    var theme by rememberSaveable { mutableStateOf(onboardingTheme(installer.state.value)) }
+    // The desktop is optional: off unless the user asks for it on the Options page. Reopened
+    // during a run, it follows that run, so Retry and the Done page keep the user's choice.
+    var installDesktop by rememberSaveable { mutableStateOf(onboardingInstallsDesktop(installer.state.value)) }
     var showLog by rememberSaveable { mutableStateOf(true) }
     // PRoot unless the user picks chroot on a rooted phone. A running install keeps its id.
     var runtime by rememberSaveable {
@@ -219,7 +230,11 @@ fun OnboardingFlowScreen(
         // The chosen install becomes the one Home, the terminal and Files drive.
         UbuntuRuntimeSwitch.apply(context.applicationContext, runtime)
         step = OnboardStep.Running
-        installer.start(runtime.distroId, theme)
+        installer.start(
+            runtime.distroId,
+            theme,
+            if (installDesktop) InstallKind.TERMINAL_AND_DESKTOP else InstallKind.TERMINAL,
+        )
     }
 
     /** Leaving the Done page: the finished run no longer needs to be shown. */
@@ -231,7 +246,7 @@ fun OnboardingFlowScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(FluxDarkSurface)
+            .background(MaterialTheme.colorScheme.background)
             .systemBarsPadding()
     ) {
         when (step) {
@@ -247,6 +262,8 @@ fun OnboardingFlowScreen(
             OnboardStep.Options -> OptionsPage(
                 theme = theme,
                 onTheme = { theme = it },
+                installDesktop = installDesktop,
+                onInstallDesktop = { installDesktop = it },
                 runtime = runtime,
                 rootAvailable = rootAvailable == true,
                 onRuntime = { runtime = it },
@@ -280,9 +297,12 @@ fun OnboardingFlowScreen(
                 }
             )
             OnboardStep.Done -> DonePage(
-                onHome = { leaveDone(onFinished) },
                 onTerminal = { leaveDone(onOpenTerminal) },
-                onDesktop = { leaveDone { onStartDesktop(runtime.distroId) } },
+                onDesktop = if (installDesktop) {
+                    { leaveDone { onStartDesktop(runtime.distroId) } }
+                } else {
+                    null
+                },
                 runtime = runtime
             )
         }
@@ -294,7 +314,7 @@ fun OnboardingFlowScreen(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun WelcomePage(onNext: () -> Unit) {
+internal fun WelcomePage(onNext: () -> Unit) {
     val colors = MaterialTheme.colorScheme
 
     Column(
@@ -310,20 +330,11 @@ private fun WelcomePage(onNext: () -> Unit) {
                 .padding(top = 16.dp, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Glowing Logo Container
             Box(
                 modifier = Modifier
                     .size(68.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                FluxAccentMagenta.copy(alpha = 0.25f),
-                                FluxAccentCyan.copy(alpha = 0.25f)
-                            )
-                        )
-                    )
-                    .border(1.dp, FluxHairline, RoundedCornerShape(20.dp)),
+                    .clip(MaterialTheme.shapes.large)
+                    .background(colors.surfaceContainerHigh),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -337,19 +348,17 @@ private fun WelcomePage(onNext: () -> Unit) {
 
             Text(
                 text = "FluxLinux",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = colors.onBackground,
-                letterSpacing = 0.5.sp
+                style = MaterialTheme.typography.displaySmall,
+                color = colors.onBackground
             )
 
             Spacer(Modifier.height(6.dp))
 
             Text(
                 text = stringResource(R.string.onboarding_welcome_tagline),
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
-                color = colors.onBackground.copy(alpha = 0.72f),
+                color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
@@ -363,28 +372,21 @@ private fun WelcomePage(onNext: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Feature 1: what setup installs
+            // What setup gives you: the terminal first, the desktop as an option, files both ways.
             ModernFeatureCard(
-                icon = Icons.Filled.Storage,
-                iconTint = FluxAccentMagenta,
+                icon = Icons.Filled.Terminal,
                 title = stringResource(R.string.onboarding_feature_ubuntu_title),
                 description = stringResource(R.string.onboarding_feature_ubuntu_desc)
             )
-
-            // Feature 2: Desktop & Themes
             ModernFeatureCard(
                 icon = Icons.Filled.DesktopWindows,
-                iconTint = FluxAccentCyan,
-                title = "XFCE4 Desktop",
-                description = "Pre-configured desktop experience with Flux glass themes, icons, wallpapers, and fonts."
+                title = stringResource(R.string.onboarding_feature_desktop_title),
+                description = stringResource(R.string.onboarding_feature_desktop_desc)
             )
-
-            // Feature 3: Integrated Terminal & X11
             ModernFeatureCard(
-                icon = Icons.Filled.Terminal,
-                iconTint = BrandCream,
-                title = "Embedded Terminal & X11",
-                description = "Built-in hardware accelerated X11 display and multi-tab terminal with Oh My Zsh integration."
+                icon = Icons.Filled.FolderShared,
+                title = stringResource(R.string.onboarding_feature_files_title),
+                description = stringResource(R.string.onboarding_feature_files_desc)
             )
 
             Spacer(Modifier.height(4.dp))
@@ -395,8 +397,7 @@ private fun WelcomePage(onNext: () -> Unit) {
                     .fillMaxWidth()
                     .heightIn(max = 130.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surface.copy(alpha = 0.45f))
-                    .border(1.dp, FluxHairline, RoundedCornerShape(16.dp)),
+                    .background(colors.surfaceContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -412,7 +413,7 @@ private fun WelcomePage(onNext: () -> Unit) {
                             Brush.verticalGradient(
                                 listOf(
                                     Color.Transparent,
-                                    FluxDarkSurface.copy(alpha = 0.65f)
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0.65f)
                                 )
                             )
                         )
@@ -424,17 +425,17 @@ private fun WelcomePage(onNext: () -> Unit) {
 
         // Get Started CTA
         FluxPrimaryButton(
-            text = "Get Started",
+            text = stringResource(R.string.onboarding_get_started),
             icon = Icons.Filled.ChevronRight,
             onClick = onNext
         )
     }
 }
 
+/** One welcome point: icon and two lines of text on the background, no card around it. */
 @Composable
 private fun ModernFeatureCard(
     icon: ImageVector,
-    iconTint: Color,
     title: String,
     description: String
 ) {
@@ -442,43 +443,37 @@ private fun ModernFeatureCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(colors.surface.copy(alpha = 0.72f))
-            .border(1.dp, FluxHairline, RoundedCornerShape(14.dp))
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.Top
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(iconTint.copy(alpha = 0.15f))
-                .border(1.dp, iconTint.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
+                .size(40.dp)
+                .clip(MaterialTheme.shapes.small)
+                .background(colors.secondaryContainer),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = iconTint,
+                tint = colors.onSecondaryContainer,
                 modifier = Modifier.size(22.dp)
             )
         }
 
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(16.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
                 color = colors.onSurface,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleSmall
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = description,
-                color = colors.onSurface.copy(alpha = 0.68f),
-                fontSize = 12.5.sp,
-                lineHeight = 16.sp
+                color = colors.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium
             )
         }
     }
@@ -518,8 +513,7 @@ private fun ConsentPage(onBack: () -> Unit, onNext: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surface.copy(alpha = 0.72f))
-                    .border(1.dp, FluxHairline, RoundedCornerShape(16.dp))
+                    .background(colors.surfaceContainer)
                     .padding(18.dp)
             ) {
                 Column {
@@ -528,13 +522,13 @@ private fun ConsentPage(onBack: () -> Unit, onNext: () -> Unit) {
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(FluxAccentMagenta.copy(alpha = 0.15f)),
+                                .background(MaterialTheme.colorScheme.secondaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.CloudDownload,
                                 contentDescription = null,
-                                tint = FluxAccentMagenta,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -621,8 +615,7 @@ private fun DownloadItemBadge(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(FluxDarkSurface.copy(alpha = 0.8f))
-            .border(1.dp, FluxHairline, RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
@@ -636,7 +629,7 @@ private fun DownloadItemBadge(
             text = size,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = FluxAccentCyan
+            color = MaterialTheme.colorScheme.primary
         )
     }
 }
@@ -705,8 +698,7 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surface.copy(alpha = 0.75f))
-                    .border(1.dp, FluxHairline, RoundedCornerShape(16.dp))
+                    .background(colors.surfaceContainer)
                     .padding(18.dp)
             ) {
                 Column {
@@ -721,15 +713,15 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
                                     .size(40.dp)
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(
-                                        if (bootstrapDone) Color(0xFF69F0AE).copy(alpha = 0.15f)
-                                        else FluxAccentMagenta.copy(alpha = 0.15f)
+                                        if (bootstrapDone) MaterialTheme.colorScheme.secondaryContainer
+                                        else MaterialTheme.colorScheme.secondaryContainer
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = if (bootstrapDone) Icons.Filled.CheckCircle else Icons.Filled.Memory,
                                     contentDescription = null,
-                                    tint = if (bootstrapDone) Color(0xFF69F0AE) else FluxAccentMagenta,
+                                    tint = if (bootstrapDone) FluxSuccess else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -744,14 +736,14 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
                                 Text(
                                     text = if (bootstrapDone) "Initialized & Ready" else "Requires Setup",
                                     fontSize = 12.sp,
-                                    color = if (bootstrapDone) Color(0xFF69F0AE) else colors.onSurface.copy(alpha = 0.6f)
+                                    color = if (bootstrapDone) FluxSuccess else colors.onSurface.copy(alpha = 0.6f)
                                 )
                             }
                         }
 
                         MethodChip(
                             label = if (bootstrapDone) "READY" else if (initializing) "EXTRACTING" else "PENDING",
-                            color = if (bootstrapDone) Color(0xFF69F0AE) else if (initializing) FluxAccentMagenta else Color(0xFFFFA000)
+                            color = if (bootstrapDone) FluxSuccess else if (initializing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -775,7 +767,7 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
                                     text = "${(progress * 100).toInt()}%",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = FluxAccentMagenta
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                             Spacer(Modifier.height(8.dp))
@@ -785,8 +777,8 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
                                     .fillMaxWidth()
                                     .height(6.dp)
                                     .clip(RoundedCornerShape(3.dp)),
-                                color = FluxAccentMagenta,
-                                trackColor = colors.surfaceVariant.copy(alpha = 0.5f)
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = colors.surfaceContainerHighest
                             )
                         }
                     } else if (!bootstrapDone) {
@@ -802,10 +794,9 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
                                 .fillMaxWidth()
                                 .height(46.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = FluxAccentMagenta.copy(alpha = 0.20f),
-                                contentColor = Color.White
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                             ),
-                            border = BorderStroke(1.dp, FluxAccentMagenta.copy(alpha = 0.5f)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -860,6 +851,8 @@ internal fun OptionsPage(
     theme: String,
     onTheme: (String) -> Unit,
     onBack: () -> Unit,
+    installDesktop: Boolean = false,
+    onInstallDesktop: (Boolean) -> Unit = {},
     onInstall: () -> Unit,
     runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT,
     rootAvailable: Boolean = false,
@@ -876,7 +869,7 @@ internal fun OptionsPage(
         StepHeader(
             currentStep = 3,
             totalSteps = ONBOARD_STEP_COUNT,
-            title = "Desktop Options",
+            title = stringResource(R.string.onboarding_options_title),
             onBack = onBack
         )
 
@@ -893,8 +886,7 @@ internal fun OptionsPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(colors.surface.copy(alpha = 0.72f))
-                    .border(1.dp, FluxHairline, RoundedCornerShape(14.dp))
+                    .background(colors.surfaceContainer)
                     .padding(14.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -928,34 +920,38 @@ internal fun OptionsPage(
                 RuntimeChoiceSection(runtime = runtime, onRuntime = onRuntime)
             }
 
-            // Appearance Theme Selection
-            Text(
-                text = "Appearance Theme",
-                fontWeight = FontWeight.Bold,
-                color = colors.onBackground,
-                fontSize = 14.sp
-            )
+            DesktopOptionCard(checked = installDesktop, onCheckedChange = onInstallDesktop)
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ThemeOptionCard(
-                    title = "Dark Theme",
-                    desc = "Sleek default",
-                    isDark = true,
-                    selected = theme == "dark",
-                    onSelect = { onTheme("dark") },
-                    modifier = Modifier.weight(1f)
-                )
-                ThemeOptionCard(
-                    title = "Light Theme",
-                    desc = "Bright workspace",
-                    isDark = false,
-                    selected = theme == "light",
-                    onSelect = { onTheme("light") },
-                    modifier = Modifier.weight(1f)
-                )
+            // The desktop theme only matters when the desktop is installed.
+            AnimatedVisibility(visible = installDesktop) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = stringResource(R.string.onboarding_theme_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.onBackground
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ThemeOptionCard(
+                            title = stringResource(R.string.onboarding_theme_dark),
+                            desc = stringResource(R.string.onboarding_theme_dark_desc),
+                            isDark = true,
+                            selected = theme == "dark",
+                            onSelect = { onTheme("dark") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        ThemeOptionCard(
+                            title = stringResource(R.string.onboarding_theme_light),
+                            desc = stringResource(R.string.onboarding_theme_light_desc),
+                            isDark = false,
+                            selected = theme == "light",
+                            onSelect = { onTheme("light") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
 
             // Package Manifest Card
@@ -963,8 +959,7 @@ internal fun OptionsPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surface.copy(alpha = 0.75f))
-                    .border(1.dp, FluxHairline, RoundedCornerShape(16.dp))
+                    .background(colors.surfaceContainer)
                     .padding(16.dp)
             ) {
                 Column {
@@ -972,43 +967,45 @@ internal fun OptionsPage(
                         Icon(
                             imageVector = Icons.Filled.Layers,
                             contentDescription = null,
-                            tint = FluxAccentCyan,
+                            tint = colors.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "Package Manifest Included",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
+                            text = stringResource(R.string.onboarding_manifest_title),
+                            style = MaterialTheme.typography.titleSmall,
                             color = colors.onSurface
                         )
                     }
 
                     Spacer(Modifier.height(10.dp))
 
-                    val items = listOf(
-                        stringResource(R.string.onboarding_manifest_rootfs),
-                        "XFCE4 lightweight desktop environment",
-                        "Flux themes, wallpapers, and Nerd fonts",
-                        "Embedded X11 display server + Zsh terminal"
-                    )
+                    val items = buildList {
+                        add(stringResource(R.string.onboarding_manifest_rootfs))
+                        add(stringResource(R.string.onboarding_manifest_terminal))
+                        if (installDesktop) {
+                            add(stringResource(R.string.onboarding_manifest_desktop))
+                            add(stringResource(R.string.onboarding_manifest_theming))
+                        }
+                    }
 
                     items.forEach { item ->
                         Row(
                             modifier = Modifier.padding(vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Top
                         ) {
                             Box(
                                 modifier = Modifier
+                                    .padding(top = 7.dp)
                                     .size(6.dp)
                                     .clip(CircleShape)
-                                    .background(FluxAccentMagenta)
+                                    .background(MaterialTheme.colorScheme.primary)
                             )
                             Spacer(Modifier.width(10.dp))
                             Text(
                                 text = item,
-                                fontSize = 12.5.sp,
-                                color = colors.onSurface.copy(alpha = 0.8f)
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.onSurfaceVariant
                             )
                         }
                     }
@@ -1037,13 +1034,43 @@ internal fun OptionsPage(
             )
 
             FluxPrimaryButton(
-                text = "Install Now",
+                text = stringResource(R.string.onboarding_install),
                 enabled = downloadConsent,
                 icon = Icons.Filled.Download,
                 onClick = onInstall,
                 modifier = Modifier.weight(1.3f)
             )
         }
+    }
+}
+
+/** "Also install the XFCE desktop": off by default; the desktop can be added later. */
+@Composable
+private fun DesktopOptionCard(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(colors.surfaceContainer)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = stringResource(R.string.onboarding_desktop_option),
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.onSurface
+            )
+            Text(
+                text = stringResource(R.string.onboarding_desktop_option_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        FluxSwitch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -1058,9 +1085,8 @@ internal fun RuntimeChoiceSection(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = stringResource(R.string.onboarding_runtime_title),
-            fontWeight = FontWeight.Bold,
-            color = colors.onBackground,
-            fontSize = 14.sp
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.onBackground
         )
         Row(
             modifier = Modifier
@@ -1104,11 +1130,11 @@ private fun RuntimeOptionCard(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
-    val borderColor = if (selected) FluxAccentMagenta else FluxHairline
+    val borderColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) FluxAccentMagenta.copy(alpha = 0.12f) else colors.surface.copy(alpha = 0.72f))
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else colors.surfaceContainer)
             .border(if (selected) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(14.dp))
             .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
             .padding(12.dp)
@@ -1122,14 +1148,14 @@ private fun RuntimeOptionCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (selected) FluxAccentMagenta else colors.onSurface.copy(alpha = 0.7f),
+                    tint = if (selected) MaterialTheme.colorScheme.primary else colors.onSurface.copy(alpha = 0.7f),
                     modifier = Modifier.size(22.dp)
                 )
                 RadioButton(
                     selected = selected,
                     onClick = null,
                     colors = RadioButtonDefaults.colors(
-                        selectedColor = FluxAccentMagenta,
+                        selectedColor = MaterialTheme.colorScheme.primary,
                         unselectedColor = colors.onSurface.copy(alpha = 0.4f)
                     ),
                     modifier = Modifier.size(20.dp)
@@ -1162,12 +1188,12 @@ private fun ThemeOptionCard(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
-    val borderColor = if (selected) FluxAccentMagenta else FluxHairline
+    val borderColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
 
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) FluxAccentMagenta.copy(alpha = 0.12f) else colors.surface.copy(alpha = 0.72f))
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else colors.surfaceContainer)
             .border(if (selected) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(14.dp))
             .clickable(onClick = onSelect)
             .padding(12.dp)
@@ -1183,15 +1209,15 @@ private fun ThemeOptionCard(
                     modifier = Modifier
                         .size(24.dp)
                         .clip(CircleShape)
-                        .background(if (isDark) Color(0xFF1E1E24) else Color(0xFFE8EAF6))
-                        .border(1.dp, FluxHairline, CircleShape),
+                        .background(if (isDark) DesktopThemeSwatchDark else DesktopThemeSwatchLight)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     if (selected) {
                         Icon(
                             imageVector = Icons.Filled.Check,
                             contentDescription = null,
-                            tint = if (isDark) FluxAccentMagenta else Color(0xFF1E1E24),
+                            tint = if (isDark) MaterialTheme.colorScheme.primary else DesktopThemeSwatchDark,
                             modifier = Modifier.size(14.dp)
                         )
                     }
@@ -1201,7 +1227,7 @@ private fun ThemeOptionCard(
                     selected = selected,
                     onClick = onSelect,
                     colors = RadioButtonDefaults.colors(
-                        selectedColor = FluxAccentMagenta,
+                        selectedColor = MaterialTheme.colorScheme.primary,
                         unselectedColor = colors.onSurface.copy(alpha = 0.4f)
                     ),
                     modifier = Modifier.size(20.dp)
@@ -1229,12 +1255,14 @@ private fun ThemeOptionCard(
 // 6. DONE / COMPLETION PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Stateless completion page (also rendered by the onboarding screenshot previews). */
+/**
+ * Stateless completion page (also rendered by the onboarding screenshot previews). The terminal
+ * is the primary action; [onDesktop] is null when setup installed no desktop.
+ */
 @Composable
 internal fun DonePage(
-    onHome: () -> Unit,
     onTerminal: () -> Unit,
-    onDesktop: () -> Unit,
+    onDesktop: (() -> Unit)?,
     runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT
 ) {
     val colors = MaterialTheme.colorScheme
@@ -1252,16 +1280,8 @@ internal fun DonePage(
                 Box(
                     modifier = Modifier
                         .size(108.dp)
-                        .clip(RoundedCornerShape(32.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    colors.surface.copy(alpha = 0.85f),
-                                    colors.surfaceVariant.copy(alpha = 0.6f)
-                                )
-                            )
-                        )
-                        .border(1.5.dp, FluxHairline, RoundedCornerShape(32.dp)),
+                        .clip(MaterialTheme.shapes.extraLarge)
+                        .background(colors.surfaceContainerHigh),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
@@ -1275,16 +1295,16 @@ internal fun DonePage(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(FluxDarkSurface)
+                        .background(colors.background)
                         .padding(3.dp)
                         .clip(CircleShape)
-                        .background(OnboardSuccess),
+                        .background(FluxSuccess),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,
-                        tint = FluxDarkSurface,
+                        tint = colors.background,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -1294,8 +1314,7 @@ internal fun DonePage(
 
             Text(
                 text = stringResource(R.string.onboarding_done_title),
-                fontSize = 28.sp,
-                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center,
                 color = colors.onBackground
             )
@@ -1303,79 +1322,66 @@ internal fun DonePage(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = stringResource(R.string.onboarding_done_body),
+                text = stringResource(
+                    if (onDesktop != null) R.string.onboarding_done_body_desktop
+                    else R.string.onboarding_done_body
+                ),
                 textAlign = TextAlign.Center,
-                color = colors.onBackground.copy(alpha = 0.72f),
-                fontSize = 14.5.sp,
-                lineHeight = 20.sp,
+                color = colors.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(horizontal = 12.dp)
             )
 
             Spacer(Modifier.height(14.dp))
 
-            MethodChip(
-                label = stringResource(
+            Text(
+                text = stringResource(
                     if (runtime == UbuntuRuntimeMode.CHROOT) R.string.onboarding_done_chip_chroot
                     else R.string.onboarding_done_chip
                 ),
-                color = FluxAccentCyan
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSecondaryContainer,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(colors.secondaryContainer)
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
             )
 
             Spacer(Modifier.height(32.dp))
 
-            // Primary action: start the Ubuntu desktop
-            Button(
-                onClick = onDesktop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = BrandCream,
-                    contentColor = FluxDarkGrey
-                ),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Icon(Icons.Filled.DesktopWindows, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    stringResource(R.string.onboarding_done_start_desktop),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Secondary action: open a terminal
+            // Primary action: the terminal, the app's home
             Button(
                 onClick = onTerminal,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 50.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = FluxAccentMagenta.copy(alpha = 0.16f),
-                    contentColor = colors.onBackground
-                ),
-                border = BorderStroke(1.dp, FluxAccentMagenta.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(14.dp)
+                    .heightIn(min = 56.dp),
+                shape = MaterialTheme.shapes.medium
             ) {
-                Icon(Icons.Filled.Terminal, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Terminal, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(
                     stringResource(R.string.onboarding_done_open_terminal),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp
+                    style = MaterialTheme.typography.titleSmall
                 )
             }
 
-            Spacer(Modifier.height(4.dp))
-
-            // Tertiary action: leave setup for the dashboard
-            FluxGhostButton(
-                text = stringResource(R.string.onboarding_done_dashboard),
-                onClick = onHome,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (onDesktop != null) {
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = onDesktop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 50.dp),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Icon(Icons.Filled.DesktopWindows, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        stringResource(R.string.onboarding_done_start_desktop),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
         }
     }
 }
@@ -1437,7 +1443,7 @@ internal fun StorageAccessContent(
     onContinue: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    val accent = if (granted) OnboardSuccess else FluxAccentMagenta
+    val accent = if (granted) FluxSuccess else MaterialTheme.colorScheme.primary
 
     Column(
         modifier = Modifier
@@ -1488,8 +1494,7 @@ internal fun StorageAccessContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surface.copy(alpha = 0.72f))
-                    .border(1.dp, FluxHairline, RoundedCornerShape(16.dp))
+                    .background(colors.surfaceContainer)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -1503,15 +1508,14 @@ internal fun StorageAccessContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(FluxAccentCyan.copy(alpha = 0.08f))
-                    .border(1.dp, FluxAccentCyan.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Filled.FolderOpen,
                     contentDescription = null,
-                    tint = FluxAccentCyan,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(Modifier.width(12.dp))
@@ -1529,18 +1533,17 @@ internal fun StorageAccessContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(OnboardSuccess.copy(alpha = 0.12f))
-                        .border(1.dp, OnboardSuccess.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                         .semantics { liveRegion = LiveRegionMode.Polite }
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = OnboardSuccess, modifier = Modifier.size(22.dp))
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FluxSuccess, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
                         stringResource(R.string.onboarding_storage_granted),
-                        color = OnboardSuccess,
+                        color = FluxSuccess,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
                     )
@@ -1593,7 +1596,7 @@ private fun StorageLinkRow(path: String, description: String) {
         Icon(
             imageVector = Icons.Filled.FolderOpen,
             contentDescription = null,
-            tint = FluxAccentCyan,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .padding(top = 2.dp)
                 .size(18.dp)
@@ -1644,7 +1647,7 @@ private fun StepHeader(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
-                    tint = BrandCream,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1666,8 +1669,8 @@ private fun StepHeader(
                 .fillMaxWidth()
                 .height(4.dp)
                 .clip(RoundedCornerShape(2.dp)),
-            color = FluxAccentMagenta,
-            trackColor = colors.surfaceVariant.copy(alpha = 0.4f)
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = colors.surfaceContainerHighest
         )
 
         Spacer(Modifier.height(14.dp))
@@ -1688,33 +1691,31 @@ private fun FluxConsentCheckboxCard(
 ) {
     val body = stringResource(R.string.onboarding_consent_body)
     val colors = MaterialTheme.colorScheme
-    val borderColor = if (consented) FluxAccentMagenta else FluxHairline
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (consented) FluxAccentMagenta.copy(alpha = 0.08f) else colors.surface.copy(alpha = 0.72f))
-            .border(1.dp, borderColor, RoundedCornerShape(14.dp))
-            .clickable { onConsentChange(!consented) }
-            .padding(14.dp),
+            .clip(MaterialTheme.shapes.medium)
+            .background(if (consented) colors.secondaryContainer else colors.surfaceContainer)
+            .toggleable(value = consented, role = Role.Checkbox, onValueChange = onConsentChange)
+            .padding(start = 4.dp, top = 4.dp, end = 16.dp, bottom = 14.dp),
         verticalAlignment = Alignment.Top
     ) {
         Checkbox(
             checked = consented,
-            onCheckedChange = onConsentChange,
+            onCheckedChange = null,
+            modifier = Modifier.size(48.dp),
             colors = CheckboxDefaults.colors(
-                checkedColor = FluxAccentMagenta,
-                uncheckedColor = colors.onSurface.copy(alpha = 0.45f)
+                checkedColor = colors.primary,
+                checkmarkColor = colors.onPrimary,
+                uncheckedColor = colors.onSurfaceVariant
             )
         )
-        Spacer(Modifier.width(8.dp))
         Text(
             text = body,
-            color = colors.onSurface.copy(alpha = 0.85f),
-            fontSize = 12.5.sp,
-            lineHeight = 17.sp,
-            modifier = Modifier.padding(top = 10.dp)
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurface,
+            modifier = Modifier.padding(top = 14.dp)
         )
     }
 }
@@ -1733,12 +1734,6 @@ private fun FluxPrimaryButton(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = BrandCream,
-            contentColor = FluxDarkGrey,
-            disabledContainerColor = FluxSwitchUncheckedTrack,
-            disabledContentColor = FluxBodyMuted
-        ),
         shape = RoundedCornerShape(14.dp)
     ) {
         Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -1758,7 +1753,7 @@ private fun FluxGhostButton(
     TextButton(
         onClick = onClick,
         modifier = modifier.height(52.dp),
-        colors = ButtonDefaults.textButtonColors(contentColor = BrandCream)
+        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
     ) {
         Text(text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
     }

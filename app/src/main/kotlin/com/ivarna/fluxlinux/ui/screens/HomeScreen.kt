@@ -3,38 +3,34 @@ package com.ivarna.fluxlinux.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DesktopWindows
-import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -44,10 +40,12 @@ import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.desktop.DesktopLauncher
 import com.ivarna.fluxlinux.core.desktop.DesktopSession
 import com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
+import com.ivarna.fluxlinux.core.desktop.UbuntuDesktop
 import com.ivarna.fluxlinux.core.files.UbuntuFiles
 import com.ivarna.fluxlinux.core.system.GuestStorageLinks
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.install.InstallController
+import com.ivarna.fluxlinux.core.install.InstallKind
 import com.ivarna.fluxlinux.core.terminal.BootstrapInstaller
 import com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager
 import com.ivarna.fluxlinux.core.root.RootShell
@@ -56,15 +54,17 @@ import com.ivarna.fluxlinux.core.utils.RuntimeSwitchDecision
 import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.core.utils.UbuntuInstallCheck
 import com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe
-import com.ivarna.fluxlinux.core.utils.UbuntuLaunchPreferences
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
+import com.ivarna.fluxlinux.ui.components.DesktopAddOnUi
 import com.ivarna.fluxlinux.ui.components.SharedStorageUi
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboard
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardActions
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardState
 import com.ivarna.fluxlinux.ui.components.UbuntuStatus
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
+import com.ivarna.fluxlinux.ui.theme.TerminalBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -75,7 +75,6 @@ import kotlinx.coroutines.withContext
  */
 internal fun ubuntuStatus(
     install: UbuntuInstallCheck,
-    autoStartPending: Boolean,
     session: DesktopSession?,
     activeId: String,
 ): UbuntuStatus {
@@ -86,7 +85,6 @@ internal fun ubuntuStatus(
         install == UbuntuInstallCheck.CHECKING -> UbuntuStatus.CHECKING
         install == UbuntuInstallCheck.NO_ROOT -> UbuntuStatus.NEEDS_ROOT
         install == UbuntuInstallCheck.NOT_INSTALLED -> UbuntuStatus.NOT_INSTALLED
-        autoStartPending -> UbuntuStatus.STARTING
         else -> UbuntuStatus.STOPPED
     }
 }
@@ -112,23 +110,39 @@ internal fun homeRootProbeAllowed(reason: RootProbeReason, lastRoot: Boolean?): 
 
 /**
  * Whether Home offers the quick runtime switch: the other mode's install is known to exist
- * and no desktop is running, starting or about to auto-start.
+ * and no desktop is running or starting.
  */
-internal fun canSwitchRuntime(otherInstalled: Boolean, status: UbuntuStatus, desktopActive: Boolean, autoStartPending: Boolean): Boolean =
-    otherInstalled && !desktopActive && !autoStartPending &&
+internal fun canSwitchRuntime(otherInstalled: Boolean, status: UbuntuStatus, desktopActive: Boolean): Boolean =
+    otherInstalled && !desktopActive &&
         status != UbuntuStatus.RUNNING && status != UbuntuStatus.STARTING
 
 /**
- * Home: the Ubuntu dashboard. Status and start/open/stop, terminal and file shortcuts,
- * shared storage, and recovery. Device state is read here; the leaves in
- * [UbuntuDashboard] are stateless (see the screenshot previews).
+ * The Desktop section's state for the active install [activeId]: a running or failed desktop
+ * add-on run of that install wins; otherwise [desktopInstalled] decides. Terminal-only runs and
+ * runs for the other install never show here.
+ */
+internal fun desktopAddOnUi(
+    install: InstallController.State,
+    activeId: String,
+    desktopInstalled: Boolean,
+): DesktopAddOnUi {
+    val addOn = install.takeIf { it.kind == InstallKind.DESKTOP_ADD_ON && it.distroId == activeId }
+    return when {
+        addOn?.isRunning == true -> DesktopAddOnUi.Installing(addOn.percent, addOn.phaseLabel, addOn.detail)
+        desktopInstalled -> DesktopAddOnUi.Installed
+        addOn?.status == InstallController.Status.Failed -> DesktopAddOnUi.Failed(addOn.errorMessage)
+        else -> DesktopAddOnUi.NotInstalled
+    }
+}
+
+/**
+ * Home: the Ubuntu overview, opened from the terminal drawer. Status, the optional desktop
+ * (install, start/open/stop), files, shared storage and recovery. Device state is read here;
+ * the leaves in [UbuntuDashboard] are stateless (see the screenshot previews).
  */
 @Composable
 fun HomeScreen(
     scriptRefreshTrigger: Int = 0,
-    autoStartPending: Boolean = false,
-    onCancelAutoStart: () -> Unit = {},
-    onOpenTerminal: (distroId: String, root: Boolean) -> Unit = { _, _ -> },
     onNavigateToInstall: (Distro) -> Unit,
     onNavigateToSettings: (Distro) -> Unit,
     onNavigateToTroubleshooting: () -> Unit
@@ -233,9 +247,27 @@ fun HomeScreen(
         UbuntuRuntimeMode.PROOT -> rootAvailable == true && chrootInstalled == true
         UbuntuRuntimeMode.CHROOT -> prootInstalled
     }
-    val lastStartFailed = remember(stateRefresh, refreshKey, autoStartPending, activeId) {
-        UbuntuLaunchPreferences.lastAutoStartFailed(context, activeId)
+    // The optional desktop, read off the main thread: the stored flag, else a startxfce4 file
+    // check (PRoot) or, once root was granted, an su probe of the chroot that also heals the
+    // flag. Starts from the stored flag so an installed desktop doesn't flash "not installed".
+    var desktopDetected by remember(activeId) {
+        mutableStateOf(StateManager.isComponentInstalled(context, activeId, UbuntuDesktop.COMPONENT_ID))
     }
+    LaunchedEffect(installed, activeId, runtime, rootAvailable, stateRefresh) {
+        if (!installed) return@LaunchedEffect
+        val app = context.applicationContext
+        val probeChrootDesktop = runtime == UbuntuRuntimeMode.CHROOT && rootAvailable == true
+        desktopDetected = withContext(Dispatchers.IO) {
+            runCatching {
+                UbuntuDesktop.isInstalled(app, activeId) ||
+                    (probeChrootDesktop && UbuntuDesktop.probe(app, activeId))
+            }.getOrElse { desktopDetected }
+        }
+    }
+    val installer = remember { InstallController.get(context.applicationContext) }
+    val installState by installer.state.collectAsState()
+    var showDesktopInstallConfirm by remember { mutableStateOf(false) }
+    var showDesktopInstallLog by remember { mutableStateOf(false) }
     var creatingLinks by remember { mutableStateOf(false) }
     // The chroot check goes through su, so links are always read off the main thread.
     var linksPresent by remember { mutableStateOf(false) }
@@ -288,7 +320,6 @@ fun HomeScreen(
     fun startDesktop() {
         try {
             DesktopLauncher.start(context, activeId) { ok ->
-                if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(context, activeId)
                 refreshKey++
                 if (!ok) showDesktopLogs = true
             }
@@ -298,7 +329,6 @@ fun HomeScreen(
     }
 
     fun stopDesktop(onDone: (() -> Unit)? = null) {
-        UbuntuLaunchPreferences.clearAutoStartAttempt(context)
         val id = session?.distroId ?: desktopUi.distroId ?: activeId
         try {
             DesktopLauncher.stop(context, id) {
@@ -405,7 +435,7 @@ fun HomeScreen(
             UbuntuRuntimeSwitch.decide(
                 current = runtime,
                 target = target,
-                desktopActive = desktopActive || autoStartPending,
+                desktopActive = desktopActive,
                 rootAvailable = rootAvailable == true,
             )
         ) {
@@ -425,7 +455,19 @@ fun HomeScreen(
         }
     }
 
-    val status = ubuntuStatus(install, autoStartPending, session, activeId)
+    /** Starts the desktop add-on on the active install; never supersedes another running install. */
+    fun installDesktop(theme: String) {
+        val current = installer.state.value
+        if (current.isRunning) {
+            toast(context.getString(R.string.home_desktop_install_busy))
+            return
+        }
+        installer.start(activeId, theme, InstallKind.DESKTOP_ADD_ON)
+    }
+
+    val status = ubuntuStatus(install, session, activeId)
+    val desktopInstalled = desktopDetected || session?.distroId == activeId
+    val desktop = desktopAddOnUi(installState, activeId, desktopInstalled)
     val otherId = otherDesktopId(session, activeId)
     val otherName = when (otherId) {
         null -> null
@@ -435,21 +477,20 @@ fun HomeScreen(
     }
     val state = UbuntuDashboardState(
         status = status,
-        autoStartPending = autoStartPending,
-        lastStartFailed = lastStartFailed,
         otherDesktopRunning = otherName,
         storage = storage,
         runtime = runtime,
-        canSwitchRuntime = canSwitchRuntime(otherInstalled, status, desktopActive, autoStartPending),
+        canSwitchRuntime = canSwitchRuntime(otherInstalled, status, desktopActive),
+        desktop = desktop,
     )
     val actions = UbuntuDashboardActions(
         onStartDesktop = { startDesktop() },
         onOpenDesktop = { DesktopLauncher.reopenDisplay(context) },
         onStopDesktop = { stopDesktop() },
-        onCancelAutoStart = onCancelAutoStart,
+        onInstallDesktop = { showDesktopInstallConfirm = true },
+        onCancelDesktopInstall = { installer.cancel() },
+        onDesktopInstallLog = { showDesktopInstallLog = true },
         onSetUpUbuntu = { ubuntuDistro?.let(onNavigateToInstall) },
-        onTerminal = { onOpenTerminal(activeId, false) },
-        onRootTerminal = { onOpenTerminal(activeId, true) },
         onFiles = { openFiles(UbuntuFiles.ROOT_HOME) },
         onFilesystem = { openFiles(UbuntuFiles.ROOT_SYSTEM) },
         onAllowStorage = {
@@ -504,69 +545,133 @@ fun HomeScreen(
         )
     }
 
-    // ─── Graphical Desktop live logs (termux-lib VIEW LOGS) ─────────────────
+    if (showDesktopInstallConfirm) {
+        DesktopInstallDialog(
+            onInstall = { theme ->
+                showDesktopInstallConfirm = false
+                installDesktop(theme)
+            },
+            onDismiss = { showDesktopInstallConfirm = false }
+        )
+    }
+
+    if (showDesktopInstallLog) {
+        LogDialog(
+            title = stringResource(R.string.home_desktop_install_log_title),
+            subtitle = installState.phaseLabel.ifBlank { null },
+            logText = installState.logText,
+            onCopy = { copyLog(context, installState.logText) },
+            onDismiss = { showDesktopInstallLog = false }
+        )
+    }
+
+    // ─── Desktop start/stop log (termux-lib VIEW LOGS) ──────────────────────
     if (showDesktopLogs) {
-        DesktopLogsDialog(
-            logText = if (desktopUi.logText.isNotBlank()) {
-                desktopUi.logText
-            } else {
-                DesktopLauncher.readLog(context)
-            },
-            phase = desktopUi.phase,
-            onDismiss = { showDesktopLogs = false },
-            onOpenX11 = {
-                DesktopLauncher.reopenDisplay(context)
-            },
-            onCopy = {
-                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val text = if (desktopUi.logText.isNotBlank()) {
-                    desktopUi.logText
-                } else {
-                    DesktopLauncher.readLog(context)
+        val logText = desktopUi.logText.ifBlank { DesktopLauncher.readLog(context) }
+        LogDialog(
+            title = stringResource(R.string.home_log_title_desktop),
+            subtitle = stringResource(
+                when (desktopUi.phase) {
+                    DesktopLauncher.Phase.Starting -> R.string.home_log_phase_starting
+                    DesktopLauncher.Phase.Running -> R.string.home_log_phase_running
+                    DesktopLauncher.Phase.Idle -> R.string.home_log_phase_idle
                 }
-                cm.setPrimaryClip(ClipData.newPlainText("desktop_log", text))
-                Toast.makeText(context, "Log copied", Toast.LENGTH_SHORT).show()
+            ),
+            logText = logText,
+            onCopy = { copyLog(context, logText) },
+            onDismiss = { showDesktopLogs = false },
+            openDisplay = if (desktopUi.phase != DesktopLauncher.Phase.Idle) {
+                { DesktopLauncher.reopenDisplay(context) }
+            } else {
+                null
             }
         )
     }
 }
 
-// ─── Desktop start/stop log dialog ─────────────────────────────────────────────
+private fun copyLog(context: Context, text: String) {
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+    runCatching { cm.setPrimaryClip(ClipData.newPlainText("log", text)) }
+    // Android 13+ shows its own clipboard confirmation.
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, R.string.home_log_copied, Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** Confirms the large desktop download and picks its theme (the same two as setup). */
 @Composable
-private fun DesktopLogsDialog(
+private fun DesktopInstallDialog(onInstall: (theme: String) -> Unit, onDismiss: () -> Unit) {
+    var theme by rememberSaveable { mutableStateOf("dark") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Filled.DesktopWindows, contentDescription = null) },
+        title = { Text(stringResource(R.string.home_desktop_confirm_title)) },
+        text = {
+            Column {
+                Text(
+                    stringResource(R.string.home_desktop_confirm_body),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    stringResource(R.string.home_desktop_confirm_theme),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = FluxSpacing.lg, bottom = FluxSpacing.xs)
+                )
+                Column(Modifier.selectableGroup()) {
+                    listOf(
+                        "dark" to R.string.home_desktop_theme_dark,
+                        "light" to R.string.home_desktop_theme_light,
+                    ).forEach { (id, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = FluxSpacing.touch)
+                                .clip(MaterialTheme.shapes.small)
+                                .selectable(
+                                    selected = theme == id,
+                                    role = Role.RadioButton,
+                                    onClick = { theme = id }
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = theme == id, onClick = null)
+                            Spacer(Modifier.width(FluxSpacing.md))
+                            Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onInstall(theme) }) {
+                Text(stringResource(R.string.home_desktop_confirm_install))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.home_desktop_confirm_cancel)) }
+        }
+    )
+}
+
+/**
+ * Scrolling log viewer (desktop start/stop log, desktop install log): follows new output,
+ * copies the whole text, and offers "Open display" while a desktop runs.
+ */
+@Composable
+private fun LogDialog(
+    title: String,
+    subtitle: String?,
     logText: String,
-    phase: DesktopLauncher.Phase,
+    onCopy: () -> Unit,
     onDismiss: () -> Unit,
-    onOpenX11: () -> Unit,
-    onCopy: () -> Unit
+    openDisplay: (() -> Unit)? = null,
 ) {
     val scroll = rememberScrollState()
     LaunchedEffect(logText) {
         scroll.animateScrollTo(scroll.maxValue)
     }
-
-    // Dark primary is near-black — prefer cream secondary + light surfaces for contrast.
-    val titleColor = MaterialTheme.colorScheme.onBackground
-    val accent = MaterialTheme.colorScheme.secondary
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val logFg = Color(0xFFE8EAED)
-    val logBg = Color(0xFF101214)
-    val phaseLabel = when (phase) {
-        DesktopLauncher.Phase.Starting -> "Starting…"
-        DesktopLauncher.Phase.Running -> "Running"
-        DesktopLauncher.Phase.Idle -> "Idle"
-    }
-    val phaseIcon = when (phase) {
-        DesktopLauncher.Phase.Starting -> Icons.Filled.Sync
-        DesktopLauncher.Phase.Running -> Icons.Filled.PlayArrow
-        DesktopLauncher.Phase.Idle -> Icons.Filled.Schedule
-    }
-    val phaseTint = when (phase) {
-        DesktopLauncher.Phase.Starting -> accent
-        DesktopLauncher.Phase.Running -> Color(0xFF69F0AE)
-        DesktopLauncher.Phase.Idle -> muted
-    }
-
+    val colors = MaterialTheme.colorScheme
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
@@ -575,122 +680,70 @@ private fun DesktopLogsDialog(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
                 .fillMaxHeight(0.75f),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+            shape = MaterialTheme.shapes.extraLarge,
+            color = colors.surfaceContainerHigh,
         ) {
-            Column(Modifier.padding(16.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.DesktopWindows,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                "Graphical Desktop Log",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                color = titleColor
-                            )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = phaseIcon,
-                                    contentDescription = null,
-                                    tint = phaseTint,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    phaseLabel,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = phaseTint
-                                )
-                            }
+            Column(Modifier.padding(FluxSpacing.lg)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(start = FluxSpacing.sm)) {
+                        Text(title, style = MaterialTheme.typography.titleLarge, color = colors.onSurface)
+                        if (subtitle != null) {
+                            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                         }
                     }
                     IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = "Close",
-                            tint = titleColor
+                            contentDescription = stringResource(R.string.home_log_close),
+                            tint = colors.onSurfaceVariant
                         )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
+                        .padding(top = FluxSpacing.md)
                         .weight(1f)
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(logBg)
-                        .border(
-                            BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                            RoundedCornerShape(12.dp)
-                        )
-                        .padding(12.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(TerminalBackground)
+                        .padding(FluxSpacing.md)
                 ) {
+                    // Real program output: a monospace face is the content, not decoration.
                     Text(
-                        text = logText.ifBlank { "Waiting for desktop output…" },
+                        text = logText.ifBlank { stringResource(R.string.home_log_waiting) },
+                        style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        color = logFg,
+                        color = colors.onSurface,
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scroll)
                     )
                 }
-                Spacer(Modifier.height(12.dp))
                 Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = FluxSpacing.md),
+                    horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
                 ) {
                     OutlinedButton(
                         onClick = onCopy,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = accent
-                        ),
-                        border = BorderStroke(1.5.dp, accent.copy(alpha = 0.75f))
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.weight(1f).heightIn(min = FluxSpacing.touch)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.ContentCopy,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Copy", fontWeight = FontWeight.SemiBold)
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(FluxSpacing.sm))
+                        Text(stringResource(R.string.home_log_copy))
                     }
-                    Button(
-                        onClick = onOpenX11,
-                        enabled = phase != DesktopLauncher.Phase.Idle,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF00E5FF),
-                            contentColor = Color.Black,
-                            disabledContainerColor = Color(0xFF00E5FF).copy(alpha = 0.28f),
-                            disabledContentColor = Color.Black.copy(alpha = 0.45f)
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.OpenInNew,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Open X11", fontWeight = FontWeight.Bold)
+                    if (openDisplay != null) {
+                        Button(
+                            onClick = openDisplay,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.weight(1f).heightIn(min = FluxSpacing.touch)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(FluxSpacing.sm))
+                            Text(stringResource(R.string.home_log_open_display))
+                        }
                     }
                 }
             }

@@ -1,14 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Welcome -->
-    <string name="onboarding_welcome_tagline">Ubuntu desktop on your phone. No root needed.</string>
-    <string name="onboarding_feature_ubuntu_title">Ubuntu 26.04 with XFCE</string>
-    <string name="onboarding_feature_ubuntu_desc">Setup installs Ubuntu 26.04 with the XFCE desktop using PRoot, so it runs without root. Rooted phones can choose chroot instead.</string>
+    <string name="onboarding_welcome_tagline">Ubuntu in a real terminal on your phone. No root needed.</string>
+    <string name="onboarding_feature_ubuntu_title">Ubuntu 26.04 terminal</string>
+    <string name="onboarding_feature_ubuntu_desc">Zsh with Oh My Zsh, tabs and extra keys. Tap a link to open it in your browser; Paste is one key.</string>
+    <string name="onboarding_feature_desktop_title">Optional XFCE desktop</string>
+    <string name="onboarding_feature_desktop_desc">Add a full desktop during setup or any time later. The terminal works without it.</string>
+    <string name="onboarding_feature_files_title">Your files, both ways</string>
+    <string name="onboarding_feature_files_desc">Ubuntu sees your phone\'s folders in ~/&#8288;storage, and the Files app can browse Ubuntu\'s home.</string>
 
     <!-- Options -->
     <string name="onboarding_options_distro_name">Ubuntu 26.04</string>
-    <string name="onboarding_options_distro_desc">XFCE desktop · PRoot, no root needed</string>
-    <string name="onboarding_options_distro_desc_chroot">XFCE desktop · chroot, runs with root</string>
+    <string name="onboarding_options_title">Install options</string>
+    <string name="onboarding_options_distro_desc">Terminal with zsh · PRoot, no root needed</string>
+    <string name="onboarding_options_distro_desc_chroot">Terminal with zsh · chroot, runs with root</string>
+    <string name="onboarding_desktop_option">Also install the XFCE desktop</string>
+    <string name="onboarding_desktop_option_desc">A full desktop in a display app. A large extra download; you can also add it later from the Ubuntu page.</string>
+    <string name="onboarding_theme_title">Desktop theme</string>
+    <string name="onboarding_theme_dark">Dark</string>
+    <string name="onboarding_theme_dark_desc">The default</string>
+    <string name="onboarding_theme_light">Light</string>
+    <string name="onboarding_theme_light_desc">Bright workspace</string>
+    <string name="onboarding_manifest_title">What gets installed</string>
+    <string name="onboarding_manifest_terminal">Zsh, Oh My Zsh and plugins for the terminal</string>
+    <string name="onboarding_manifest_desktop">XFCE desktop and the X11 display</string>
+    <string name="onboarding_manifest_theming">Flux themes, icons, wallpapers and Nerd fonts</string>
+    <string name="onboarding_install">Install</string>
     <string name="onboarding_runtime_title">How Ubuntu runs</string>
     <string name="onboarding_runtime_proot">PRoot</string>
     <string name="onboarding_runtime_proot_desc">No root needed. Works on any phone.</string>
@@ -38,12 +55,12 @@
 
     <!-- Done -->
     <string name="onboarding_done_title">Ubuntu is ready</string>
-    <string name="onboarding_done_body">Ubuntu 26.04 with XFCE is installed. Start the desktop, or open a terminal.</string>
-    <string name="onboarding_done_chip">PROOT · NO ROOT</string>
-    <string name="onboarding_done_chip_chroot">CHROOT · ROOT</string>
-    <string name="onboarding_done_start_desktop">Start Ubuntu desktop</string>
+    <string name="onboarding_done_body">Ubuntu 26.04 is installed. Open the terminal to start. You can add the XFCE desktop later from the Ubuntu page.</string>
+    <string name="onboarding_done_body_desktop">Ubuntu 26.04 with the XFCE desktop is installed. Open the terminal, or start the desktop.</string>
+    <string name="onboarding_done_chip">PRoot · no root</string>
+    <string name="onboarding_done_chip_chroot">Chroot · root</string>
+    <string name="onboarding_done_start_desktop">Start desktop</string>
     <string name="onboarding_done_open_terminal">Open terminal</string>
-    <string name="onboarding_done_dashboard">Go to dashboard</string>
     <string name="onboarding_done_icon_desc">Ubuntu installed</string>
     <string name="onboarding_notice_body">The Linux host tools ship inside the app. To provide a complete Linux environment, FluxLinux downloads the Ubuntu rootfs directly from GitHub Releases upon continuation. It is not bundled in the F-Droid APK:</string>
     <string name="onboarding_notice_chip_host">Host tools</string>
@@ -52,4 +69,5 @@
     <string name="onboarding_notice_chip_rootfs_size">~80-150 MiB</string>
     <string name="onboarding_host_setup_intro">Initialize the local embedded Linux prefix, PulseAudio server, and terminal toolchain before Ubuntu is installed.</string>
     <string name="onboarding_consent_body">I understand this setup downloads the Ubuntu rootfs from GitHub Releases. That archive is not in the base APK and is not checked by F-Droid.</string>
+    <string name="onboarding_get_started">Get started</string>
 </resources>

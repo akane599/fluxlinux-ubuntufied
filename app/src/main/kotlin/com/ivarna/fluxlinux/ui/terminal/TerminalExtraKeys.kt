@@ -7,7 +7,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -31,6 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +45,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,12 +55,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
-import com.ivarna.fluxlinux.ui.theme.FluxAccentMagenta
 import com.termux.view.TerminalView
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -283,11 +284,18 @@ private fun keyDescriptionRes(key: String): Int? = when (key) {
 /** Hold-to-repeat schedule for the toolbar keys: [KeyRepeat] accelerated vs constant mode. */
 private val LocalKeyRepeatAccelerated = compositionLocalOf { false }
 
+/** Narrow cells (a phone with both utility columns): word labels step down one size. */
+private val LocalCompactLabels = compositionLocalOf { false }
+
 private val KEY_HEIGHT = 44.dp
-private val KEY_GAP = 2.dp
+private val KEY_GAP = 3.dp
 private val MIN_FULL_ROW_CELL_WIDTH = 56.dp
-/** The fixed ☰ column: one key wide, as tall as the rows it spans. */
-private val DRAWER_KEY_WIDTH = KEY_HEIGHT
+/** Below this cell width "HOME" / "PGUP" at labelMedium touch the key edges. */
+private val COMPACT_LABEL_CELL_WIDTH = 40.dp
+/** The fixed utility columns (☰ at the left, Paste at the right): one key wide, as tall as the rows. */
+private val UTILITY_KEY_WIDTH = KEY_HEIGHT
+private val LOCK_INDICATOR_WIDTH = 14.dp
+private val LOCK_INDICATOR_HEIGHT = 2.dp
 
 /**
  * Termux-style special-keys toolbar ([TerminalExtraKeysLayout]).
@@ -296,16 +304,19 @@ private val DRAWER_KEY_WIDTH = KEY_HEIGHT
  * together, so the columns stay aligned. When the full rows don't fit, cells are
  * sized so the 7 Termux keys fill the width and the extra keys sit past the edge.
  * F1–F12 (toggled via Fn) form a third row on the same grid.
- * A fixed ☰ key ([onOpenDrawer]) spans the rows at the left edge, outside the scroll, and the
- * grid is sized from the width left of it.
- * Image attach is out of scope for v1 (plan §4).
+ *
+ * Two fixed utility columns sit outside the scroll and mirror each other: ☰ ([onOpenDrawer])
+ * at the left edge and Paste ([onPaste]; long-press: [onPasteLongPress], the clipboard menu)
+ * at the right edge, so Paste is always one tap away whatever the keys are scrolled to.
  */
 @Composable
 fun TerminalExtraKeys(
     modState: TerminalModifierState,
     terminalView: () -> TerminalView?,
     onOpenDrawer: () -> Unit,
+    onPaste: () -> Unit,
     modifier: Modifier = Modifier,
+    onPasteLongPress: (() -> Unit)? = null,
     accelerateRepeat: Boolean = false,
 ) {
     val scroll = rememberScrollState()
@@ -361,9 +372,9 @@ fun TerminalExtraKeys(
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
         ) {
-            val gridWidth = maxWidth - KEY_GAP - DRAWER_KEY_WIDTH
+            val gridWidth = maxWidth - (KEY_GAP + UTILITY_KEY_WIDTH) * 2
             fun cellWidthFor(columns: Int): Dp = (gridWidth - KEY_GAP * (columns + 1)) / columns
             val fullRowCell = cellWidthFor(TerminalExtraKeysLayout.COLUMNS)
             val cellWidth = if (fullRowCell >= MIN_FULL_ROW_CELL_WIDTH) fullRowCell
@@ -371,34 +382,63 @@ fun TerminalExtraKeys(
             val rowModifier = Modifier
                 .height(KEY_HEIGHT)
                 .padding(horizontal = KEY_GAP)
+            val compactLabels = cellWidth < COMPACT_LABEL_CELL_WIDTH
             val rows = if (fnVisible) TerminalExtraKeysLayout.ROWS + listOf(TerminalExtraKeysLayout.F_KEYS)
             else TerminalExtraKeysLayout.ROWS
 
-            Row(modifier = Modifier.padding(vertical = KEY_GAP)) {
-                DrawerKey(
-                    onClick = onOpenDrawer,
-                    modifier = Modifier
-                        .padding(start = KEY_GAP)
-                        .width(DRAWER_KEY_WIDTH)
-                        .height(KEY_HEIGHT * rows.size + KEY_GAP * (rows.size - 1))
-                )
-                Column(
-                    modifier = Modifier.horizontalScroll(scroll),
-                    verticalArrangement = Arrangement.spacedBy(KEY_GAP)
-                ) {
-                    rows.forEach { row ->
-                        Row(modifier = rowModifier, horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
-                            row.forEach { key -> Key(key, Modifier.width(cellWidth)) }
+            val utilityHeight = KEY_HEIGHT * rows.size + KEY_GAP * (rows.size - 1)
+
+            CompositionLocalProvider(LocalCompactLabels provides compactLabels) {
+                Row(modifier = Modifier.padding(vertical = KEY_GAP)) {
+                    DrawerKey(
+                        onClick = onOpenDrawer,
+                        modifier = Modifier
+                            .padding(start = KEY_GAP)
+                            .width(UTILITY_KEY_WIDTH)
+                            .height(utilityHeight)
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .horizontalScroll(scroll),
+                        verticalArrangement = Arrangement.spacedBy(KEY_GAP)
+                    ) {
+                        rows.forEach { row ->
+                            Row(modifier = rowModifier, horizontalArrangement = Arrangement.spacedBy(KEY_GAP)) {
+                                row.forEach { key -> Key(key, Modifier.width(cellWidth)) }
+                            }
                         }
                     }
+                    PasteKey(
+                        onClick = onPaste,
+                        onLongClick = onPasteLongPress,
+                        modifier = Modifier
+                            .padding(end = KEY_GAP)
+                            .width(UTILITY_KEY_WIDTH)
+                            .height(utilityHeight)
+                    )
                 }
             }
         }
     }
 }
 
-/** Single glyphs (arrows, ↹, symbols) get a larger size so they read like Termux's keys. */
-private fun labelFontSize(label: String) = if (label.length == 1) 18.sp else 11.sp
+/** Single glyphs (arrows, ↹, symbols) read larger, like Termux's keys; words stay compact. */
+@Composable
+private fun labelStyle(label: String): TextStyle = when {
+    label.length == 1 -> MaterialTheme.typography.titleMedium
+    LocalCompactLabels.current -> MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)
+    else -> MaterialTheme.typography.labelMedium
+}
+
+/** Key face: flat tonal fill on the bar; an active modifier or Fn takes the cream accent. */
+@Composable
+private fun keyFill(active: Boolean): Color =
+    if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
+
+@Composable
+private fun keyContent(active: Boolean): Color =
+    if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
 
 @Composable
 private fun ModifierKey(
@@ -414,32 +454,24 @@ private fun ModifierKey(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .fillMaxHeight()
-            .background(
-                if (active) FluxAccentMagenta.copy(alpha = 0.85f)
-                else MaterialTheme.colorScheme.surface
-            )
-            // R5: LOCKED (long-press) gets an outline ring + badge dot so it is
-            // visually distinct from a one-shot active modifier.
-            .then(
-                if (locked) Modifier.border(2.dp, MaterialTheme.colorScheme.onPrimary)
-                else Modifier
-            )
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(keyFill(active))
             .combinedClickable(onClick = onPress, onLongClick = onLongPress)
     ) {
         KeyLabel(
             label = label,
             description = description,
-            color = if (active) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Bold
+            color = keyContent(active),
+            fontWeight = FontWeight.SemiBold
         )
+        // Locked (long-press) adds a bar under the label, so it reads apart from a one-shot press.
         if (locked) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(3.dp)
-                    .size(6.dp)
-                    .background(MaterialTheme.colorScheme.onPrimary, CircleShape)
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 5.dp)
+                    .size(width = LOCK_INDICATOR_WIDTH, height = LOCK_INDICATOR_HEIGHT)
+                    .background(keyContent(true), CircleShape)
             )
         }
     }
@@ -526,17 +558,14 @@ private fun ToolbarKey(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .fillMaxHeight()
-            .background(
-                if (active) FluxAccentMagenta.copy(alpha = 0.85f)
-                else MaterialTheme.colorScheme.surface
-            )
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(keyFill(active))
             .then(keyClickModifier(onClick, onHoldEnd))
     ) {
         KeyLabel(
             label = label,
             description = description,
-            color = if (active) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurface,
+            color = keyContent(active),
             fontWeight = FontWeight.Medium
         )
     }
@@ -548,7 +577,8 @@ private fun DrawerKey(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .background(MaterialTheme.colorScheme.surface)
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(role = Role.Button, onClick = onClick)
     ) {
         Icon(
@@ -560,11 +590,36 @@ private fun DrawerKey(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
+/** Paste from the clipboard (bracketed when the program asked for it); long-press: clipboard menu. */
+@Composable
+private fun PasteKey(onClick: () -> Unit, onLongClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .combinedClickable(
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.terminal_paste),
+                onLongClickLabel = onLongClick?.let { stringResource(R.string.terminal_paste_more) },
+                onLongClick = onLongClick,
+                onClick = onClick
+            )
+    ) {
+        Icon(
+            imageVector = Icons.Default.ContentPaste,
+            contentDescription = stringResource(R.string.terminal_paste),
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
 @Composable
 private fun KeyLabel(label: String, description: String?, color: Color, fontWeight: FontWeight) {
     Text(
         text = label,
-        fontSize = labelFontSize(label),
+        style = labelStyle(label),
         fontWeight = fontWeight,
         color = color,
         maxLines = 1,

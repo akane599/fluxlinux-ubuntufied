@@ -9,7 +9,6 @@
     <string name="terminal_new_session">New Ubuntu session</string>
     <string name="terminal_new_session_chroot">New Ubuntu chroot session</string>
     <string name="terminal_extra_keys">Extra keys</string>
-    <string name="terminal_back_home">Back to home</string>
     <string name="terminal_more_shells">More shells</string>
     <string name="terminal_shell_ubuntu_root">Ubuntu root shell</string>
     <string name="terminal_shell_ubuntu_chroot">Ubuntu chroot shell</string>
@@ -28,7 +27,7 @@
     <string name="terminal_empty_closed">All tabs are closed.</string>
     <string name="terminal_open_ubuntu">Open Ubuntu terminal</string>
     <string name="terminal_error_tab_limit">Tab limit reached (%1$d)</string>
-    <string name="terminal_error_host_bootstrap">Host bootstrap not ready — check Settings</string>
+    <string name="terminal_error_host_bootstrap">FluxLinux\'s host tools aren\'t ready. Use Repair host files on the Ubuntu page.</string>
     <string name="terminal_error_host_not_ready">Host not ready — check Settings</string>
     <string name="terminal_error_host_failed">Host shell failed to open</string>
     <string name="terminal_error_chroot_failed">Chroot session failed to open</string>

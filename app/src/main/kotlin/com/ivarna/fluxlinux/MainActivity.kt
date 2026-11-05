@@ -10,46 +10,26 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.isGranted
 import com.ivarna.fluxlinux.ui.components.BottomTab
-import com.ivarna.fluxlinux.ui.components.GlassScaffold
 import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
 import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.core.utils.ThemePreferences
-import com.ivarna.fluxlinux.core.utils.UbuntuLaunchPreferences
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.hazeChild
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 
 // Screen navigation enum
 enum class Screen {
@@ -355,7 +335,7 @@ class MainActivity : ComponentActivity() {
         com.ivarna.fluxlinux.core.terminal.TerminalLauncher.prepareHost(activity) { ok ->
             if (!ok) {
                 android.widget.Toast.makeText(
-                    activity, "Host bootstrap not ready — check Settings",
+                    activity, activity.getString(R.string.terminal_error_host_bootstrap),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
                 return@prepareHost
@@ -477,71 +457,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * A plain app open: launcher (MAIN) or an explicit component start with no action.
-     * Not the fluxlinux:// deep link, not the FGS notification's target page.
-     */
-    private fun isPlainLaunch(intent: android.content.Intent?): Boolean {
-        if (intent == null) return true
-        val action = intent.action
-        if (action != null && action != android.content.Intent.ACTION_MAIN) return false
-        if (intent.data != null) return false
-        return intent.getStringExtra(com.ivarna.fluxlinux.core.service.LaunchTargets.EXTRA_TARGET_PAGE) == null &&
-            intent.getStringExtra(com.ivarna.fluxlinux.core.service.LaunchTargets.EXTRA_TARGET_PAGE_ALIAS) == null
-    }
-
-    /** Auto-start runs at most once per cold launch (also guarded by rememberSaveable). */
-    private var coldLaunchAutoStart = false
-
-    /**
-     * Ubuntu auto-start preconditions other than the cold-launch flag, for the active Ubuntu
-     * install ([UbuntuRuntime.activeDistroId]). The crash-loop guard
-     * ([UbuntuLaunchPreferences.lastAutoStartFailed]) keeps a failing start from looping.
-     * The install check runs off the main thread: chroot needs su. Chroot without root (or not
-     * installed) skips auto-start without marking an attempt, so the guard never trips on it.
-     * Returns the distro id that passed the checks (null = no auto-start); only that id may be
-     * launched (see [UbuntuLaunchPreferences.autoStartTarget]).
-     */
-    private suspend fun autoStartCheckedDistroId(): String? {
-        if (!StateManager.isOnboardingComplete(this) ||
-            !UbuntuLaunchPreferences.isAutoStartDesktop(this)
-        ) return null
-        val app = applicationContext
-        val mode = com.ivarna.fluxlinux.core.utils.UbuntuRuntime.mode(app)
-        if (UbuntuLaunchPreferences.lastAutoStartFailed(app, mode.distroId)) return null
-        val check = withContext(Dispatchers.IO) {
-            com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe.probe(app, mode)
-        }
-        return mode.distroId.takeIf { check == com.ivarna.fluxlinux.core.utils.UbuntuInstallCheck.INSTALLED }
-    }
-
-    /** Starts the checked Ubuntu after the countdown; its attempt mark clears only on a ready desktop. */
-    private fun launchUbuntuAutoStart(distroId: String) {
-        val app = applicationContext
-        UbuntuLaunchPreferences.markAutoStartAttempt(app, distroId)
-        try {
-            com.ivarna.fluxlinux.core.desktop.DesktopLauncher.start(this, distroId) { ok ->
-                if (ok) UbuntuLaunchPreferences.clearAutoStartAttempt(app, distroId)
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("FluxLinux", "Ubuntu auto-start failed", e)
-        }
-    }
-
     override fun onDestroy() {
         GpuDriverInstaller.onPending = null
         DriverRelease.disarm(this)
         super.onDestroy()
     }
 
-    @OptIn(ExperimentalPermissionsApi::class, ExperimentalHazeMaterialsApi::class)
+    @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         GpuDriverInstaller.onPending = { runOnUiThread { armDriverResume() } }
         armDriverResume()
         if (savedInstanceState == null) {
-            // Read before the callback dispatch, which may rewrite the intent to MAIN.
-            coldLaunchAutoStart = isPlainLaunch(intent)
             intent?.let(::routeTargetPageAfterFirstFrame)
             dispatchLegacyTermuxCallback(intent)
         }
@@ -600,11 +527,12 @@ class MainActivity : ComponentActivity() {
                 currentScreenRef = remember { kotlinx.coroutines.flow.MutableStateFlow(currentScreen) }
                 LaunchedEffect(currentScreen) { currentScreenRef?.value = currentScreen }
                 
-                var currentTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
+                // The terminal is the app's home; the Ubuntu page (HOME) opens from its drawer.
+                var currentTab by rememberSaveable { mutableStateOf(BottomTab.TERMINAL) }
                 currentTabRef = remember { kotlinx.coroutines.flow.MutableStateFlow(currentTab) }
                 LaunchedEffect(currentTab) { currentTabRef?.value = currentTab }
                 // FGS / external intent may flip tab via currentTabRef
-                val externalTab by (currentTabRef ?: kotlinx.coroutines.flow.MutableStateFlow(BottomTab.HOME))
+                val externalTab by (currentTabRef ?: kotlinx.coroutines.flow.MutableStateFlow(BottomTab.TERMINAL))
                     .collectAsState()
                 LaunchedEffect(externalTab) {
                     if (externalTab != currentTab) currentTab = externalTab
@@ -621,48 +549,6 @@ class MainActivity : ComponentActivity() {
                     currentTab = BottomTab.TERMINAL
                 }
 
-                // ── Ubuntu auto-start: once per cold launch ──
-                // rememberSaveable survives recreation, so returning from X11 or rotating
-                // never starts a second time; a restored countdown resumes instead.
-                var autoStartHandled by rememberSaveable { mutableStateOf(false) }
-                var autoStartPending by rememberSaveable { mutableStateOf(false) }
-                // The install the countdown was checked for; a restored countdown reuses it.
-                var autoStartDistroId by rememberSaveable { mutableStateOf<String?>(null) }
-                LaunchedEffect(Unit) {
-                    if (!autoStartPending) {
-                        if (autoStartHandled || !coldLaunchAutoStart) return@LaunchedEffect
-                        autoStartHandled = true
-                        autoStartDistroId = autoStartCheckedDistroId() ?: return@LaunchedEffect
-                        withContext(Dispatchers.IO) {
-                            com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery
-                                .reconcileStale(applicationContext)
-                        }
-                        val running = com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery.current(
-                            this@MainActivity,
-                            com.ivarna.fluxlinux.core.desktop.DesktopLauncher.uiState.value
-                        )
-                        if (running != null ||
-                            com.ivarna.fluxlinux.core.desktop.DesktopLauncher.isSessionActive()
-                        ) {
-                            if (running != null) {
-                                com.ivarna.fluxlinux.core.desktop.DesktopLauncher.reopenDisplay(this@MainActivity)
-                            }
-                            return@LaunchedEffect
-                        }
-                        autoStartPending = true
-                    }
-                    delay(1500)
-                    if (!autoStartPending) return@LaunchedEffect
-                    autoStartPending = false
-                    // A runtime switch (Settings) during the countdown cancels it: the other
-                    // install was never checked.
-                    val target = UbuntuLaunchPreferences.autoStartTarget(
-                        autoStartDistroId,
-                        com.ivarna.fluxlinux.core.utils.UbuntuRuntime.activeDistroId(applicationContext),
-                    ) ?: return@LaunchedEffect
-                    launchUbuntuAutoStart(target)
-                }
-
                 // Troubleshooting opens from Settings or from Home recovery; Back returns there.
                 var troubleshootingReturn by remember { mutableStateOf(Screen.SETTINGS) }
                 val openTroubleshooting: (Screen) -> Unit = { from ->
@@ -670,7 +556,21 @@ class MainActivity : ComponentActivity() {
                     currentScreen = Screen.TROUBLESHOOTING
                 }
 
-                BackHandler {
+                // Settings opens from the terminal drawer or the Ubuntu page; Back returns there.
+                var settingsReturnTab by rememberSaveable { mutableStateOf(BottomTab.TERMINAL) }
+                val openSettings: (BottomTab) -> Unit = { from ->
+                    settingsReturnTab = from
+                    currentScreen = Screen.SETTINGS
+                }
+                val leaveSettings: () -> Unit = {
+                    currentScreen = Screen.HOME
+                    currentTab = settingsReturnTab
+                }
+
+                // At the terminal (the app's root) Back goes to the system; the terminal's own
+                // handler still closes its drawer first.
+                val atRoot = currentScreen == Screen.HOME && currentTab == BottomTab.TERMINAL
+                BackHandler(enabled = !atRoot) {
                     if (currentScreen == Screen.SETTINGS_CHROOT_DETAIL) {
                         currentScreen = Screen.SETTINGS_CHROOT
                     } else if (currentScreen == Screen.SETTINGS_PROOT_DETAIL) {
@@ -685,18 +585,16 @@ class MainActivity : ComponentActivity() {
                     } else if (currentScreen == Screen.TROUBLESHOOTING) {
                         currentScreen = troubleshootingReturn
                         if (troubleshootingReturn == Screen.HOME) currentTab = BottomTab.HOME
-                    } else if (currentScreen == Screen.SETTINGS
-                        || currentScreen == Screen.DISTRO_SETTINGS
+                    } else if (currentScreen == Screen.SETTINGS) {
+                        leaveSettings()
+                    } else if (currentScreen == Screen.DISTRO_SETTINGS
                         || currentScreen == Screen.INSTALL_WIZARD) {
                         currentScreen = Screen.HOME
                         currentTab = BottomTab.HOME
                     } else if (currentScreen == Screen.ONBOARDING || currentScreen == Screen.PREREQUISITES) {
                         finish()
-                    } else if (currentScreen == Screen.HOME && currentTab != BottomTab.HOME) {
-                        if (currentTab == BottomTab.TERMINAL) {
-                            com.ivarna.fluxlinux.ui.terminal.hideIme(window.decorView)
-                        }
-                        currentTab = BottomTab.HOME
+                    } else if (currentScreen == Screen.HOME && currentTab == BottomTab.HOME) {
+                        currentTab = BottomTab.TERMINAL
                     } else {
                         finish()
                     }
@@ -751,203 +649,23 @@ class MainActivity : ComponentActivity() {
                     currentScreen = Screen.DISTRO_SETTINGS
                 }
 
-                // ── In-app terminal actions (termux-flux-terminal / chroot-root-shell) ──
-                val onOpenTerminal: (String, Boolean) -> Unit = { distroId, root ->
-                    val method = try {
-                        com.ivarna.fluxlinux.core.data.terminalComponentFor(distroId).method
-                    } catch (_: Exception) {
-                        "proot"
-                    }
-                    val type = if (root) "shell-root" else "shell"
-                    val label = com.ivarna.fluxlinux.core.install.DistroInstallProfile
-                        .forId(distroId)?.displayName
-                        ?: distroId
-                    val title = when (method) {
-                        "chroot" -> if (root) "$label Root Shell" else "$label Shell"
-                        else -> if (root) "$label Shell (root)" else "$label Shell"
-                    }
-                    com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager.openSessionAfterHost(
-                        this@MainActivity,
-                        type = type,
-                        title = title,
-                        method = method,
-                        distroId = distroId,
-                        onResult = { result ->
-                            if (result == com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager.SessionOpenResult.OPENED) {
-                                openTerminalTab()
-                            } else {
-                                android.widget.Toast.makeText(
-                                    this@MainActivity,
-                                    "Host bootstrap not ready — check Settings",
-                                    android.widget.Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    )
-                }
-
-                val startEmbeddedInstall: (com.ivarna.fluxlinux.core.data.Distro, String?, () -> Unit) -> Unit =
-                    { distro, setupB64, onBaseInstalled ->
-                        com.ivarna.fluxlinux.core.terminal.TerminalLauncher.prepareHost(
-                            this@MainActivity,
-                            onDone = { ok ->
-                                if (!ok) {
-                                    android.widget.Toast.makeText(
-                                        this@MainActivity,
-                                        "Host bootstrap failed to extract",
-                                        android.widget.Toast.LENGTH_LONG
-                                    ).show()
-                                    return@prepareHost
-                                }
-                                val opened = com.ivarna.fluxlinux.core.terminal.FluxTerminalSessionManager
-                                    .openInstallSession(
-                                        this@MainActivity,
-                                        distro,
-                                        setupB64,
-                                        onFinished = {
-                                            // B3: fires only when the install session exited 0
-                                            com.ivarna.fluxlinux.core.utils.StateManager.setDistroInstalled(
-                                                this@MainActivity, distro.id, true
-                                            )
-                                            com.ivarna.fluxlinux.core.utils.StateManager.triggerRefresh()
-                                            onBaseInstalled()
-                                        }
-                                    )
-                                if (opened) {
-                                    openTerminalTab()
-                                }
-                            }
+                val openUbuntuFiles: () -> Unit = {
+                    val opened = runCatching {
+                        com.ivarna.fluxlinux.core.files.UbuntuFiles.open(
+                            this@MainActivity, com.ivarna.fluxlinux.core.files.UbuntuFiles.ROOT_HOME
                         )
-                    }
-
-                
-                @Composable
-                fun MainScreenContent(
-                    tab: BottomTab,
-                    hazeState: HazeState
-                ) {
-                    when (tab) {
-                        BottomTab.HOME -> {
-                            com.ivarna.fluxlinux.ui.screens.HomeScreen(
-                                scriptRefreshTrigger = refreshKey + lifecycleRefreshKey,
-                                autoStartPending = autoStartPending,
-                                onCancelAutoStart = { autoStartPending = false },
-                                onOpenTerminal = onOpenTerminal,
-                                onNavigateToInstall = onNavigateToInstall,
-                                onNavigateToSettings = onNavigateToDistroSettings,
-                                onNavigateToTroubleshooting = { openTroubleshooting(Screen.HOME) }
-                            )
-                        }
-                        BottomTab.TERMINAL -> {
-                            com.ivarna.fluxlinux.ui.screens.TerminalScreen(
-                                onBack = { currentTab = BottomTab.HOME },
-                                embeddedInBottomNav = false
-                            )
-                        }
+                    }.getOrDefault(false)
+                    if (!opened) {
+                        android.widget.Toast.makeText(
+                            this@MainActivity, R.string.home_files_unavailable, android.widget.Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
 
-                // Helper for Top Bar
-                @Composable
-                fun TopBar(
-                    hazeState: HazeState,
-                    onSettingsClick: () -> Unit,
-                    onTerminalClick: () -> Unit,
-                    onOpenDisplay: () -> Unit,
-                    displayLive: Boolean,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .hazeChild(
-                                state = hazeState,
-                                style = HazeStyle(
-                                    backgroundColor = MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
-                                    blurRadius = 20.dp,
-                                    tint = null
-                                )
-                            )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                                .windowInsetsPadding(WindowInsets.statusBars),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_logo),
-                                    contentDescription = "Logo",
-                                    modifier = Modifier.size(32.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "FluxLinux",
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (!displayLive && com.ivarna.fluxlinux.core.terminal.TerminalLauncher.isBootstrapExtracted(LocalContext.current)) {
-                                   Text(
-                                       text = "Host: embedded",
-                                       style = MaterialTheme.typography.labelSmall,
-                                       color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                                       modifier = Modifier.padding(end = 4.dp)
-                                   )
-                                }
-
-                                IconButton(onClick = onOpenDisplay) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.DesktopWindows,
-                                            contentDescription = if (displayLive) "Open X11 display — desktop running" else "Open X11 display",
-                                            tint = MaterialTheme.colorScheme.onBackground
-                                        )
-                                        if (displayLive) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(8.dp)
-                                                    .align(Alignment.TopEnd)
-                                                    .clip(CircleShape)
-                                                    .background(Color(0xFF69F0AE))
-                                            )
-                                        }
-                                    }
-                                }
-
-                                IconButton(onClick = onTerminalClick) {
-                                    Icon(
-                                        imageVector = Icons.Default.Terminal,
-                                        contentDescription = "Terminal",
-                                        tint = MaterialTheme.colorScheme.onBackground
-                                    )
-                                }
-                                IconButton(onClick = onSettingsClick) {
-                                    Icon(
-                                        imageVector = Icons.Default.Settings,
-                                        contentDescription = "Settings",
-                                        tint = MaterialTheme.colorScheme.onBackground
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                
                 // Show appropriate screen based on state
                 when (currentScreen) {
                     Screen.ONBOARDING -> {
                         com.ivarna.fluxlinux.ui.onboarding.OnboardingFlowScreen(
-                            onFinished = {
-                                StateManager.setOnboardingComplete(this@MainActivity, true)
-                                currentScreen = Screen.HOME
-                                currentTab = BottomTab.HOME
-                            },
                             onOpenTerminal = {
                                 StateManager.setOnboardingComplete(this@MainActivity, true)
                                 currentScreen = Screen.HOME
@@ -956,6 +674,7 @@ class MainActivity : ComponentActivity() {
                             onStartDesktop = { distroId ->
                                 StateManager.setOnboardingComplete(this@MainActivity, true)
                                 currentScreen = Screen.HOME
+                                // The Ubuntu page shows the desktop starting and its log.
                                 currentTab = BottomTab.HOME
                                 // GUI flags owned by DesktopLauncher
                                 com.ivarna.fluxlinux.core.desktop.DesktopLauncher.start(
@@ -965,46 +684,61 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     Screen.HOME -> {
-                        val hazeState = remember { HazeState() }
-                        val showTopBar = currentTab != BottomTab.TERMINAL
-                        val desktopUi by com.ivarna.fluxlinux.core.desktop.DesktopLauncher.uiState.collectAsState()
-                        val stateRefresh by com.ivarna.fluxlinux.core.utils.StateManager.refreshTrigger.collectAsState()
-                        val session = remember(desktopUi, stateRefresh) {
-                            com.ivarna.fluxlinux.core.desktop.DesktopSessionQuery.current(this@MainActivity, desktopUi)
-                        }
-
                         LaunchedEffect(currentTab) {
                             if (currentTab != BottomTab.TERMINAL) {
                                 com.ivarna.fluxlinux.ui.terminal.hideIme(window.decorView)
                             }
                         }
-
-                        GlassScaffold(
-                            hazeState = hazeState,
-                            blurContent = currentTab == BottomTab.HOME,
-                            topBar = {
-                                if (showTopBar) {
-                                    TopBar(
-                                        hazeState = hazeState,
-                                        onSettingsClick = { currentScreen = Screen.SETTINGS },
-                                        onTerminalClick = { currentTab = BottomTab.TERMINAL },
-                                        onOpenDisplay = {
-                                            com.ivarna.fluxlinux.core.desktop.DesktopLauncher.reopenDisplay(this@MainActivity)
+                        when (currentTab) {
+                            BottomTab.TERMINAL -> com.ivarna.fluxlinux.ui.screens.TerminalScreen(
+                                onOpenDashboard = { currentTab = BottomTab.HOME },
+                                onOpenFiles = openUbuntuFiles,
+                                onOpenSettings = { openSettings(BottomTab.TERMINAL) },
+                            )
+                            BottomTab.HOME -> Scaffold(
+                                topBar = {
+                                    TopAppBar(
+                                        title = { Text(stringResource(R.string.home_top_title)) },
+                                        navigationIcon = {
+                                            IconButton(onClick = { currentTab = BottomTab.TERMINAL }) {
+                                                Icon(
+                                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                                    contentDescription = stringResource(R.string.home_top_back)
+                                                )
+                                            }
                                         },
-                                        displayLive = session != null
+                                        actions = {
+                                            IconButton(onClick = { openSettings(BottomTab.HOME) }) {
+                                                Icon(
+                                                    Icons.Default.Settings,
+                                                    contentDescription = stringResource(R.string.home_top_settings)
+                                                )
+                                            }
+                                        },
+                                        colors = TopAppBarDefaults.topAppBarColors(
+                                            containerColor = MaterialTheme.colorScheme.background,
+                                            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                        ),
+                                    )
+                                },
+                                containerColor = MaterialTheme.colorScheme.background,
+                                // The dashboard pads the navigation bar itself (bottom spacer).
+                                contentWindowInsets = WindowInsets.statusBars,
+                            ) { padding ->
+                                Box(Modifier.padding(top = padding.calculateTopPadding())) {
+                                    com.ivarna.fluxlinux.ui.screens.HomeScreen(
+                                        scriptRefreshTrigger = refreshKey + lifecycleRefreshKey,
+                                        onNavigateToInstall = onNavigateToInstall,
+                                        onNavigateToSettings = onNavigateToDistroSettings,
+                                        onNavigateToTroubleshooting = { openTroubleshooting(Screen.HOME) }
                                     )
                                 }
                             }
-                        ) {
-                            MainScreenContent(
-                                tab = currentTab,
-                                hazeState = hazeState
-                            )
                         }
                     }
                     Screen.SETTINGS -> {
                         com.ivarna.fluxlinux.ui.screens.SettingsScreen(
-                            onBack = { currentScreen = Screen.HOME },
+                            onBack = leaveSettings,
                             permissionState = permissionState,
                             onStartService = onStartServiceStub,
                             onStartActivity = onStartActivityStub,
@@ -1230,43 +964,6 @@ class MainActivity : ComponentActivity() {
                                      )
                                  },
                                   onStartActivity = onStartActivityStub,
-                                  onNavigateToStart = { /* Not used in Settings, but if needed */ },
-                                  onLaunchXfce = {
-                                      try {
-                                          com.ivarna.fluxlinux.core.desktop.DesktopLauncher.start(
-                                              this@MainActivity, selectedDistro!!.id
-                                          )
-                                      } catch (e: Exception) {
-                                          android.util.Log.e("FluxLinux", "Launch XFCE4 failed", e)
-                                      }
-                                  },
-                                  onStopXfce = {
-                                      try {
-                                          com.ivarna.fluxlinux.core.desktop.DesktopLauncher.stop(
-                                              this@MainActivity, selectedDistro!!.id
-                                          )
-                                      } catch (e: Exception) {
-                                          android.util.Log.e("FluxLinux", "Stop XFCE4 failed", e)
-                                      }
-                                  },
-                                  onLaunchKde = {
-                                      try {
-                                          com.ivarna.fluxlinux.core.desktop.DesktopLauncher.start(
-                                              this@MainActivity, selectedDistro!!.id, "kde"
-                                          )
-                                      } catch (e: Exception) {
-                                          android.util.Log.e("FluxLinux", "Launch KDE failed", e)
-                                      }
-                                  },
-                                  onStopKde = {
-                                      try {
-                                          com.ivarna.fluxlinux.core.desktop.DesktopLauncher.stop(
-                                              this@MainActivity, selectedDistro!!.id
-                                          )
-                                      } catch (e: Exception) {
-                                          android.util.Log.e("FluxLinux", "Stop KDE failed", e)
-                                      }
-                                  }
                               )
 
                          } else {

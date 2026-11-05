@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.android.tools.screenshot.PreviewTest
 import com.ivarna.fluxlinux.core.utils.ThemeMode
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
+import com.ivarna.fluxlinux.ui.components.DesktopAddOnUi
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.components.GlassSettingCard
 import com.ivarna.fluxlinux.ui.components.SharedStorageUi
@@ -76,34 +77,52 @@ fun HomeScreenPreview() {
 }
 
 @PreviewTest
-@Preview(name = "HomeRunning", showBackground = true, widthDp = 360, heightDp = 1120)
+@Preview(name = "HomeRunning", showBackground = true, widthDp = 360, heightDp = 1060)
 @Composable
 fun HomeRunningPreview() {
     Dashboard(UbuntuDashboardState(status = UbuntuStatus.RUNNING, storage = storageReady))
 }
 
+// Desktop add-on states: not installed (terminal-only setup), installing, failed.
 @PreviewTest
-@Preview(name = "HomeAutoStart", showBackground = true, widthDp = 360, heightDp = 330)
+@Preview(name = "HomeDesktopNotInstalled", showBackground = true, widthDp = 360, heightDp = 1100)
 @Composable
-fun HomeAutoStartPreview() {
+fun HomeDesktopNotInstalledPreview() {
     Dashboard(
         UbuntuDashboardState(
             status = UbuntuStatus.STOPPED,
-            autoStartPending = true,
-            storage = storageReady
+            storage = storageReady,
+            desktop = DesktopAddOnUi.NotInstalled
         )
     )
 }
 
 @PreviewTest
-@Preview(name = "HomeStartFailed", showBackground = true, widthDp = 360, heightDp = 480)
+@Preview(name = "HomeDesktopInstalling", showBackground = true, widthDp = 360, heightDp = 1080)
 @Composable
-fun HomeStartFailedPreview() {
+fun HomeDesktopInstallingPreview() {
     Dashboard(
         UbuntuDashboardState(
             status = UbuntuStatus.STOPPED,
-            lastStartFailed = true,
-            storage = storageReady
+            storage = storageReady,
+            desktop = DesktopAddOnUi.Installing(
+                percent = 42,
+                phaseLabel = "Installing the XFCE desktop…",
+                detail = "Unpacking xfce4-panel (4.20.4-1) ..."
+            )
+        )
+    )
+}
+
+@PreviewTest
+@Preview(name = "HomeDesktopFailed", showBackground = true, widthDp = 360, heightDp = 1060)
+@Composable
+fun HomeDesktopFailedPreview() {
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.STOPPED,
+            storage = storageReady,
+            desktop = DesktopAddOnUi.Failed("apt-get exited with code 100")
         )
     )
 }
@@ -193,7 +212,7 @@ fun SettingsRuntimePreview() {
 }
 
 @PreviewTest
-@Preview(name = "Settings", showBackground = true, widthDp = 360, heightDp = 340)
+@Preview(name = "Settings", showBackground = true, widthDp = 360, heightDp = 220)
 @Composable
 fun SettingsPreview() {
     PreviewHost {
@@ -202,11 +221,6 @@ fun SettingsPreview() {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SectionHeader("App")
-            SettingRow(
-                title = "Open Ubuntu desktop when FluxLinux starts",
-                subtitle = "Starts the desktop each time you open the app",
-                checked = true
-            )
             SettingRow(title = "Terminal", subtitle = "Font, size and extra keys", checked = false)
             SectionHeader("Advanced")
         }

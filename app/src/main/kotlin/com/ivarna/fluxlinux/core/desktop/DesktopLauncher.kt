@@ -224,20 +224,24 @@ object DesktopLauncher {
                 return@prepareHost
             } else {
                 val prootName = profile?.prootName ?: "debian"
-                if (!TerminalLauncher.isProotInstalled(app, prootName)) {
-                    toast(app, "Distro not installed. Complete onboarding first.")
-                    finishStart(app, distroId, false, "Distro not installed", onResult)
-                    return@prepareHost
-                }
-                if (needsDesktopCheck && !UbuntuDesktop.isInstalled(app, distroId)) {
-                    val msg = app.getString(R.string.desktop_install_first)
-                    toast(app, msg)
-                    finishStart(app, distroId, false, msg, onResult)
-                    return@prepareHost
-                }
+                // prepareHost answers on main: the rootfs file checks run on a worker thread.
+                Thread {
+                    val installed = TerminalLauncher.isProotInstalled(app, prootName)
+                    val desktopOk = !installed || !needsDesktopCheck || UbuntuDesktop.isInstalled(app, distroId)
+                    main.post {
+                        if (!installed) {
+                            toast(app, "Distro not installed. Complete onboarding first.")
+                            finishStart(app, distroId, false, "Distro not installed", onResult)
+                        } else if (!desktopOk) {
+                            val msg = app.getString(R.string.desktop_install_first)
+                            toast(app, msg)
+                            finishStart(app, distroId, false, msg, onResult)
+                        } else {
+                            continueStart(app, distroId, method, profile, onResult)
+                        }
+                    }
+                }.start()
             }
-
-            continueStart(app, distroId, method, profile, onResult)
         }
     }
 

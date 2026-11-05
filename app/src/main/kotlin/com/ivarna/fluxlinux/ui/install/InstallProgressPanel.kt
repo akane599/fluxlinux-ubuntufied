@@ -52,11 +52,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ivarna.fluxlinux.ui.theme.BrandCream
-import com.ivarna.fluxlinux.ui.theme.FluxAccentCyan
-import com.ivarna.fluxlinux.ui.theme.FluxAccentMagenta
-import com.ivarna.fluxlinux.ui.theme.FluxDarkGrey
-import com.ivarna.fluxlinux.ui.theme.FluxHairline
+import com.ivarna.fluxlinux.ui.theme.FluxSuccess
+import com.ivarna.fluxlinux.ui.theme.TerminalBackground
 
 /**
  * Shared install progress UI for onboarding + Distros [InstallConfigScreen].
@@ -110,9 +107,9 @@ fun InstallProgressPanel(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = when {
-                        failed -> "Setup Failed"
-                        isDone -> "Install Complete"
-                        else -> "Setting Up Environment"
+                        failed -> "Setup failed"
+                        isDone -> "Install complete"
+                        else -> "Setting up Ubuntu"
                     },
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
@@ -122,8 +119,8 @@ fun InstallProgressPanel(
                 Text(
                     text = when {
                         failed -> "An error occurred during execution"
-                        isDone -> "All base packages and configs are installed"
-                        else -> "Downloading rootfs & configuring packages"
+                        isDone -> "Everything is installed"
+                        else -> "Downloading and configuring packages"
                     },
                     fontSize = 13.sp,
                     color = colors.onBackground.copy(alpha = 0.65f)
@@ -138,16 +135,16 @@ fun InstallProgressPanel(
                     .background(
                         when {
                             failed -> colors.error.copy(alpha = 0.15f)
-                            isDone -> Color(0xFF69F0AE).copy(alpha = 0.15f)
-                            else -> FluxAccentMagenta.copy(alpha = 0.15f)
+                            isDone -> FluxSuccess.copy(alpha = 0.15f)
+                            else -> colors.secondaryContainer
                         }
                     )
                     .border(
                         1.dp,
                         when {
                             failed -> colors.error.copy(alpha = 0.4f)
-                            isDone -> Color(0xFF69F0AE).copy(alpha = 0.4f)
-                            else -> FluxAccentMagenta.copy(alpha = 0.4f)
+                            isDone -> FluxSuccess.copy(alpha = 0.4f)
+                            else -> colors.outlineVariant
                         },
                         CircleShape
                     ),
@@ -162,8 +159,8 @@ fun InstallProgressPanel(
                     contentDescription = null,
                     tint = when {
                         failed -> colors.error
-                        isDone -> Color(0xFF69F0AE)
-                        else -> FluxAccentMagenta
+                        isDone -> FluxSuccess
+                        else -> colors.primary
                     },
                     modifier = Modifier.size(24.dp)
                 )
@@ -177,8 +174,7 @@ fun InstallProgressPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(colors.surface.copy(alpha = 0.75f))
-                .border(1.dp, FluxHairline, RoundedCornerShape(16.dp))
+                .background(colors.surfaceContainer)
                 .padding(16.dp)
         ) {
             Column {
@@ -203,8 +199,8 @@ fun InstallProgressPanel(
                         fontWeight = FontWeight.Bold,
                         color = when {
                             failed -> colors.error
-                            isDone -> Color(0xFF69F0AE)
-                            else -> FluxAccentMagenta
+                            isDone -> FluxSuccess
+                            else -> colors.primary
                         }
                     )
                 }
@@ -220,10 +216,10 @@ fun InstallProgressPanel(
                         .clip(RoundedCornerShape(4.dp)),
                     color = when {
                         failed -> colors.error
-                        isDone -> Color(0xFF69F0AE)
-                        else -> FluxAccentMagenta
+                        isDone -> FluxSuccess
+                        else -> colors.primary
                     },
-                    trackColor = colors.surfaceVariant.copy(alpha = 0.5f)
+                    trackColor = colors.surfaceContainerHighest
                 )
 
                 if (detail.isNotBlank()) {
@@ -261,12 +257,12 @@ fun InstallProgressPanel(
                 Icon(
                     imageVector = Icons.Filled.Code,
                     contentDescription = null,
-                    tint = FluxAccentCyan,
+                    tint = colors.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "Terminal Output",
+                    text = "Output",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = colors.onBackground.copy(alpha = 0.85f)
@@ -275,10 +271,9 @@ fun InstallProgressPanel(
 
             TextButton(
                 onClick = onToggleLog,
-                colors = ButtonDefaults.textButtonColors(contentColor = BrandCream)
             ) {
                 Text(
-                    if (showLog) "Hide Console" else "Show Console",
+                    if (showLog) "Hide log" else "Show log",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp
                 )
@@ -294,14 +289,13 @@ fun InstallProgressPanel(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF0D0D11))
-                    .border(1.dp, FluxHairline, RoundedCornerShape(14.dp))
+                    .background(TerminalBackground)
                     .padding(12.dp)
                     .verticalScroll(logScroll)
             ) {
                 Text(
                     text = logText.ifBlank { "Initializing installation stream…" },
-                    color = if (logText.isBlank()) Color(0xFF78909C) else Color(0xFFCFD8DC),
+                    color = if (logText.isBlank()) colors.onSurfaceVariant else colors.onSurface,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     lineHeight = 16.sp
@@ -323,10 +317,6 @@ fun InstallProgressPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = BrandCream,
-                        contentColor = FluxDarkGrey
-                    ),
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     Icon(
@@ -335,7 +325,7 @@ fun InstallProgressPanel(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Retry Setup", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Retry", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
 
                 if (onBack != null) {
@@ -343,9 +333,8 @@ fun InstallProgressPanel(
                     TextButton(
                         onClick = onBack,
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.textButtonColors(contentColor = BrandCream)
-                    ) {
-                        Text("Back to Configuration", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                            ) {
+                        Text("Back to options", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     }
                 }
             }
@@ -356,10 +345,6 @@ fun InstallProgressPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = BrandCream,
-                        contentColor = FluxDarkGrey
-                    ),
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     Text("Continue", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -380,15 +365,15 @@ fun InstallThemePickRow(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val colors = MaterialTheme.colorScheme
-    val borderColor = if (selected) FluxAccentMagenta else FluxHairline
+    val borderColor = if (selected) colors.primary else colors.outlineVariant
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
             .background(
-                if (selected) FluxAccentMagenta.copy(alpha = 0.12f)
-                else colors.surface.copy(alpha = 0.75f)
+                if (selected) colors.secondaryContainer
+                else colors.surfaceContainer
             )
             .border(if (selected) 1.5.dp else 1.dp, borderColor, shape)
             .clickable(onClick = onSelect)
@@ -399,7 +384,7 @@ fun InstallThemePickRow(
             selected = selected,
             onClick = onSelect,
             colors = RadioButtonDefaults.colors(
-                selectedColor = FluxAccentMagenta,
+                selectedColor = colors.primary,
                 unselectedColor = colors.onSurface.copy(alpha = 0.4f)
             )
         )

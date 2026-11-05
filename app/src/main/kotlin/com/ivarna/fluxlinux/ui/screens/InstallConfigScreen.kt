@@ -48,6 +48,7 @@ import com.ivarna.fluxlinux.core.desktop.UbuntuDesktop
 import com.ivarna.fluxlinux.core.install.DistroInstallProfile
 import com.ivarna.fluxlinux.core.install.InstallController
 import com.ivarna.fluxlinux.core.install.InstallKind
+import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import com.ivarna.fluxlinux.ui.components.GlassScaffold
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
@@ -83,11 +84,18 @@ fun InstallConfigScreen(
     var selectedTheme by rememberSaveable { mutableStateOf("dark") }
     var showLog by rememberSaveable { mutableStateOf(true) }
     // Re-running setup keeps an installed desktop and never adds one (that is Home's add-on).
-    var desktopInstalled by remember(distro.id) { mutableStateOf(UbuntuDesktop.isInstalled(appCtx, distro.id)) }
+    // Starts from the stored flag; the rootfs check runs off main, and a chroot rootfs is
+    // root-only, so without the flag it asks root (which also heals the flag).
+    var desktopInstalled by remember(distro.id) {
+        mutableStateOf(StateManager.isComponentInstalled(appCtx, distro.id, UbuntuDesktop.COMPONENT_ID))
+    }
     LaunchedEffect(distro.id) {
-        // A chroot rootfs is root-only: without the flag, ask root (off main; heals the flag).
-        if (!desktopInstalled && UbuntuRuntime.isChrootId(distro.id)) {
-            desktopInstalled = withContext(Dispatchers.IO) { UbuntuDesktop.probe(appCtx, distro.id) }
+        if (desktopInstalled) return@LaunchedEffect
+        desktopInstalled = withContext(Dispatchers.IO) {
+            runCatching {
+                UbuntuDesktop.isInstalled(appCtx, distro.id) ||
+                    (UbuntuRuntime.isChrootId(distro.id) && UbuntuDesktop.probe(appCtx, distro.id))
+            }.getOrDefault(false)
         }
     }
     val kind = InstallKind.effective(distro.id, InstallKind.forRerun(desktopInstalled))
@@ -114,9 +122,10 @@ fun InstallConfigScreen(
         }
     }
 
-    fun startInstall() {
+    /** [runKind]: Retry repeats the failed run as it was (e.g. Home's desktop add-on). */
+    fun startInstall(runKind: InstallKind = kind) {
         // One process-wide install at a time; a new start supersedes the previous run.
-        installer.start(distro.id, selectedTheme, kind)
+        installer.start(distro.id, selectedTheme, runKind)
     }
 
     GlassScaffold(
@@ -327,7 +336,7 @@ fun InstallConfigScreen(
                 errorMessage = install.errorMessage,
                 showLog = showLog,
                 onToggleLog = { showLog = !showLog },
-                onRetry = { startInstall() },
+                onRetry = { startInstall(install.kind) },
                 onDone = {
                     installer.clearFinished()
                     onInstallComplete()

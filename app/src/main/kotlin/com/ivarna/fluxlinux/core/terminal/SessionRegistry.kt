@@ -4,7 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.widget.Toast
+import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.service.AppTerminalService
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
@@ -83,6 +88,7 @@ object SessionRegistry {
 
     /** Background executor for paste (clipboard → emulator writes). */
     private val pasteExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
     val activeSession: ManagedSession?
         get() = sessionsList.getOrNull(_activeIndex.value)
@@ -243,6 +249,12 @@ object SessionRegistry {
                 try {
                     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     cm.setPrimaryClip(ClipData.newPlainText("terminal", text))
+                    // Android 13+ confirms clipboard writes itself; a toast there would double it.
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                        mainHandler.post {
+                            Toast.makeText(ctx, R.string.terminal_copied, Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 } catch (e: Exception) {
                     Log.w(TAG, "copy to clipboard failed: ${e.message}")
                 }

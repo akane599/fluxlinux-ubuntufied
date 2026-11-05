@@ -12,7 +12,8 @@ import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.onboarding.DonePage
 import com.ivarna.fluxlinux.ui.onboarding.OptionsPage
 import com.ivarna.fluxlinux.ui.onboarding.StorageAccessContent
-import com.ivarna.fluxlinux.ui.theme.FluxDarkSurface
+import com.ivarna.fluxlinux.ui.onboarding.WelcomePage
+import androidx.compose.material3.MaterialTheme
 import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
 
 // Onboarding screenshot previews built from the stateless leaves of OnboardingFlowScreen.
@@ -22,7 +23,7 @@ import com.ivarna.fluxlinux.ui.theme.FluxLinuxTheme
 private fun OnboardingPreviewHost(content: @Composable () -> Unit) {
     FluxLinuxTheme(themeMode = ThemeMode.DARK, dynamicColor = false) {
         // Same backdrop as OnboardingFlowScreen's root Box.
-        Box(Modifier.fillMaxSize().background(FluxDarkSurface)) { content() }
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { content() }
     }
 }
 
@@ -62,16 +63,48 @@ fun OnboardingStorageLargeFontPreview() {
     }
 }
 
+// First page: terminal-first pitch, the desktop as an option.
+@PreviewTest
+@Preview(name = "OnboardingWelcome", showBackground = true, widthDp = 360, heightDp = 800)
+@Composable
+fun OnboardingWelcomePreview() {
+    OnboardingPreviewHost {
+        WelcomePage(onNext = {})
+    }
+}
+
+// Terminal-only setup (the default): no "Start desktop".
 @PreviewTest
 @Preview(name = "OnboardingDone", showBackground = true, widthDp = 360, heightDp = 800)
 @Composable
 fun OnboardingDonePreview() {
     OnboardingPreviewHost {
-        DonePage(onHome = {}, onTerminal = {}, onDesktop = {})
+        DonePage(onTerminal = {}, onDesktop = null)
     }
 }
 
-// Options page on a rooted phone with chroot picked (the runtime cards appear only with root).
+// Setup with "Also install the XFCE desktop" on: Start desktop as the secondary action.
+@PreviewTest
+@Preview(name = "OnboardingDoneDesktop", showBackground = true, widthDp = 360, heightDp = 800)
+@Composable
+fun OnboardingDoneDesktopPreview() {
+    OnboardingPreviewHost {
+        DonePage(onTerminal = {}, onDesktop = {})
+    }
+}
+
+// Options page as most people see it: no root, desktop off (the default).
+@PreviewTest
+@Preview(name = "OnboardingOptions", showBackground = true, widthDp = 360, heightDp = 800)
+@Composable
+fun OnboardingOptionsPreview() {
+    OnboardingPreviewHost {
+        OptionsPage(theme = "dark", onTheme = {}, onBack = {}, onInstall = {})
+    }
+}
+
+// Options page on a rooted phone with chroot picked (the runtime cards appear only with root)
+// and the desktop switched on, so the theme cards show.
 @PreviewTest
 @Preview(name = "OnboardingOptionsChroot", showBackground = true, widthDp = 360, heightDp = 1000)
 @Composable
@@ -82,6 +115,7 @@ fun OnboardingOptionsChrootPreview() {
             onTheme = {},
             onBack = {},
             onInstall = {},
+            installDesktop = true,
             runtime = UbuntuRuntimeMode.CHROOT,
             rootAvailable = true,
             onRuntime = {}
@@ -94,6 +128,6 @@ fun OnboardingOptionsChrootPreview() {
 @Composable
 fun OnboardingDoneChrootPreview() {
     OnboardingPreviewHost {
-        DonePage(onHome = {}, onTerminal = {}, onDesktop = {}, runtime = UbuntuRuntimeMode.CHROOT)
+        DonePage(onTerminal = {}, onDesktop = null, runtime = UbuntuRuntimeMode.CHROOT)
     }
 }

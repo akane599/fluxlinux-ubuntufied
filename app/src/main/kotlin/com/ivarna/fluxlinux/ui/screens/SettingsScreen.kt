@@ -76,12 +76,7 @@ import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.system.SharedStorageAccess
 import com.ivarna.fluxlinux.core.utils.ThemeMode
 import com.ivarna.fluxlinux.ui.components.GlassSettingCard
-import com.ivarna.fluxlinux.ui.components.FluxSwitch
-import com.ivarna.fluxlinux.core.utils.UbuntuLaunchPreferences
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
@@ -180,20 +175,6 @@ fun SettingsScreen(
             )
 
             UbuntuRuntimeRow()
-
-            var autoStart by remember {
-                mutableStateOf(UbuntuLaunchPreferences.isAutoStartDesktop(context))
-            }
-            SettingsSwitchCard(
-                icon = Icons.Default.DesktopWindows,
-                title = stringResource(R.string.settings_autostart_title),
-                subtitle = stringResource(R.string.settings_autostart_sub),
-                checked = autoStart,
-                onCheckedChange = {
-                    autoStart = it
-                    UbuntuLaunchPreferences.setAutoStartDesktop(context, it)
-                }
-            )
 
             // F-Droid (ivarna) flavor only: its manifest declares the permission, Play's does not.
             if (SharedStorageAccess.declared(context)) {
@@ -602,7 +583,6 @@ private fun UbuntuRuntimeRow() {
             confirmButton = {
                 TextButton(onClick = {
                     stopFirstFor = null
-                    UbuntuLaunchPreferences.clearAutoStartAttempt(app)
                     val running = DesktopSessionQuery.current(context, DesktopLauncher.uiState.value)
                     val id = running?.distroId ?: DesktopLauncher.uiState.value.distroId ?: runtime.distroId
                     // onDone may arrive on the stop script's reader thread.
@@ -672,52 +652,6 @@ private fun SettingsNavCard(
                 contentDescription = null,
                 tint = chevronColor
             )
-        }
-    }
-}
-
-@Composable
-private fun SettingsSwitchCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val iconTint = MaterialTheme.colorScheme.secondary
-    GlassSettingCard {
-        Row(
-            modifier = Modifier
-                .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
-                .padding(horizontal = 18.dp, vertical = 18.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(iconTint.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    subtitle,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            FluxSwitch(checked = checked, onCheckedChange = null)
         }
     }
 }

@@ -19,6 +19,7 @@ import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.utils.ThemeMode
 import com.ivarna.fluxlinux.ui.screens.TerminalDrawerSheet
 import com.ivarna.fluxlinux.ui.screens.TerminalEmptyState
+import com.ivarna.fluxlinux.ui.screens.TerminalLinksDialog
 import com.ivarna.fluxlinux.ui.screens.TerminalSwitchSettingCard
 import com.ivarna.fluxlinux.ui.screens.TerminalTabUi
 import com.ivarna.fluxlinux.ui.terminal.TerminalExtraKeys
@@ -41,7 +42,7 @@ private fun TerminalPreviewHost(themeMode: ThemeMode = ThemeMode.DARK, content: 
     }
 }
 
-// Three sessions, the second selected, extra keys on, Back available. The Box stops the
+// Three sessions, the second selected, extra keys on, wakelock off, all destinations shown. The Box stops the
 // host Surface's min-width constraint from stretching the sheet past its real width.
 @Composable
 private fun DrawerSheetPreview() {
@@ -59,7 +60,11 @@ private fun DrawerSheet() {
         onCloseOthers = {},
         onNewSession = {},
         onToggleExtraKeys = {},
-        onBack = {}
+        onOpenDashboard = {},
+        onOpenFiles = {},
+        onOpenSettings = {},
+        wakeLockHeld = false,
+        onToggleWakeLock = {}
     )
 }
 
@@ -106,8 +111,29 @@ fun TerminalEmptyFailedPreview() {
     TerminalPreviewHost {
         TerminalEmptyState(
             opening = false,
-            errorMessage = "Host bootstrap not ready — check Settings",
-            onOpen = {}
+            errorMessage = "FluxLinux's host tools aren't ready. Use Repair host files on the Ubuntu page.",
+            onOpen = {},
+            onOpenDashboard = {},
+            onOpenSettings = {},
+        )
+    }
+}
+
+// "Open a link…" from the clipboard menu: newest link first, long URLs wrap to two lines.
+@PreviewTest
+@Preview(name = "TerminalLinksDialog", showBackground = true, widthDp = 360, heightDp = 640)
+@Composable
+fun TerminalLinksDialogPreview() {
+    TerminalPreviewHost {
+        TerminalLinksDialog(
+            links = listOf(
+                "https://github.com/ohmyzsh/ohmyzsh/wiki/Installing-ZSH#install-and-set-up-zsh-as-default",
+                "https://ubuntu.com/download",
+                "www.kernel.org",
+            ),
+            onOpen = {},
+            onCopy = {},
+            onDismiss = {}
         )
     }
 }
@@ -120,7 +146,7 @@ private fun ExtraKeysPreview(themeMode: ThemeMode) {
         lockAlt()
     }
     TerminalPreviewHost(themeMode) {
-        TerminalExtraKeys(modState = modState, terminalView = { null }, onOpenDrawer = {})
+        TerminalExtraKeys(modState = modState, terminalView = { null }, onOpenDrawer = {}, onPaste = {})
     }
 }
 

@@ -43,14 +43,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Coffee
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SpaceDashboard
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
@@ -64,6 +68,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -107,16 +112,21 @@ import com.ivarna.fluxlinux.core.terminal.TerminalShellCardUi
 import com.ivarna.fluxlinux.core.chroot.ChrootDetection
 import com.ivarna.fluxlinux.core.root.ChrootPaths
 import com.ivarna.fluxlinux.core.terminal.TerminalShellCatalog
+import com.ivarna.fluxlinux.core.terminal.TerminalWakeLock
+import com.ivarna.fluxlinux.core.service.AppTerminalService
 import com.ivarna.fluxlinux.core.utils.TerminalPreferences
+import com.ivarna.fluxlinux.core.utils.UbuntuInstallProbe
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
+import com.ivarna.fluxlinux.ui.terminal.TerminalClipboard
 import com.ivarna.fluxlinux.ui.terminal.TerminalExtraKeys
 import com.ivarna.fluxlinux.ui.terminal.TerminalModifierState
 import com.ivarna.fluxlinux.ui.terminal.TerminalSessionChoices
 import com.ivarna.fluxlinux.ui.terminal.TerminalSessionDefaults
 import com.ivarna.fluxlinux.ui.terminal.hideIme
-import com.ivarna.fluxlinux.ui.theme.FluxAccentMagenta
+import com.ivarna.fluxlinux.ui.theme.FluxSpacing
+import com.ivarna.fluxlinux.ui.theme.TerminalBackground
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import kotlin.math.abs
@@ -145,8 +155,14 @@ private val EDGE_OPEN_DISTANCE = 48.dp
 /**
  * In-app terminal with multi-session support + full ExtraKeys toolbar (injectKey / ModifierState lock).
  *
- * No top bar: sessions, new shells, the extra-keys toggle and Back live in a Termux-style
- * drawer opened by a left-edge swipe or the extra keys' ☰ key.
+ * The app's home screen. No top bar: sessions, new shells, the extra-keys toggle and the way to
+ * the Ubuntu overview, Files and Settings live in a Termux-style drawer opened by a left-edge
+ * swipe or the extra keys' ☰ key.
+ *
+ * Tapping a web link in the output opens it in the default browser ([TerminalClipboard.linkAt]);
+ * other taps raise the keyboard. Paste: the extra keys' Paste key, Ctrl+Shift+V, or the menu
+ * behind the selection toolbar's "More…" (also long-press on Paste), which also lists links and
+ * copies or shares the whole output.
  *
  * Ubuntu-first: there is no distro selector. Entering the screen with no sessions opens an
  * Ubuntu PRoot user shell once; the drawer's "New Ubuntu session" opens another one. Secondary
@@ -155,8 +171,9 @@ private val EDGE_OPEN_DISTANCE = 48.dp
  */
 @Composable
 fun TerminalScreen(
-    onBack: (() -> Unit)? = null,
-    embeddedInBottomNav: Boolean = false
+    onOpenDashboard: (() -> Unit)? = null,
+    onOpenFiles: (() -> Unit)? = null,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val activeIndex by FluxTerminalSessionManager.activeIndex.collectAsState()
@@ -176,6 +193,8 @@ fun TerminalScreen(
         mutableStateOf(TerminalPreferences.isKeyRepeatAccelerated(context))
     }
     var terminalViewRef by remember { mutableStateOf<TerminalView?>(null) }
+    // Links listed by the clipboard menu's "Open a link…"; null = dialog closed.
+    var linkChoices by remember { mutableStateOf<List<String>?>(null) }
     // Empty-state auto-open runs once per entry; a failure leaves a retry button, never a loop.
     var autoOpenTried by rememberSaveable { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
@@ -185,6 +204,7 @@ fun TerminalScreen(
     // (the shell menu) recompute: ChrootDetection only answers from its cache on main.
     var detectionRevision by remember { mutableIntStateOf(0) }
     val runtime by remember { UbuntuRuntime.modeFlow(context) }.collectAsState()
+    val wakeLockHeld by TerminalWakeLock.held.collectAsState()
     // Avoid SIGWINCH spam on every Compose recomposition — only when the emulator's
     // cols/rows or the attached pid actually change (R2: pinch zoom changes cols/rows
     // without a view-size change, so pixel width/height is NOT a valid guard key).
@@ -299,6 +319,9 @@ fun TerminalScreen(
         // main ChrootDetection is cache-only, so a cold start would report it missing).
         val waitForRoot = runtime == UbuntuRuntimeMode.CHROOT
         if (!waitForRoot) autoOpenOnce()
+        // The terminal is the first screen: like Home, only ask su once a chroot was ever set
+        // up, so PRoot users on a rooted phone get no root prompt on every launch.
+        if (!waitForRoot && !UbuntuInstallProbe.chrootEverInstalled(context)) return@LaunchedEffect
         val app = context.applicationContext
         val root = withContext(Dispatchers.IO) {
             val ok = runCatching { RootShell.isRootAvailable() }.getOrDefault(false)
@@ -366,6 +389,19 @@ fun TerminalScreen(
     // Back closes an open drawer; when closed, MainActivity's handler runs as before.
     BackHandler(enabled = drawerOpening) { closeDrawer() }
 
+    /** Drawer destination: drop the keyboard and the drawer before leaving the terminal. */
+    fun leaveTerminal(go: () -> Unit): () -> Unit = {
+        terminalViewRef?.let { hideIme(it) }
+        scope.launch { drawerState.snapTo(DrawerValue.Closed) }
+        go()
+    }
+
+    fun showLinks(view: TerminalView?) {
+        val links = TerminalClipboard.links(view)
+        if (links.isEmpty()) toast(context.getString(R.string.terminal_links_empty))
+        else linkChoices = links
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -399,11 +435,15 @@ fun TerminalScreen(
                     TerminalPreferences.setExtraKeysEnabled(context, next)
                     terminalViewRef?.let { forceTerminalResize(it) }
                 },
-                onBack = onBack?.let { back ->
-                    {
-                        terminalViewRef?.let { hideIme(it) }
-                        back()
-                    }
+                onOpenDashboard = onOpenDashboard?.let(::leaveTerminal),
+                onOpenFiles = onOpenFiles?.let(::leaveTerminal),
+                onOpenSettings = onOpenSettings?.let(::leaveTerminal),
+                wakeLockHeld = wakeLockHeld,
+                // The lock lives only while sessions do (the service drops it with the last one).
+                onToggleWakeLock = if (sessions.isNotEmpty()) {
+                    { AppTerminalService.toggleWakeLock(context) }
+                } else {
+                    null
                 },
                 newSessionLabel = stringResource(
                     if (runtime == UbuntuRuntimeMode.CHROOT) R.string.terminal_new_session_chroot
@@ -433,7 +473,8 @@ fun TerminalScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                // Same black as TerminalView's renderer: no seam under the status bar.
+                .background(TerminalBackground)
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(
                     WindowInsets.ime.union(WindowInsets.navigationBars)
@@ -466,8 +507,16 @@ fun TerminalScreen(
                                         return scale
                                     }
 
+                                    // A link under the tap opens in the browser; anything else
+                                    // raises the keyboard. Also in mouse-tracking apps (Claude
+                                    // Code / Codex full screen, tmux mouse on): TerminalView has
+                                    // already sent them the tap as a click, which they ignore or
+                                    // use to focus, and a tap on a link (a login URL) means open
+                                    // it. Only vim with mouse=a also moves its cursor there.
                                     override fun onSingleTapUp(e: android.view.MotionEvent) {
-                                        showTerminalIme(this@apply)
+                                        val url = TerminalClipboard.linkAt(this@apply, e)
+                                        if (url != null) TerminalClipboard.openLink(ctx, url)
+                                        else showTerminalIme(this@apply)
                                     }
 
                                     override fun shouldBackButtonBeMappedToEscape(): Boolean = false
@@ -475,8 +524,15 @@ fun TerminalScreen(
                                     override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
                                     override fun isTerminalViewSelected(): Boolean = true
                                     override fun copyModeChanged(active: Boolean) {}
-                                    // Let the view handle keys — never swallow (nativecode parity).
-                                    override fun onKeyDown(keyCode: Int, event: KeyEvent, session: com.termux.terminal.TerminalSession): Boolean = false
+                                    // Ctrl+Shift+V / a keyboard Paste key paste; every other key goes
+                                    // to the view (nativecode parity).
+                                    override fun onKeyDown(keyCode: Int, event: KeyEvent, session: com.termux.terminal.TerminalSession): Boolean {
+                                        if (!TerminalClipboard.isPasteShortcut(keyCode, event.isCtrlPressed, event.isShiftPressed)) {
+                                            return false
+                                        }
+                                        TerminalClipboard.pasteWithFeedback(this@apply, ctx)
+                                        return true
+                                    }
                                     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = false
                                     override fun onLongPress(e: android.view.MotionEvent): Boolean = false
                                     // Modifiers read from shared lockable state (ModifierState parity).
@@ -494,6 +550,7 @@ fun TerminalScreen(
                                     override fun logStackTraceWithMessage(tag: String, message: String, e: Exception) {}
                                     override fun logStackTrace(tag: String, e: Exception) {}
                                 })
+                                TerminalClipboard.installContextMenu(this) { showLinks(this) }
                                 terminalViewRef = this
                             }
                         },
@@ -541,6 +598,8 @@ fun TerminalScreen(
                         terminalView = { terminalViewRef },
                         accelerateRepeat = accelerateKeys,
                         onOpenDrawer = ::openDrawer,
+                        onPaste = { TerminalClipboard.pasteWithFeedback(terminalViewRef, context) },
+                        onPasteLongPress = { terminalViewRef?.showContextMenu() },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -551,7 +610,9 @@ fun TerminalScreen(
                         opening = opening || !autoOpenTried,
                         errorMessage = openError,
                         onOpen = { openUbuntu(fromEmptyState = true) },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        onOpenDashboard = onOpenDashboard?.let { leaveTerminal(it) },
+                        onOpenSettings = onOpenSettings?.let { leaveTerminal(it) },
                     )
                     DrawerEdgeZone(
                         drawerState = drawerState,
@@ -562,6 +623,21 @@ fun TerminalScreen(
                 }
             }
         }
+    }
+
+    linkChoices?.let { links ->
+        TerminalLinksDialog(
+            links = links,
+            onOpen = { url ->
+                linkChoices = null
+                TerminalClipboard.openLink(context, url)
+            },
+            onCopy = { url ->
+                linkChoices = null
+                TerminalClipboard.copy(context, url, R.string.terminal_link_copied)
+            },
+            onDismiss = { linkChoices = null }
+        )
     }
 }
 
@@ -624,9 +700,10 @@ private fun DrawerEdgeZone(
 }
 
 /**
- * Termux-style session drawer: the session list on top, actions at the bottom within thumb reach.
- * Stateless (the screen owns the session manager calls) so previews can drive it with fake
- * sessions. [shellMenu] is the "More shells" dropdown, composed only while open.
+ * Termux-style session drawer: the session list on top, actions at the bottom within thumb reach,
+ * then the app's other places (Ubuntu overview, Files, Settings). Stateless (the screen owns the
+ * session manager calls) so previews can drive it with fake sessions. [shellMenu] is the
+ * "More shells" dropdown, composed only while open. A null destination hides its row.
  */
 @Composable
 fun TerminalDrawerSheet(
@@ -638,35 +715,38 @@ fun TerminalDrawerSheet(
     onCloseOthers: (Int) -> Unit,
     onNewSession: () -> Unit,
     onToggleExtraKeys: () -> Unit,
-    onBack: (() -> Unit)?,
+    onOpenDashboard: (() -> Unit)?,
+    onOpenFiles: (() -> Unit)?,
+    onOpenSettings: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    wakeLockHeld: Boolean = false,
+    onToggleWakeLock: (() -> Unit)? = null,
     newSessionLabel: String = stringResource(R.string.terminal_new_session),
     shellMenu: @Composable (onDismiss: () -> Unit) -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     ModalDrawerSheet(modifier = modifier.widthIn(max = DRAWER_MAX_WIDTH)) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Column(modifier = Modifier.padding(horizontal = FluxSpacing.md, vertical = FluxSpacing.sm)) {
             Text(
                 text = stringResource(R.string.terminal_drawer_title),
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
                 color = colors.onSurface,
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.lg)
                     .semantics { heading() }
             )
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
             ) {
                 if (sessions.isEmpty()) {
                     Text(
                         text = stringResource(R.string.terminal_drawer_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)
                     )
                 }
                 sessions.forEachIndexed { i, session ->
@@ -681,14 +761,13 @@ fun TerminalDrawerSheet(
                 }
             }
             HorizontalDivider(
-                modifier = Modifier.padding(vertical = 8.dp),
+                modifier = Modifier.padding(vertical = FluxSpacing.sm),
                 color = colors.outlineVariant
             )
             NewSessionRow(label = newSessionLabel, onNewSession = onNewSession, shellMenu = shellMenu)
-            val extraKeysLabel = stringResource(R.string.terminal_extra_keys)
             DrawerActionRow(
                 icon = Icons.Default.Keyboard,
-                label = extraKeysLabel,
+                label = stringResource(R.string.terminal_extra_keys),
                 modifier = Modifier.toggleable(
                     value = extraKeysVisible,
                     role = Role.Switch,
@@ -698,14 +777,52 @@ fun TerminalDrawerSheet(
                 FluxSwitch(
                     checked = extraKeysVisible,
                     onCheckedChange = null,
-                    modifier = Modifier.padding(end = 12.dp)
+                    modifier = Modifier.padding(end = FluxSpacing.md)
                 )
             }
-            if (onBack != null) {
+            onToggleWakeLock?.let { toggle ->
                 DrawerActionRow(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    label = stringResource(R.string.terminal_back_home),
-                    modifier = Modifier.clickable(role = Role.Button, onClick = onBack)
+                    icon = Icons.Default.Coffee,
+                    label = stringResource(R.string.terminal_drawer_wakelock),
+                    supporting = stringResource(R.string.terminal_drawer_wakelock_sub),
+                    modifier = Modifier.toggleable(
+                        value = wakeLockHeld,
+                        role = Role.Switch,
+                        onValueChange = { toggle() }
+                    )
+                ) {
+                    FluxSwitch(
+                        checked = wakeLockHeld,
+                        onCheckedChange = null,
+                        modifier = Modifier.padding(end = FluxSpacing.md)
+                    )
+                }
+            }
+            if (onOpenDashboard != null || onOpenFiles != null || onOpenSettings != null) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = FluxSpacing.sm),
+                    color = colors.outlineVariant
+                )
+            }
+            onOpenDashboard?.let {
+                DrawerActionRow(
+                    icon = Icons.Default.SpaceDashboard,
+                    label = stringResource(R.string.terminal_drawer_ubuntu),
+                    modifier = Modifier.clickable(role = Role.Button, onClick = it)
+                )
+            }
+            onOpenFiles?.let {
+                DrawerActionRow(
+                    icon = Icons.Default.Folder,
+                    label = stringResource(R.string.terminal_drawer_files),
+                    modifier = Modifier.clickable(role = Role.Button, onClick = it)
+                )
+            }
+            onOpenSettings?.let {
+                DrawerActionRow(
+                    icon = Icons.Default.Settings,
+                    label = stringResource(R.string.terminal_drawer_settings),
+                    modifier = Modifier.clickable(role = Role.Button, onClick = it)
                 )
             }
         }
@@ -718,6 +835,7 @@ private fun DrawerActionRow(
     icon: ImageVector,
     label: String,
     modifier: Modifier = Modifier,
+    supporting: String? = null,
     trailing: @Composable () -> Unit = {},
 ) {
     Row(
@@ -726,7 +844,7 @@ private fun DrawerActionRow(
             .heightIn(min = DRAWER_ROW_HEIGHT)
             .clip(CircleShape)
             .then(modifier)
-            .padding(start = 16.dp),
+            .padding(start = FluxSpacing.lg),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -735,14 +853,25 @@ private fun DrawerActionRow(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(24.dp)
         )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+        Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 12.dp, end = 8.dp)
-        )
+                .padding(start = FluxSpacing.md, end = FluxSpacing.sm)
+                .padding(vertical = if (supporting != null) FluxSpacing.sm else 0.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            supporting?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
         trailing()
     }
 }
@@ -756,7 +885,6 @@ private fun NewSessionRow(
     shellMenu: @Composable (onDismiss: () -> Unit) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val newLabel = label
     val moreLabel = stringResource(R.string.terminal_more_shells)
     Box {
         Row(
@@ -766,28 +894,28 @@ private fun NewSessionRow(
                 .clip(CircleShape)
                 .combinedClickable(
                     role = Role.Button,
-                    onClickLabel = newLabel,
+                    onClickLabel = label,
                     onLongClickLabel = moreLabel,
                     onLongClick = { menuOpen = true },
                     onClick = onNewSession
                 )
-                .padding(start = 16.dp),
+                .padding(start = FluxSpacing.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = null,
-                tint = FluxAccentMagenta,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
             )
             Text(
-                text = newLabel,
+                text = label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 12.dp, end = 8.dp)
+                    .padding(start = FluxSpacing.md, end = FluxSpacing.sm)
             )
             IconButton(onClick = { menuOpen = true }) {
                 Icon(
@@ -863,7 +991,7 @@ private fun ShellMenuItem(label: String, icon: ImageVector, onClick: () -> Unit)
 
 /**
  * One session in the drawer: tap switches, the own 48dp ✕ target closes, long-press opens
- * "Close" / "Close other tabs". The selected session gets the accent tint.
+ * "Close" / "Close other tabs". The selected session sits on the secondary container.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -881,16 +1009,14 @@ private fun DrawerSessionRow(
     val closeLabel = stringResource(R.string.terminal_tab_close_named, title)
     val switchLabel = stringResource(R.string.terminal_tab_switch, title)
     val menuLabel = stringResource(R.string.terminal_tab_menu)
+    val content = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = DRAWER_ROW_HEIGHT)
                 .clip(CircleShape)
-                .then(
-                    if (selected) Modifier.background(FluxAccentMagenta.copy(alpha = 0.22f))
-                    else Modifier
-                )
+                .then(if (selected) Modifier.background(colors.secondaryContainer) else Modifier)
                 .combinedClickable(
                     role = Role.Tab,
                     onClickLabel = switchLabel,
@@ -899,7 +1025,7 @@ private fun DrawerSessionRow(
                     onClick = onSelect
                 )
                 .semantics { this.selected = selected }
-                .padding(start = 16.dp, end = 4.dp),
+                .padding(start = FluxSpacing.lg, end = FluxSpacing.xs),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(
@@ -911,17 +1037,17 @@ private fun DrawerSessionRow(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) colors.onSurface else colors.onSurfaceVariant,
+                color = content,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 12.dp, end = 8.dp)
+                    .padding(start = FluxSpacing.md, end = FluxSpacing.sm)
             )
             // Own 48dp hit area; the row's select target never overlaps it.
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(FluxSpacing.touch)
                     .clip(CircleShape)
                     .clickable(role = Role.Button, onClick = onClose)
                     .semantics { contentDescription = closeLabel },
@@ -930,7 +1056,7 @@ private fun DrawerSessionRow(
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = null,
-                    tint = if (selected) colors.onSurface else colors.onSurfaceVariant,
+                    tint = content,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -957,6 +1083,63 @@ private fun DrawerSessionRow(
 }
 
 /**
+ * Links found in the session's output, newest first: tap opens one in the browser, long-press
+ * copies it. Stateless for screenshot previews.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun TerminalLinksDialog(
+    links: List<String>,
+    onOpen: (String) -> Unit,
+    onCopy: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val copyLabel = stringResource(R.string.terminal_link_copy)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.terminal_links_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.terminal_links_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = FluxSpacing.sm)
+                )
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    links.forEach { url ->
+                        val openLabel = stringResource(R.string.terminal_link_open, url)
+                        Text(
+                            text = url,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = FluxSpacing.touch)
+                                .clip(MaterialTheme.shapes.small)
+                                .combinedClickable(
+                                    role = Role.Button,
+                                    onClickLabel = openLabel,
+                                    onLongClickLabel = copyLabel,
+                                    onLongClick = { onCopy(url) },
+                                    onClick = { onOpen(url) }
+                                )
+                                // 14dp top and bottom: a one-line link is exactly the 48dp target.
+                                .padding(horizontal = FluxSpacing.sm, vertical = FluxSpacing.md + FluxSpacing.xxs)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.terminal_links_close)) }
+        }
+    )
+}
+
+/**
  * Compact empty state: no selector, just the Ubuntu shell being opened, or why it failed
  * with a single retry. Stateless for screenshot previews.
  */
@@ -966,12 +1149,16 @@ fun TerminalEmptyState(
     errorMessage: String?,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    // With no session there is no extra-keys bar (no ☰) and the edge swipe is hidden, so the
+    // other destinations, e.g. "Repair host files" on the Ubuntu page, need a visible way in.
+    onOpenDashboard: (() -> Unit)? = null,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
+            .padding(horizontal = FluxSpacing.xl, vertical = FluxSpacing.xxl),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -983,21 +1170,20 @@ fun TerminalEmptyState(
         Text(
             text = stringResource(R.string.terminal_empty_title),
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = colors.onBackground,
-            modifier = Modifier.padding(top = 16.dp)
+            color = colors.onSurface,
+            modifier = Modifier.padding(top = FluxSpacing.lg)
         )
         Row(
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier.padding(top = FluxSpacing.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (opening) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(16.dp),
                     strokeWidth = 2.dp,
-                    color = FluxAccentMagenta
+                    color = colors.primary
                 )
-                Spacer(Modifier.size(8.dp))
+                Spacer(Modifier.size(FluxSpacing.sm))
             }
             Text(
                 text = when {
@@ -1014,16 +1200,33 @@ fun TerminalEmptyState(
             onClick = onOpen,
             enabled = !opening,
             modifier = Modifier
-                .padding(top = 24.dp)
-                .heightIn(min = 48.dp)
+                .padding(top = FluxSpacing.xl)
+                .heightIn(min = FluxSpacing.touch)
         ) {
             Icon(
                 imageVector = Icons.Default.Terminal,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp)
             )
-            Spacer(Modifier.size(8.dp))
+            Spacer(Modifier.size(FluxSpacing.sm))
             Text(stringResource(R.string.terminal_open_ubuntu))
+        }
+        if (onOpenDashboard != null || onOpenSettings != null) {
+            Row(
+                modifier = Modifier.padding(top = FluxSpacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
+            ) {
+                onOpenDashboard?.let {
+                    TextButton(onClick = it, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
+                        Text(stringResource(R.string.terminal_drawer_ubuntu))
+                    }
+                }
+                onOpenSettings?.let {
+                    TextButton(onClick = it, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
+                        Text(stringResource(R.string.terminal_drawer_settings))
+                    }
+                }
+            }
         }
     }
 }

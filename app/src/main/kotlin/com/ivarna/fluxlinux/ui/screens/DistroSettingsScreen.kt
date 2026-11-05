@@ -57,13 +57,7 @@ fun DistroSettingsScreen(
     onUninstallComponent: (DistroComponent) -> Unit = {},
     onUninstallDistro: () -> Unit,
     onReinstallDistro: () -> Unit,
-    onNavigateToStart: (() -> Unit)? = null,
     onStartActivity: (android.content.Intent) -> Unit,
-    onLaunchXfce: (() -> Unit)? = null,
-    onStopXfce: (() -> Unit)? = null,
-    onLaunchKde: (() -> Unit)? = null,
-    onStopKde: (() -> Unit)? = null,
-    onLaunchCli: (() -> Unit)? = null,
     hazeState: HazeState
 ) {
     val context = LocalContext.current

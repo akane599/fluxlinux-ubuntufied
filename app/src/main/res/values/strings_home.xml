@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Ubuntu dashboard (Home) -->
-    <string name="home_ubuntu_name">Ubuntu</string>
-    <string name="home_ubuntu_version">26.04</string>
+    <string name="home_ubuntu_title">Ubuntu 26.04</string>
+    <string name="home_top_title">Ubuntu</string>
+    <string name="home_top_back">Back to terminal</string>
+    <string name="home_top_settings">Settings</string>
     <!-- Ubuntu runtime (PRoot vs chroot) -->
     <string name="home_runtime_proot">PRoot</string>
     <string name="home_runtime_chroot">Chroot · root</string>
     <string name="home_runtime_switch_to">Switch to %1$s</string>
-    <string name="home_runtime_switched_proot">Home now uses Ubuntu PRoot</string>
-    <string name="home_runtime_switched_chroot">Home now uses Ubuntu chroot</string>
+    <string name="home_runtime_switched_proot">Now using Ubuntu PRoot</string>
+    <string name="home_runtime_switched_chroot">Now using Ubuntu chroot</string>
     <string name="home_runtime_switch_blocked">Stop the desktop before switching the Ubuntu runtime</string>
     <string name="home_runtime_no_root">Root access isn\'t available, so Ubuntu chroot can\'t be used</string>
     <string name="home_other_ubuntu_proot">Ubuntu PRoot</string>
     <string name="home_other_ubuntu_chroot">Ubuntu chroot</string>
     <string name="home_ubuntu_logo">Ubuntu logo</string>
 
-    <string name="home_status_running">Running</string>
-    <string name="home_status_starting">Starting</string>
-    <string name="home_status_stopped">Stopped</string>
+    <string name="home_status_ready">Ready</string>
     <string name="home_status_not_installed">Not installed</string>
     <string name="home_status_checking">Checking</string>
     <string name="home_status_needs_root">Root needed</string>
 
-    <string name="home_hero_running">The XFCE desktop is running.</string>
-    <string name="home_hero_starting">Starting the XFCE desktop…</string>
-    <string name="home_hero_stopped">The XFCE desktop is ready to start.</string>
+    <string name="home_hero_running">Running in the display app.</string>
+    <string name="home_hero_starting">Starting…</string>
+    <string name="home_hero_stopped">Installed and stopped.</string>
     <string name="home_hero_not_installed">Ubuntu isn\'t set up on this device yet. Other installed distros are kept.</string>
     <string name="home_hero_not_installed_chroot">Ubuntu chroot isn\'t set up on this device yet. It runs with root, separate from PRoot.</string>
     <string name="home_hero_checking">Checking the Ubuntu chroot install…</string>
@@ -38,22 +38,46 @@
     <string name="home_action_retry_root">Check root again</string>
     <string name="home_action_use_proot">Use PRoot</string>
 
-    <!-- Auto-start countdown -->
-    <string name="home_autostart_title">Starting Ubuntu…</string>
-    <string name="home_autostart_body">The desktop opens in a moment.</string>
-    <string name="home_autostart_cancel">Cancel</string>
+    <!-- Desktop (optional XFCE add-on) -->
+    <string name="home_section_desktop">Desktop</string>
+    <string name="home_desktop_title">XFCE desktop</string>
+    <string name="home_desktop_not_installed">Not installed. The terminal works without it.</string>
+    <string name="home_desktop_value">A full Linux desktop with windows and apps, shown in a separate display app.</string>
+    <string name="home_desktop_install">Install desktop</string>
+    <string name="home_desktop_installing">Installing the desktop</string>
+    <string name="home_desktop_installing_starting">Starting…</string>
+    <string name="home_desktop_installing_note">Ubuntu keeps working meanwhile. Avoid apt in the terminal until this finishes.</string>
+    <string name="home_desktop_percent">%1$d%%</string>
+    <string name="home_desktop_show_log">Show log</string>
+    <string name="home_desktop_cancel">Cancel</string>
+    <string name="home_desktop_install_failed">The desktop install didn\'t finish.</string>
+    <string name="home_desktop_retry">Try again</string>
+    <string name="home_desktop_install_busy">Another install is running. Try again when it finishes.</string>
+    <string name="home_desktop_confirm_title">Install the XFCE desktop?</string>
+    <string name="home_desktop_confirm_body">It downloads several hundred MB and takes a few minutes. Ubuntu stays usable meanwhile; avoid apt in the terminal until it finishes.</string>
+    <string name="home_desktop_confirm_theme">Desktop theme</string>
+    <string name="home_desktop_theme_dark">Dark</string>
+    <string name="home_desktop_theme_light">Light</string>
+    <string name="home_desktop_confirm_install">Install</string>
+    <string name="home_desktop_confirm_cancel">Cancel</string>
+    <string name="home_desktop_install_log_title">Desktop install log</string>
 
-    <!-- Crash-loop guard banner -->
-    <string name="home_failed_title">Ubuntu didn\'t start last time</string>
-    <string name="home_failed_body">Automatic start is paused until the desktop starts once.</string>
-    <string name="home_failed_view_log">View log</string>
-    <string name="home_failed_try_again">Try again</string>
-    <string name="home_failed_recovery">Recovery</string>
+    <!-- Log dialog -->
+    <string name="home_log_title_desktop">Desktop log</string>
+    <string name="home_log_phase_starting">Starting…</string>
+    <string name="home_log_phase_running">Running</string>
+    <string name="home_log_phase_idle">Not running</string>
+    <string name="home_log_waiting">Waiting for output…</string>
+    <string name="home_log_copy">Copy</string>
+    <string name="home_log_copied">Log copied</string>
+    <string name="home_log_open_display">Open display</string>
+    <string name="home_log_close">Close</string>
 
-    <!-- Quick actions -->
-    <string name="home_quick_terminal">Terminal</string>
-    <string name="home_quick_root_terminal">Root terminal</string>
-    <string name="home_quick_files">Files</string>
+    <!-- Files -->
+    <string name="home_section_files">Files</string>
+    <string name="home_files_home">Home folder</string>
+    <string name="home_files_home_sub">Your Ubuntu home in the Files app</string>
+    <string name="home_files_system_sub">The whole system, from /</string>
     <string name="home_quick_filesystem">Ubuntu filesystem</string>
     <string name="home_files_unavailable">No file manager could open Ubuntu\'s files</string>
 
@@ -75,14 +99,13 @@
     <!-- Recovery -->
     <string name="home_recovery_title">Recovery</string>
     <string name="home_recovery_view_log">View desktop log</string>
-    <string name="home_recovery_view_log_sub">Output from the last desktop start</string>
     <string name="home_recovery_stop_all">Stop everything</string>
     <string name="home_recovery_stop_all_sub">Close terminals and stop the desktop</string>
     <string name="home_recovery_stop_all_done">Terminals closed and desktop stopped</string>
     <string name="home_recovery_repair">Repair host files</string>
     <string name="home_recovery_repair_sub">Re-extract FluxLinux\'s built-in tools. Ubuntu and your files are kept.</string>
     <string name="home_recovery_rerun">Re-run Ubuntu setup</string>
-    <string name="home_recovery_rerun_sub">Reinstall the desktop packages. Your Ubuntu files are kept.</string>
+    <string name="home_recovery_rerun_sub">Reinstall Ubuntu\'s packages. Your files are kept.</string>
     <string name="home_recovery_settings">Ubuntu settings</string>
     <string name="home_recovery_settings_sub">Components, hardware acceleration, uninstall</string>
     <string name="home_recovery_troubleshooting">Troubleshooting</string>
@@ -97,8 +120,6 @@
     <string name="home_repair_failed">Repair failed. Check your connection and try again.</string>
 
     <!-- Settings -->
-    <string name="settings_autostart_title">Open Ubuntu desktop when FluxLinux starts</string>
-    <string name="settings_autostart_sub">Starts the desktop each time you open the app</string>
     <string name="settings_advanced_header">Advanced</string>
     <string name="settings_runtime_title">Ubuntu runtime</string>
     <string name="settings_runtime_proot">PRoot</string>
@@ -107,29 +128,29 @@
     <string name="settings_runtime_chroot_sub">Chroot: faster and a full system, needs root.</string>
     <string name="settings_runtime_checking">Checking root access…</string>
     <string name="settings_runtime_no_root">Root access was denied or isn\'t available. Ubuntu stays on PRoot. Allow FluxLinux in your root manager (Magisk, KernelSU) and try again.</string>
-    <string name="settings_runtime_chroot_missing">Ubuntu chroot isn\'t set up yet. Set it up from Home.</string>
-    <string name="settings_runtime_proot_missing">Ubuntu PRoot isn\'t set up yet. Set it up from Home.</string>
+    <string name="settings_runtime_chroot_missing">Ubuntu chroot isn\'t set up yet. Set it up from the Ubuntu page.</string>
+    <string name="settings_runtime_proot_missing">Ubuntu PRoot isn\'t set up yet. Set it up from the Ubuntu page.</string>
     <string name="settings_runtime_stop_title">Stop the desktop first?</string>
-    <string name="settings_runtime_stop_body">The Ubuntu desktop is running. Stop it and switch Home to %1$s?</string>
+    <string name="settings_runtime_stop_body">The Ubuntu desktop is running. Stop it and switch to %1$s?</string>
     <string name="settings_runtime_stop_confirm">Stop and switch</string>
     <string name="settings_runtime_stop_cancel">Cancel</string>
 
     <!-- PRoot / Chroot storage lists (Settings > Advanced) -->
-    <string name="storage_go_home">Go to Home</string>
-    <string name="storage_proot_empty_hint">Set up Ubuntu from Home.</string>
-    <string name="storage_chroot_empty_hint">Root-level Linux lives outside app storage. To set up Ubuntu chroot, choose Chroot under Settings > Ubuntu runtime, then set it up from Home.</string>
+    <string name="storage_go_home">Open the Ubuntu page</string>
+    <string name="storage_proot_empty_hint">Set up Ubuntu from the Ubuntu page.</string>
+    <string name="storage_chroot_empty_hint">Root-level Linux lives outside app storage. To set up Ubuntu chroot, choose Chroot under Settings > Ubuntu runtime, then set it up from the Ubuntu page.</string>
 
     <!-- Troubleshooting -->
     <string name="trouble_desktop_title">The desktop doesn\'t open</string>
-    <string name="trouble_desktop_body">On Home, open Recovery and tap View desktop log to see why. Tap Stop everything, then Start desktop. If the log mentions missing host files, use Repair host files.</string>
+    <string name="trouble_desktop_body">Open Ubuntu from the terminal drawer and tap View desktop log under Desktop to see why. Tap Stop everything under Recovery, then Start desktop. If the log mentions missing host files, use Repair host files.</string>
     <string name="trouble_black_title">Black screen</string>
     <string name="trouble_black_body">XFCE draws a few seconds after the display opens. If it stays black, stop the desktop and start it again. Settings > X11 Display controls scaling and fullscreen.</string>
     <string name="trouble_sound_title">No sound</string>
     <string name="trouble_sound_body">Settings > Audio shows whether PulseAudio is running and can restart it. Ubuntu plays through the host\'s private socket (PULSE_SERVER=unix:/tmp/pulse-native), so don\'t install a sound server inside Ubuntu.</string>
     <string name="trouble_links_title">~/storage folders are empty</string>
-    <string name="trouble_links_body">The links point at your phone\'s folders. On Home, allow shared storage, then tap Create links. Existing files with the same names are never replaced.</string>
+    <string name="trouble_links_body">The links point at your phone\'s folders. On the Ubuntu page, allow shared storage, then tap Create links. Existing files with the same names are never replaced.</string>
     <string name="trouble_phantom_title">Android 12+ closes Linux apps</string>
     <string name="trouble_phantom_body">Android\'s phantom process killer can stop the desktop or terminal. Settings > Process killer fix turns it off with root, Shizuku or adb.</string>
     <string name="trouble_reinstall_title">Reinstall without losing files</string>
-    <string name="trouble_reinstall_body">Re-run Ubuntu setup reinstalls the desktop packages and keeps your files. Repair host files re-extracts FluxLinux\'s tools and keeps Ubuntu too. Only Uninstall in Ubuntu settings deletes Ubuntu.</string>
+    <string name="trouble_reinstall_body">Re-run Ubuntu setup reinstalls Ubuntu\'s packages and keeps your files. Repair host files re-extracts FluxLinux\'s tools and keeps Ubuntu too. Only Uninstall in Ubuntu settings deletes Ubuntu.</string>
 </resources>
