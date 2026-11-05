@@ -49,3 +49,5 @@ design/before/
 design/after/
 *.jks
 *.keystore
+*.p12
+*.pfx
