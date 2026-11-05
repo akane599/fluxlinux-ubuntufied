@@ -63,6 +63,9 @@ class GuestShellScriptTest {
     fun terminalOnlySetupSkipsOnlyTheDesktop() = runNamed("desktop_optional_test.sh")
 
     @Test
+    fun customizationWithoutOhMyZshExitsPartial() = runNamed("customization_partial_exit_test.sh")
+
+    @Test
     fun everyShellTestIsWiredHere() {
         val wired = setOf(
             "xfwm4_no_compositing_test.sh",
@@ -71,6 +74,7 @@ class GuestShellScriptTest {
             "pulse_repair_chroot_test.sh",
             "papirus_proot_fallback_test.sh",
             "desktop_optional_test.sh",
+            "customization_partial_exit_test.sh",
         )
         val present = repoDir("src/test/shell").listFiles { f -> f.name.endsWith("_test.sh") }
             .orEmpty().map { it.name }.toSet()
