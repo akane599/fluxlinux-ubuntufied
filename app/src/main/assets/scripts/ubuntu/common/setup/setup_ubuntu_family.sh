@@ -24,13 +24,15 @@ if ! command -v _flux_setup_pulse >/dev/null 2>&1 \
     exit 2
 fi
 
-# setup_ubuntu_family.sh — Ubuntu 26.04 LTS (Resolute) XFCE (proot + chroot).
+# setup_ubuntu_family.sh — Ubuntu 26.04 LTS (Resolute) base setup (proot + chroot),
+# plus the optional XFCE desktop.
 # Debian-LIKE, not Debian: rewrite mirrors to ports.ubuntu.com, NEVER add debian.org.
 # Never install ubuntu-desktop / do-release-upgrade / PPAs.
 #
-# FLUX_INSTALL_DESKTOP=0 (exported by the app's terminal-only setup) skips the XFCE
-# packages, the startxfce4 check and the first-paint GPU mode. Unset or 1 installs the
-# desktop, so Distro Settings re-runs and the desktop add-on keep today's behaviour.
+# The app's install always exports FLUX_INSTALL_DESKTOP: 0 for a terminal-only run skips
+# the XFCE packages, the startxfce4 check and the first-paint GPU mode; 1 (a run with the
+# desktop, or the desktop add-on) installs them. Unset (a standalone run, or a Distro
+# Settings component session that sets no flag) installs the desktop, like 1.
 
 DISTRO_NAME="${1:-ubuntu}"
 echo "FluxLinux: Configuring ${DISTRO_NAME} (Ubuntu Family)..."

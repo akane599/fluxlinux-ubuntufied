@@ -164,8 +164,9 @@ _flux_sha256_ok() {
 
 echo "FluxLinux: Installing customization packages..."
 # FLUX_CUSTOMIZE_DESKTOP=0 (the app's terminal-only setup): only the shell part runs
-# (Oh My Zsh, plugins, pokemon, .zshrc, fastfetch). Unset or 1 also applies the XFCE
-# theme, icons, cursor, wallpaper, Nerd Font and xfconf, as before.
+# (Oh My Zsh, plugins, pokemon, .zshrc, fastfetch). 1 (a run with the desktop) or unset
+# (a standalone run or a Distro Settings session) also applies the XFCE theme, icons,
+# cursor, wallpaper, Nerd Font and xfconf.
 if [ "${FLUX_CUSTOMIZE_DESKTOP:-1}" != 0 ]; then
     # unzip: theme/icon/cursor/wallpaper/font zips; fontconfig: fc-list / fc-cache.
     _flux_desktop_pkgs="unzip fontconfig"

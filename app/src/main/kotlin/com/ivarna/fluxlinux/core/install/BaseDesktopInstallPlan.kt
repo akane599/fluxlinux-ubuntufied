@@ -109,11 +109,14 @@ object BaseDesktopInstallPlan {
     private const val DESKTOP_CUSTOM_LABEL = "Applying Flux customization…"
     private const val TERMINAL_CUSTOM_LABEL = "Setting up zsh and Oh My Zsh…"
 
-    /** `export FLUX_INSTALL_DESKTOP='1|0'` for the family payload (scripts default to 1). */
+    /**
+     * `export FLUX_INSTALL_DESKTOP='1|0'` for the family payload. Unset reads as 1, except
+     * that flux_guest_common.sh adds the XFCE Pulse plugin next to an existing pactl only on 1.
+     */
     internal fun installDesktopExport(installDesktop: Boolean): String =
         "export FLUX_INSTALL_DESKTOP='${if (installDesktop) 1 else 0}'\n"
 
-    /** `export FLUX_CUSTOMIZE_DESKTOP='1|0'` for the customization payload (scripts default to 1). */
+    /** `export FLUX_CUSTOMIZE_DESKTOP='1|0'` for the customization payload (unset reads as 1). */
     internal fun customizeDesktopExport(customizeDesktop: Boolean): String =
         "export FLUX_CUSTOMIZE_DESKTOP='${if (customizeDesktop) 1 else 0}'\n"
 
@@ -137,8 +140,9 @@ object BaseDesktopInstallPlan {
         }
 
     /**
-     * Family setup payload. [installDesktop] false exports `FLUX_INSTALL_DESKTOP=0`, which
-     * the Ubuntu family script reads to skip XFCE (terminal-only install).
+     * Family setup payload. [installDesktop] false exports `FLUX_INSTALL_DESKTOP=0` (the
+     * terminal-only install), which two parts of it read: the Ubuntu family script skips XFCE,
+     * and flux_guest_common.sh's Pulse client setup skips the xfce4-pulseaudio-plugin.
      */
     fun familySetupPayload(
         ctx: Context,
@@ -178,8 +182,10 @@ object BaseDesktopInstallPlan {
         )
 
     /**
-     * Customization payload. [customizeDesktop] false exports `FLUX_CUSTOMIZE_DESKTOP=0`:
-     * only the shell part (Oh My Zsh, plugins, .zshrc, fastfetch) runs.
+     * Customization payload. [customizeDesktop] false exports `FLUX_CUSTOMIZE_DESKTOP=0`,
+     * which only setup_customization_xfce.sh honours: just its shell part (Oh My Zsh,
+     * plugins, .zshrc, fastfetch) runs. Other distros' customization scripts ignore it; they
+     * only run desktop installs ([InstallKind.effective]).
      */
     fun customizationPayload(
         ctx: Context,

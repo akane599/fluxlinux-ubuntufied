@@ -30,8 +30,10 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Runs the simplified onboarding / base install with phase progress + live log.
- * Proot: prepareHost → flux_install (family) → customization via proot-distro.
- * Chroot: root check → prepareHost → setup_*_chroot → family → customization in chroot.
+ * Proot: prepareHost → download → flux_install (extract + family) → customization via
+ * proot-distro → hw-accel.
+ * Chroot: root check → prepareHost → download → extract (setup_*_chroot) → family →
+ * customization in chroot → hw-accel.
  *
  * [InstallKind] picks what runs: [InstallSteps.of] turns the effective kind into the flags
  * this runner branches on, and [BaseDesktopInstallPlan.phasesFor] gives the phases.

@@ -9,8 +9,9 @@ import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
  *   no hardware acceleration.
  * - [TERMINAL_AND_DESKTOP]: [TERMINAL] plus XFCE, the Flux desktop customization and
  *   hardware acceleration (the pre-optional-desktop install).
- * - [DESKTOP_ADD_ON]: XFCE, desktop customization and hardware acceleration on top of an
- *   already installed rootfs; no download or extraction.
+ * - [DESKTOP_ADD_ON]: on an already installed rootfs (never downloaded or extracted), re-runs
+ *   the family setup and the customization with the desktop on (so base packages, the user
+ *   and the shell setup are refreshed too), then hardware acceleration.
  */
 enum class InstallKind {
     TERMINAL,
