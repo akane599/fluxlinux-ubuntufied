@@ -1,6 +1,6 @@
 # CLAUDE.md — FluxLinux (ubuntufied fork)
 
-Runs an Ubuntu 26.04 XFCE desktop (PRoot, no root; chroot with root) over Termux-X11 with PulseAudio on Android. This fork is Ubuntu-first: setup installs Ubuntu and opening the app starts its desktop; other distros' code and existing installs remain but aren't in the main UI.
+Runs Ubuntu 26.04 on Android (PRoot, no root; chroot with root): a terminal first, plus an optional XFCE desktop over Termux-X11 with PulseAudio. This fork is Ubuntu-first and terminal-first: setup installs a terminal-only Ubuntu by default (the desktop is a setup switch or a later add-on) and opening the app shows its terminal; other distros' code and existing installs remain but aren't in the main UI.
 Android, developed on Ubuntu from the CLI.
 
 - Origin: fork of abhay-byte/fluxlinux (origin = akane599/fluxlinux-ubuntufied) @ 7f6e61d · Integration branch: main
@@ -8,7 +8,7 @@ Android, developed on Ubuntu from the CLI.
 - JDK target 17 · Gradle 8.14 · AGP 8.7.3 · Kotlin 2.0.20 · compileSdk 36 · targetSdk 36 · minSdk 26
 - Modules: :app :termux-x11 :terminal-emulator :stub · Architecture: single-activity Compose, no DI framework · DI/DB/Net: none / none / okhttp
 - Flavors (dimension `store`): `ivarna` = com.ivarna.fluxlinux (F-Droid/GitHub, arm64-v8a only) · `zenithblue` = com.zenithblue.fluxlinux (Play) · Launcher: .MainActivity
-- Baseline: build ok (ivarnaDebug) · 727 unit tests, 0 failures (v2.1.4, 2026-10-20)
+- Baseline: build ok (ivarnaDebug) · 942 unit tests, 0 failures (feat/terminal-first, 2026-11-05)
 
 ## How work flows here
 - For ongoing multi-session work, read PROGRESS.md at the repo root before planning, and update it at milestones. Its decision log is append-only (one line each).

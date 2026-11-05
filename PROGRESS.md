@@ -2,17 +2,18 @@
 
 _State of ongoing work (Current effort), baselines, the append-only decision log, audit status and known issues._
 
-## Current effort: Ubuntu chroot runtime + akane user
-_Updated: 2026-11-02 · rewrite this section, don't append_
-- **Goal:** Ubuntu runs as PRoot or chroot (rooted phone) with the same features, guest user `akane` in both; merged and released.
-- **Done:** branch `feat/ubuntu-chroot`, [PR #1](https://github.com/akane599/fluxlinux-ubuntufied/pull/1). Build, 903 unit tests, lint, screenshots and shell tests are green. Two independent reviews' P1–P3 findings are fixed. The debug APK is installed fresh on the SM-S938B (KernelSU); nothing has run on it yet.
+## Current effort: terminal-first app (on top of the Ubuntu chroot runtime)
+_Updated: 2026-11-05 · rewrite this section, don't append_
+- **Goal:** the terminal is the product: the app opens on it, XFCE is optional (setup switch off by default, "Install desktop" later), links open on tap, a Paste key, Hold wakelock, and a refined dark + cream design. Stacked on the chroot work: `feat/ubuntu-chroot` ([PR #1](https://github.com/akane599/fluxlinux-ubuntufied/pull/1)) → `feat/terminal-first` (PR against `feat/ubuntu-chroot`).
+- **Done:** both branches build; on `feat/terminal-first` 942 unit tests, lint (0 errors), screenshots and shell tests are green. Emulator QA (UI only, staged fake rootfs) covered onboarding, terminal-first launch, the empty/failed terminal state, the Ubuntu page and the desktop add-on confirm/failed states.
 - **Next:**
-  - [ ] On the phone: grant root to `com.ivarna.fluxlinux` in KernelSU, run onboarding → Chroot, start the desktop. Check `whoami` = akane, network (aid_inet), `~/storage`, audio, and Files → "Ubuntu" (root SAF, toybox/BusyBox). Monitor via adb and `run-as`; the user taps.
-  - [ ] Check a PRoot install migrating flux → akane on a real install: install v2.1.8 release, set up, then upgrade to the branch build.
-  - [ ] Fix whatever the device shows, merge PR #1, update the CLAUDE.md baseline (903 tests), release v2.2.0 (`.claude/rules/release.md`).
+  - [ ] On the SM-S938B (user taps, monitor via adb): links open in the browser (also inside Claude Code / Codex full screen), Paste key, More… menu, Hold wakelock from the notification and the drawer (`dumpsys power | grep FluxLinux`), an existing XFCE install shows Start/Open/Stop, the add-on Installing row (Show log / Cancel).
+  - [ ] Chroot checks still open from PR #1: grant root in KernelSU, onboarding → Chroot (now terminal-only by default), `whoami` = akane, network, `~/storage`, audio, Files → "Ubuntu"; a PRoot flux → akane migration from a v2.1.8 install.
+  - [ ] Merge PR #1, then the terminal-first PR; release v2.2.0 (`.claude/rules/release.md`).
 - **Open questions:** none.
 
 ## Baseline
+- 2026-11-05 @ feat/terminal-first (on 43e5253): 942 unit tests, 0 failing; lint 0 errors; screenshots valid; shell tests pass.
 - 2026-10-19 @ 7f6e61d: `:app:assembleIvarnaDebug` ok, 402 unit tests (`:app:testIvarnaDebugUnitTest`), 2 failing (pre-existing, not ours):
   - `ui.OnboardingConsentContractTest.optionsPage_requiresDownloadConsentBeforeInstall`: AssertionError (cause not yet investigated)
   - `core.terminal.GuestRootfsShellTest.alpine_absolute_sh_symlink_counts_as_installed`: AssertionError (cause not yet investigated)
@@ -42,6 +43,15 @@ _Updated: 2026-11-02 · rewrite this section, don't append_
 - 2026-11-02: chroot Files go through root (`RootGuestFs`, BusyBox applets first, single-quoted paths, rootfs confinement checked before and inside each root script) because SELinux hides /data/local/tmp/chrootUbuntu from the app uid. Host mounts inside the chroot (/proc, /sys, /dev, /sdcard bind) are list-only, so a SAF delete can never reach shared storage or host /dev; ~/storage links resolve to shared storage directly, browse/create only.
 - 2026-11-02: android-kit and Sidequest were removed by the user. Conventions moved from `.claude/live-rules/` to Claude Code's native `.claude/rules/` (path-scoped where it fits; the Sidequest orchestration rule and publish lock were dropped). `gradle-check.sh` and the compaction checkpoint hook were kept under `.claude/scripts/`, and the bug checklist under `.claude/references/`. Gradle concurrency is a fixed 2 commands × `--max-workers=4` instead of the resource-policy probe.
 - 2026-10-19: redroid (no-KVM host) can't execute the arm64 host binaries (no native bridge libs), so on-device QA there covers UI, provider and links with a staged fake rootfs only.
+- 2026-11-05: terminal-first (branch `feat/terminal-first`, PR against `feat/ubuntu-chroot`): the app opens on the terminal and the Ubuntu page, Files and Settings come from the terminal drawer, because the user wants the terminal to be the product. Desktop auto-start, its Settings switch and `UbuntuLaunchPreferences` are removed (supersedes the 2026-10-19 auto-start line).
+- 2026-11-05: XFCE is optional. `InstallKind` TERMINAL (default) / TERMINAL_AND_DESKTOP / DESKTOP_ADD_ON; guest scripts take `FLUX_INSTALL_DESKTOP` / `FLUX_CUSTOMIZE_DESKTOP`, default on, so other distros, Distro Settings components and legacy callers keep today's behaviour; only the Ubuntu family honours terminal-only (`InstallKind.effective`). `UbuntuDesktop` (flag `xfce4_desktop`, or PRoot `startxfce4`; chroot via an off-main su probe that heals the flag) decides "desktop installed" everywhere; existing XFCE installs are recognised without migration.
+- 2026-11-05: design refresh refines the incumbent dark + cream look instead of a new identity (user's choice): dynamic color off, a full warm-neutral dark scheme, Type/Shape/Spacing tokens; the neon magenta/cyan accents, glass blur and hairline borders are gone from the terminal, onboarding and Ubuntu page.
+- 2026-11-05: Paste is a fixed column at the right of the extra-keys bar, mirroring ☰ at the left, as planned; a first draft stacked it under ☰ to keep the Termux keys wider and the user asked for the planned spot. Word labels step down to labelSmall when cells are under 40dp (360dp phones).
+- 2026-11-05: the Ubuntu page is distilled: terminal and root-terminal tiles removed (Back returns to the terminal; the root shell is in the drawer's ▾ menu); the Desktop section is state-driven (install / progress / failed / start-open-stop + log). The add-on install asks for the desktop theme and refuses while another install runs.
+- 2026-11-05: a tap on a link opens it in every mode, also in mouse-tracking apps (Claude Code / Codex full screen, tmux mouse on), because the user runs those CLIs full screen; a gate that skipped mouse mode was dropped. TerminalView still sends the app its click first, so only vim with mouse=a also moves its cursor.
+- 2026-11-05: "Hold wakelock" (user request, Termux parity): a notification action on the terminal FGS plus a drawer switch, one non-refcounted PARTIAL_WAKE_LOCK in `TerminalWakeLock`, no timeout, released with the last session or when the service stops; shown only while sessions exist.
+- 2026-11-05: the empty/failed terminal state links to the Ubuntu page and Settings, because a failed shell left only the edge-swipe drawer, which a mid-height swipe can turn into system Back; the window background is dark in both themes (no white flash before the first frame).
+- 2026-11-05: the Ubuntu zsh set gains oh-my-zsh's bundled `sudo` plugin (Esc Esc prefixes the line or the last command with sudo; a line-editor widget only, so PRoot and chroot are unaffected; akane has NOPASSWD sudo in both), at the user's request. Existing managed blocks get it through `PREVIOUS_PLUGIN_LISTS` (only an unedited list is rewritten) and a bumped one-shot key (`guest_zsh_plugins_v2_<id>`).
 
 ## Audit status
 | Area | Last run | Result | How |

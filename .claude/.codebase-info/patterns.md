@@ -9,7 +9,7 @@
 - **Paths:** always go through `TermuxHostPaths` / `ChrootPaths` / `BusyBoxPaths`, which derive from `BuildConfig.APPLICATION_ID`. Never hard-code `com.ivarna.fluxlinux`.
 - **Prefs:** SharedPreferences only.
   - `fluxlinux_state` (`StateManager`), `flux_terminal_prefs` (`TerminalPreferences`), `theme_prefs` (`ThemePreferences`).
-  - `flux_ubuntu_launch` (`UbuntuLaunchPreferences`: auto-start switch and per-distro crash-loop guard), `flux_ubuntu_runtime` (`UbuntuRuntime`: PRoot/chroot choice).
+  - `flux_ubuntu_runtime` (`UbuntuRuntime`: PRoot/chroot choice). The old `flux_ubuntu_launch` auto-start prefs are no longer read.
   - `flux_legacy_termux_prefs` (`LegacyTermuxStore`), `flux_v1_notice`, `TermuxX11Preferences`, `GuestRepairCache`.
 - **Errors/logging:** `runCatching` and Boolean/Pair results, with `Log.w/e/i` and a per-object `TAG`. File logs come from `GuiDesktopLog` and `PulseHost` (cacheDir).
 - **File trees:** never use `File.deleteRecursively`, `copyRecursively`, `walkTopDown` or `walk()`. Use `core/system/SafeFiles`. Tests that create links must point them at temp dirs only, and clean up with `SafeFiles.deleteTree`.
