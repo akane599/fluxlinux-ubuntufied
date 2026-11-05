@@ -71,6 +71,7 @@ import androidx.compose.foundation.border
 import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
 import com.ivarna.fluxlinux.ui.components.aka.StatusMark
 import com.ivarna.fluxlinux.ui.components.aka.markColor
+import com.ivarna.fluxlinux.ui.install.InstallWarningNote
 import com.ivarna.fluxlinux.ui.theme.AkaMotion
 import com.ivarna.fluxlinux.ui.theme.AkaTheme
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
@@ -119,9 +120,15 @@ sealed interface DesktopAddOnUi {
 
     /**
      * Installed, with its session's [run] state. [otherRunning] names another install whose
-     * desktop runs; it is set only while this one is [DesktopRun.STOPPED].
+     * desktop runs; it is set only while this one is [DesktopRun.STOPPED]. [warning] is the
+     * add-on run's own warning when it installed the desktop but its theme or shell setup
+     * didn't finish ([InstallController.State.warning]).
      */
-    data class Installed(val run: DesktopRun, val otherRunning: String? = null) : DesktopAddOnUi
+    data class Installed(
+        val run: DesktopRun,
+        val otherRunning: String? = null,
+        val warning: String? = null,
+    ) : DesktopAddOnUi
 }
 
 @Immutable
@@ -612,6 +619,11 @@ fun DesktopPanel(
                     }
                 }
                 is DesktopAddOnUi.Installed -> {
+                    // The add-on installed the desktop, but its theme or shell setup didn't
+                    // finish; Re-run Ubuntu setup (Recovery, below) retries it.
+                    desktop.warning?.let {
+                        InstallWarningNote(warning = it, modifier = Modifier.padding(bottom = FluxSpacing.lg))
+                    }
                     when (desktop.run) {
                         DesktopRun.STOPPED -> AkaButton(
                             text = stringResource(R.string.home_action_start_desktop),

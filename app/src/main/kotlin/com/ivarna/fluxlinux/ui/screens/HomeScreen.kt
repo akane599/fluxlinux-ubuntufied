@@ -137,7 +137,9 @@ internal fun provisionalDesktop(stored: DesktopDetection, runtime: UbuntuRuntime
  * 1. a running desktop add-on run of that install: Installing (percent clamped to 0..100);
  * 2. its failed add-on run: Failed with the run's message (even if `startxfce4` is there);
  * 3. its succeeded add-on run, a session of the active install ([run] not STOPPED), or an
- *    INSTALLED [detection]: Installed, so the page never flashes "Install" before the re-probe;
+ *    INSTALLED [detection]: Installed, so the page never flashes "Install" before the re-probe.
+ *    A succeeded run's warning (theme or shell setup didn't finish) comes along until the run
+ *    is cleared or a new one starts;
  * 4. an unfinished desktop install (INCOMPLETE): Failed with no message;
  * 5. [detection] unknown (null, see [provisionalDesktop]): Checking, so a chroot whose flag
  *    isn't set yet offers no Install during its su probe; otherwise NotInstalled.
@@ -160,7 +162,11 @@ internal fun desktopAddOnUi(
         addOn?.status == InstallController.Status.Succeeded ||
             run != DesktopRun.STOPPED ||
             detection == DesktopDetection.INSTALLED ->
-            DesktopAddOnUi.Installed(run, otherRunning.takeIf { run == DesktopRun.STOPPED })
+            DesktopAddOnUi.Installed(
+                run = run,
+                otherRunning = otherRunning.takeIf { run == DesktopRun.STOPPED },
+                warning = addOn?.takeIf { it.status == InstallController.Status.Succeeded }?.warning,
+            )
         detection == DesktopDetection.INCOMPLETE -> DesktopAddOnUi.Failed(null)
         detection == null -> DesktopAddOnUi.Checking
         else -> DesktopAddOnUi.NotInstalled

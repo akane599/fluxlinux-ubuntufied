@@ -147,6 +147,24 @@ fun HomeDesktopFailedPreview() {
     )
 }
 
+// The add-on installed the desktop, but its theme setup didn't finish.
+@PreviewTest
+@Preview(name = "HomeDesktopWarning", showBackground = true, widthDp = 360, heightDp = 1200)
+@Composable
+fun HomeDesktopWarningPreview() {
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.READY,
+            desktop = DesktopAddOnUi.Installed(
+                run = DesktopRun.STOPPED,
+                warning = "Ubuntu 26.04 and its desktop are installed, but the desktop theme or shell setup " +
+                    "didn't finish, so themes, fonts, Oh My Zsh or plugins may be missing. Re-run setup to try again.",
+            ),
+            storage = storageReady,
+        )
+    )
+}
+
 @PreviewTest
 @Preview(name = "HomeDesktopChecking", showBackground = true, widthDp = 360, heightDp = 1000)
 @Composable

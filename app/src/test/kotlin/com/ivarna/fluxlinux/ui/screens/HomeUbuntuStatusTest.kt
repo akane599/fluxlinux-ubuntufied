@@ -144,6 +144,24 @@ class HomeUbuntuStatusTest {
     }
 
     @Test
+    fun desktopAddOn_succeededWithAWarning_isInstalledAndSaysSo() {
+        val warned = run(InstallKind.DESKTOP_ADD_ON, InstallController.Status.Succeeded)
+            .copy(warning = "Desktop theme didn't finish")
+        assertEquals(
+            DesktopAddOnUi.Installed(DesktopRun.STOPPED, warning = "Desktop theme didn't finish"),
+            desktopAddOnUi(warned, proot, DesktopDetection.INSTALLED),
+        )
+        // Started right away: still the same run's warning.
+        assertEquals(
+            DesktopAddOnUi.Installed(DesktopRun.RUNNING, warning = "Desktop theme didn't finish"),
+            desktopAddOnUi(warned, proot, DesktopDetection.INSTALLED, run = DesktopRun.RUNNING),
+        )
+        // Another install's run, or no run (cleared), carries no warning.
+        assertEquals(stopped, desktopAddOnUi(warned.copy(distroId = chroot), proot, DesktopDetection.INSTALLED))
+        assertEquals(stopped, desktopAddOnUi(idle, proot, DesktopDetection.INSTALLED))
+    }
+
+    @Test
     fun desktopAddOn_otherInstallsRunsAndTerminalOnlyRunsNeverShow() {
         val otherRun = run(InstallKind.DESKTOP_ADD_ON, InstallController.Status.Running, chroot)
         assertEquals(DesktopAddOnUi.NotInstalled, desktopAddOnUi(otherRun, proot, DesktopDetection.NOT_INSTALLED))
