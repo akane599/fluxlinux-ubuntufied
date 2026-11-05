@@ -86,8 +86,8 @@ private val RowMark = 12.dp
 private val RowMinHeight = 56.dp
 
 /**
- * The active Ubuntu install as the dashboard header shows it. STOPPED / STARTING / RUNNING mean
- * Ubuntu is ready; they also describe the optional desktop once it is installed.
+ * The active Ubuntu install as the dashboard header shows it: whether Ubuntu itself is usable.
+ * What the optional desktop is doing is [DesktopAddOnUi]'s business, never this.
  */
 enum class UbuntuStatus {
     /** Chroot mode: root / install detection still running off the main thread. */
@@ -96,27 +96,32 @@ enum class UbuntuStatus {
     /** Chroot mode without root access: the install can't be checked or started. */
     NEEDS_ROOT,
     NOT_INSTALLED,
-    STOPPED,
-    STARTING,
-    RUNNING,
+
+    /** Installed and usable: the terminal works, whatever the desktop is doing. */
+    READY,
 }
 
-/** Ubuntu is installed and usable (the terminal works), whatever the desktop is doing. */
-val UbuntuStatus.isReady: Boolean
-    get() = this == UbuntuStatus.STOPPED || this == UbuntuStatus.STARTING || this == UbuntuStatus.RUNNING
+/** The installed desktop's session on the active install. */
+enum class DesktopRun { STOPPED, STARTING, RUNNING }
 
 /** The optional XFCE desktop as the dashboard's Desktop section shows it. */
 @Immutable
 sealed interface DesktopAddOnUi {
+    /** Detection hasn't answered (e.g. the chroot's su probe) and nothing stored says installed. */
+    data object Checking : DesktopAddOnUi
+
     data object NotInstalled : DesktopAddOnUi
 
-    /** The add-on install is running ([InstallController] kind DESKTOP_ADD_ON). */
+    /** The add-on install is running ([InstallController] kind DESKTOP_ADD_ON); [percent] is 0..100. */
     data class Installing(val percent: Int, val phaseLabel: String, val detail: String) : DesktopAddOnUi
 
     data class Failed(val message: String?) : DesktopAddOnUi
 
-    /** Installed; [UbuntuDashboardState.status] says whether it is stopped, starting or running. */
-    data object Installed : DesktopAddOnUi
+    /**
+     * Installed, with its session's [run] state. [otherRunning] names another install whose
+     * desktop runs; it is set only while this one is [DesktopRun.STOPPED].
+     */
+    data class Installed(val run: DesktopRun, val otherRunning: String? = null) : DesktopAddOnUi
 }
 
 @Immutable
@@ -132,14 +137,13 @@ data class SharedStorageUi(
 @Immutable
 data class UbuntuDashboardState(
     val status: UbuntuStatus,
-    /** Name of another distro whose desktop is running, if any. */
-    val otherDesktopRunning: String? = null,
+    /** The Desktop section; shown only while [status] is [UbuntuStatus.READY]. */
+    val desktop: DesktopAddOnUi,
     val storage: SharedStorageUi,
     /** Which Ubuntu install the dashboard drives (PRoot `ubuntu` or chroot `ubuntu_chroot`). */
     val runtime: UbuntuRuntimeMode = UbuntuRuntimeMode.PROOT,
-    /** The other runtime's install exists and nothing is running: offer the quick switch. */
+    /** The other runtime's install exists and no desktop runs or starts: offer the quick switch. */
     val canSwitchRuntime: Boolean = false,
-    val desktop: DesktopAddOnUi = DesktopAddOnUi.Installed,
 )
 
 /** Every user action on the dashboard. Stateless leaves call these; HomeScreen wires them. */
@@ -183,7 +187,7 @@ fun UbuntuDashboard(
     actions: UbuntuDashboardActions,
     modifier: Modifier = Modifier
 ) {
-    val ready = state.status.isReady
+    val ready = state.status == UbuntuStatus.READY
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -200,12 +204,7 @@ fun UbuntuDashboard(
         if (ready) {
             // No group label: the panel's own "XFCE desktop" title heads it.
             Spacer(Modifier.height(FluxSpacing.lg))
-            DesktopPanel(
-                desktop = state.desktop,
-                status = state.status,
-                otherDesktopRunning = state.otherDesktopRunning,
-                actions = actions,
-            )
+            DesktopPanel(desktop = state.desktop, actions = actions)
 
             GroupLabel(stringResource(R.string.home_section_files))
             NavRow(
@@ -252,11 +251,15 @@ fun UbuntuHeader(
         UbuntuStatus.NEEDS_ROOT -> stringResource(R.string.home_hero_needs_root)
         UbuntuStatus.NOT_INSTALLED ->
             stringResource(if (chroot) R.string.home_hero_not_installed_chroot else R.string.home_hero_not_installed)
-        else -> null
+        UbuntuStatus.READY -> null
     }
     val shape = MaterialTheme.shapes.large
     // A ready install is light on the horizon: the line rises along the card's bottom edge.
-    val risen by animateFloatAsState(if (status.isReady) 1f else 0f, AkaMotion.rise(), label = "headerHorizon")
+    val risen by animateFloatAsState(
+        if (status == UbuntuStatus.READY) 1f else 0f,
+        AkaMotion.rise(),
+        label = "headerHorizon",
+    )
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -328,7 +331,7 @@ fun UbuntuHeader(
                         .fillMaxWidth()
                         .padding(top = FluxSpacing.lg)
                 )
-                else -> Unit
+                UbuntuStatus.CHECKING, UbuntuStatus.READY -> Unit
             }
         }
     }
@@ -341,9 +344,7 @@ private fun StatusLabel(status: UbuntuStatus, modifier: Modifier = Modifier) {
         UbuntuStatus.CHECKING -> MarkState.WORKING to stringResource(R.string.home_status_checking)
         UbuntuStatus.NEEDS_ROOT -> MarkState.FAILED to stringResource(R.string.home_status_needs_root)
         UbuntuStatus.NOT_INSTALLED -> MarkState.IDLE to stringResource(R.string.home_status_not_installed)
-        UbuntuStatus.STOPPED -> MarkState.IDLE to stringResource(R.string.home_status_ready)
-        UbuntuStatus.STARTING -> MarkState.WORKING to stringResource(R.string.ubuntu_aka_status_starting)
-        UbuntuStatus.RUNNING -> MarkState.RUNNING to stringResource(R.string.ubuntu_aka_status_running)
+        UbuntuStatus.READY -> MarkState.IDLE to stringResource(R.string.home_status_ready)
     }
     Row(
         modifier = modifier.padding(vertical = FluxSpacing.xs),
@@ -421,40 +422,39 @@ private fun RuntimeChip(
 /**
  * The optional desktop as one card: its row plus its actions. The row's mark and the
  * subtitle's ink carry the state; a failed install keeps the failed ink and mark until the
- * state changes (Try again, or the desktop turns up installed).
+ * state changes (Try again, or the desktop turns up installed). While detection runs the card
+ * says so and offers nothing, so an installed desktop never flashes "Install desktop".
  */
 @Composable
 fun DesktopPanel(
     desktop: DesktopAddOnUi,
-    status: UbuntuStatus,
-    otherDesktopRunning: String?,
     actions: UbuntuDashboardActions,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
     val inks = AkaTheme.inks
     val subtitle = when (desktop) {
+        DesktopAddOnUi.Checking -> stringResource(R.string.home_desktop_checking)
         DesktopAddOnUi.NotInstalled -> stringResource(R.string.home_desktop_not_installed)
         is DesktopAddOnUi.Installing -> desktop.phaseLabel.ifBlank {
             stringResource(R.string.home_desktop_installing_starting)
         }
         is DesktopAddOnUi.Failed -> stringResource(R.string.home_desktop_install_failed)
-        DesktopAddOnUi.Installed -> when {
-            otherDesktopRunning != null && status == UbuntuStatus.STOPPED ->
-                stringResource(R.string.home_hero_other_running, otherDesktopRunning)
-            status == UbuntuStatus.RUNNING -> stringResource(R.string.home_hero_running)
-            status == UbuntuStatus.STARTING -> stringResource(R.string.home_hero_starting)
+        is DesktopAddOnUi.Installed -> when {
+            desktop.run == DesktopRun.RUNNING -> stringResource(R.string.home_hero_running)
+            desktop.run == DesktopRun.STARTING -> stringResource(R.string.home_hero_starting)
+            desktop.otherRunning != null -> stringResource(R.string.home_hero_other_running, desktop.otherRunning)
             else -> stringResource(R.string.home_hero_stopped)
         }
     }
     val mark: MarkState? = when (desktop) {
         DesktopAddOnUi.NotInstalled -> null
-        is DesktopAddOnUi.Installing -> MarkState.WORKING
+        DesktopAddOnUi.Checking, is DesktopAddOnUi.Installing -> MarkState.WORKING
         is DesktopAddOnUi.Failed -> MarkState.FAILED
-        DesktopAddOnUi.Installed -> when (status) {
-            UbuntuStatus.RUNNING -> MarkState.RUNNING
-            UbuntuStatus.STARTING -> MarkState.WORKING
-            else -> MarkState.IDLE
+        is DesktopAddOnUi.Installed -> when (desktop.run) {
+            DesktopRun.RUNNING -> MarkState.RUNNING
+            DesktopRun.STARTING -> MarkState.WORKING
+            DesktopRun.STOPPED -> MarkState.IDLE
         }
     }
     val subtitleColor = when (mark) {
@@ -469,7 +469,8 @@ fun DesktopPanel(
             .padding(horizontal = FluxSpacing.lg)
             .akaTile(MaterialTheme.shapes.large)
             .animateContentSize(AkaMotion.standard())
-            .padding(bottom = FluxSpacing.lg)
+            // Checking has no body under its row; the row's own padding closes the card.
+            .then(if (desktop == DesktopAddOnUi.Checking) Modifier else Modifier.padding(bottom = FluxSpacing.lg))
     ) {
         Row(
             modifier = Modifier
@@ -509,6 +510,8 @@ fun DesktopPanel(
 
         Column(Modifier.fillMaxWidth().padding(horizontal = FluxSpacing.lg)) {
             when (desktop) {
+                // Nothing to act on until detection answers; the row says what is happening.
+                DesktopAddOnUi.Checking -> Unit
                 DesktopAddOnUi.NotInstalled -> {
                     Text(
                         text = stringResource(R.string.home_desktop_value),
@@ -525,7 +528,7 @@ fun DesktopPanel(
                     )
                 }
                 is DesktopAddOnUi.Installing -> {
-                    val percent = desktop.percent.coerceIn(0, 100)
+                    val percent = desktop.percent
                     LinearProgressIndicator(
                         progress = { percent / 100f },
                         color = markColor(MarkState.WORKING),
@@ -608,15 +611,17 @@ fun DesktopPanel(
                         )
                     }
                 }
-                DesktopAddOnUi.Installed -> {
-                    when (status) {
-                        UbuntuStatus.STOPPED -> AkaButton(
+                is DesktopAddOnUi.Installed -> {
+                    when (desktop.run) {
+                        DesktopRun.STOPPED -> AkaButton(
                             text = stringResource(R.string.home_action_start_desktop),
                             icon = Icons.Sharp.PlayArrow,
                             onClick = actions.onStartDesktop,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        else -> Row(horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)) {
+                        DesktopRun.STARTING, DesktopRun.RUNNING -> Row(
+                            horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm),
+                        ) {
                             SecondaryButton(
                                 label = stringResource(R.string.home_action_open_desktop),
                                 icon = Icons.AutoMirrored.Sharp.OpenInNew,

@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ubuntu page (AkaTerminal redesign): status plate words and the phantom process dialog.
-     Existing Ubuntu page copy stays in strings_home.xml. -->
+<!-- Ubuntu page (AkaTerminal redesign): the phantom process dialog. Existing Ubuntu page copy
+     stays in strings_home.xml. -->
 <resources>
-    <!-- Status plate: the desktop's run state, next to Ready / Root needed / Not installed. -->
-    <string name="ubuntu_aka_status_running">Desktop running</string>
-    <string name="ubuntu_aka_status_starting">Desktop starting</string>
-
     <!-- Phantom process killer dialog (copy moved out of the composable unchanged). -->
     <string name="ubuntu_aka_phantom_title">Phantom process killer</string>
     <string name="ubuntu_aka_phantom_intro">Android 12+ limits the background child processes each app may run. Without this fix your desktop or terminal can be killed after a few seconds (exit 137).</string>

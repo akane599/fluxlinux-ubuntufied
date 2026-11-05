@@ -23,6 +23,7 @@ import com.android.tools.screenshot.PreviewTest
 import com.ivarna.fluxlinux.core.utils.ThemeMode
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.components.DesktopAddOnUi
+import com.ivarna.fluxlinux.ui.components.DesktopRun
 import com.ivarna.fluxlinux.ui.components.SharedStorageUi
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboard
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardActions
@@ -73,30 +74,45 @@ private fun Dashboard(state: UbuntuDashboardState) {
     PreviewHost { UbuntuDashboard(state = state, actions = UbuntuDashboardActions()) }
 }
 
+// Ubuntu ready with an installed, stopped desktop; shared storage not allowed yet.
 @PreviewTest
 @Preview(name = "Home", showBackground = true, widthDp = 360, heightDp = 1240)
 @Composable
 fun HomeScreenPreview() {
-    Dashboard(UbuntuDashboardState(status = UbuntuStatus.STOPPED, storage = storageNotGranted))
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.READY,
+            desktop = DesktopAddOnUi.Installed(DesktopRun.STOPPED),
+            storage = storageNotGranted,
+        )
+    )
 }
 
+// The desktop running: the header still says Ubuntu is ready; the Desktop card says running.
 @PreviewTest
 @Preview(name = "HomeRunning", showBackground = true, widthDp = 360, heightDp = 1060)
 @Composable
 fun HomeRunningPreview() {
-    Dashboard(UbuntuDashboardState(status = UbuntuStatus.RUNNING, storage = storageReady))
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.READY,
+            desktop = DesktopAddOnUi.Installed(DesktopRun.RUNNING),
+            storage = storageReady,
+        )
+    )
 }
 
-// Desktop add-on states: not installed (terminal-only setup), installing, failed.
+// Desktop add-on states: not installed (terminal-only setup), installing, failed, and still
+// being checked (a chroot's su probe before its flag is set).
 @PreviewTest
 @Preview(name = "HomeDesktopNotInstalled", showBackground = true, widthDp = 360, heightDp = 1100)
 @Composable
 fun HomeDesktopNotInstalledPreview() {
     Dashboard(
         UbuntuDashboardState(
-            status = UbuntuStatus.STOPPED,
+            status = UbuntuStatus.READY,
+            desktop = DesktopAddOnUi.NotInstalled,
             storage = storageReady,
-            desktop = DesktopAddOnUi.NotInstalled
         )
     )
 }
@@ -107,13 +123,13 @@ fun HomeDesktopNotInstalledPreview() {
 fun HomeDesktopInstallingPreview() {
     Dashboard(
         UbuntuDashboardState(
-            status = UbuntuStatus.STOPPED,
-            storage = storageReady,
+            status = UbuntuStatus.READY,
             desktop = DesktopAddOnUi.Installing(
                 percent = 42,
                 phaseLabel = "Installing the XFCE desktop…",
                 detail = "Unpacking xfce4-panel (4.20.4-1) ..."
-            )
+            ),
+            storage = storageReady,
         )
     )
 }
@@ -124,35 +140,65 @@ fun HomeDesktopInstallingPreview() {
 fun HomeDesktopFailedPreview() {
     Dashboard(
         UbuntuDashboardState(
-            status = UbuntuStatus.STOPPED,
+            status = UbuntuStatus.READY,
+            desktop = DesktopAddOnUi.Failed("apt-get exited with code 100"),
             storage = storageReady,
-            desktop = DesktopAddOnUi.Failed("apt-get exited with code 100")
         )
     )
 }
 
 @PreviewTest
+@Preview(name = "HomeDesktopChecking", showBackground = true, widthDp = 360, heightDp = 1000)
+@Composable
+fun HomeDesktopCheckingPreview() {
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.READY,
+            desktop = DesktopAddOnUi.Checking,
+            storage = storageReady,
+            runtime = UbuntuRuntimeMode.CHROOT,
+        )
+    )
+}
+
+// Ubuntu not set up: only the header and Recovery show (the desktop state is never drawn).
+@PreviewTest
 @Preview(name = "HomeNotInstalled", showBackground = true, widthDp = 360, heightDp = 640)
 @Composable
 fun HomeNotInstalledPreview() {
-    Dashboard(UbuntuDashboardState(status = UbuntuStatus.NOT_INSTALLED, storage = storageNotGranted))
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.NOT_INSTALLED,
+            desktop = DesktopAddOnUi.NotInstalled,
+            storage = storageNotGranted,
+        )
+    )
 }
 
+// The Home preview at 1.5× font scale.
 @PreviewTest
 @Preview(name = "HomeLargeFont", showBackground = true, widthDp = 360, heightDp = 1800, fontScale = 1.5f)
 @Composable
 fun HomeLargeFontPreview() {
-    Dashboard(UbuntuDashboardState(status = UbuntuStatus.STOPPED, storage = storageNotGranted))
+    Dashboard(
+        UbuntuDashboardState(
+            status = UbuntuStatus.READY,
+            desktop = DesktopAddOnUi.Installed(DesktopRun.STOPPED),
+            storage = storageNotGranted,
+        )
+    )
 }
 
-// Chroot mode, both installs present: the runtime chip offers the quick switch.
+// Chroot mode, both installs present, desktop installed and stopped: the runtime chip offers
+// the quick switch.
 @PreviewTest
 @Preview(name = "HomeChroot", showBackground = true, widthDp = 360, heightDp = 1120)
 @Composable
 fun HomeChrootPreview() {
     Dashboard(
         UbuntuDashboardState(
-            status = UbuntuStatus.STOPPED,
+            status = UbuntuStatus.READY,
+            desktop = DesktopAddOnUi.Installed(DesktopRun.STOPPED),
             storage = storageReady,
             runtime = UbuntuRuntimeMode.CHROOT,
             canSwitchRuntime = true
@@ -160,6 +206,7 @@ fun HomeChrootPreview() {
     )
 }
 
+// Chroot mode, root denied: the desktop is never drawn (detection can't run without root).
 @PreviewTest
 @Preview(name = "HomeChrootNeedsRoot", showBackground = true, widthDp = 360, heightDp = 760)
 @Composable
@@ -167,6 +214,7 @@ fun HomeChrootNeedsRootPreview() {
     Dashboard(
         UbuntuDashboardState(
             status = UbuntuStatus.NEEDS_ROOT,
+            desktop = DesktopAddOnUi.Checking,
             storage = storageReady,
             runtime = UbuntuRuntimeMode.CHROOT,
             canSwitchRuntime = true
@@ -174,6 +222,7 @@ fun HomeChrootNeedsRootPreview() {
     )
 }
 
+// Chroot mode while root and the install are still being probed, at 1.5× font scale.
 @PreviewTest
 @Preview(name = "HomeChrootLargeFont", showBackground = true, widthDp = 360, heightDp = 520, fontScale = 1.5f)
 @Composable
@@ -181,6 +230,7 @@ fun HomeChrootLargeFontPreview() {
     Dashboard(
         UbuntuDashboardState(
             status = UbuntuStatus.CHECKING,
+            desktop = DesktopAddOnUi.Checking,
             storage = storageReady,
             runtime = UbuntuRuntimeMode.CHROOT
         )

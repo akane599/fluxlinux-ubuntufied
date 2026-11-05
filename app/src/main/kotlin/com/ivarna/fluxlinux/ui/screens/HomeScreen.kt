@@ -58,6 +58,7 @@ import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
 import com.ivarna.fluxlinux.ui.components.DesktopAddOnUi
+import com.ivarna.fluxlinux.ui.components.DesktopRun
 import com.ivarna.fluxlinux.ui.components.SharedStorageUi
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboard
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardActions
@@ -70,23 +71,28 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Pure status mapping for the Ubuntu hero card. [activeId] is the active Ubuntu install
- * ([UbuntuRuntime.activeDistroId]): a desktop of that install counts as Ubuntu's, and wins over
- * a still-running install probe (a running chroot desktop shows as running right away).
+ * Pure status mapping for the Ubuntu hero card: whether Ubuntu itself is usable. [activeId] is
+ * the active Ubuntu install ([UbuntuRuntime.activeDistroId]); a starting or running desktop of
+ * that install proves it is installed, so it wins over a still-running install probe.
  */
 internal fun ubuntuStatus(
     install: UbuntuInstallCheck,
     session: DesktopSession?,
     activeId: String,
-): UbuntuStatus {
-    val ubuntu = session?.takeIf { it.distroId == activeId }
-    return when {
-        ubuntu?.phase == DesktopSession.Phase.Running -> UbuntuStatus.RUNNING
-        ubuntu?.phase == DesktopSession.Phase.Starting -> UbuntuStatus.STARTING
-        install == UbuntuInstallCheck.CHECKING -> UbuntuStatus.CHECKING
-        install == UbuntuInstallCheck.NO_ROOT -> UbuntuStatus.NEEDS_ROOT
-        install == UbuntuInstallCheck.NOT_INSTALLED -> UbuntuStatus.NOT_INSTALLED
-        else -> UbuntuStatus.STOPPED
+): UbuntuStatus = when {
+    session?.distroId == activeId -> UbuntuStatus.READY
+    install == UbuntuInstallCheck.CHECKING -> UbuntuStatus.CHECKING
+    install == UbuntuInstallCheck.NO_ROOT -> UbuntuStatus.NEEDS_ROOT
+    install == UbuntuInstallCheck.NOT_INSTALLED -> UbuntuStatus.NOT_INSTALLED
+    else -> UbuntuStatus.READY
+}
+
+/** The active install's desktop session; a session of another install leaves it stopped. */
+internal fun desktopRun(session: DesktopSession?, activeId: String): DesktopRun {
+    val mine = session?.takeIf { it.distroId == activeId } ?: return DesktopRun.STOPPED
+    return when (mine.phase) {
+        DesktopSession.Phase.Running -> DesktopRun.RUNNING
+        DesktopSession.Phase.Starting -> DesktopRun.STARTING
     }
 }
 
@@ -111,30 +117,52 @@ internal fun homeRootProbeAllowed(reason: RootProbeReason, lastRoot: Boolean?): 
 
 /**
  * Whether Home offers the quick runtime switch: the other mode's install is known to exist
- * and no desktop is running or starting.
+ * and no desktop (of either install) is running or starting ([desktopActive]).
  */
-internal fun canSwitchRuntime(otherInstalled: Boolean, status: UbuntuStatus, desktopActive: Boolean): Boolean =
-    otherInstalled && !desktopActive &&
-        status != UbuntuStatus.RUNNING && status != UbuntuStatus.STARTING
+internal fun canSwitchRuntime(otherInstalled: Boolean, desktopActive: Boolean): Boolean =
+    otherInstalled && !desktopActive
 
 /**
- * The Desktop section's state for the active install [activeId]: a running or failed desktop
- * add-on run of that install wins; otherwise [desktopInstalled] decides, and an unfinished
- * desktop install ([desktopIncomplete], DesktopDetection.INCOMPLETE) shows as failed.
- * Terminal-only runs and runs for the other install never show here.
+ * What stands in for [UbuntuDesktop.detect] until it answers: the stored state
+ * ([UbuntuDesktop.storedDetection], prefs only), or null (unknown) for a stored NOT_INSTALLED
+ * on chroot, where the flag may simply not be set yet and only the su probe (seconds) can tell.
+ * A stored INCOMPLETE is conclusive (only a verified run clears it), and on PRoot the probe is a
+ * quick file check, so a terminal-only install doesn't flash "Checking" on every visit.
+ */
+internal fun provisionalDesktop(stored: DesktopDetection, runtime: UbuntuRuntimeMode): DesktopDetection? =
+    stored.takeUnless { it == DesktopDetection.NOT_INSTALLED && runtime == UbuntuRuntimeMode.CHROOT }
+
+/**
+ * The Desktop section's state for the active install [activeId], first match wins:
+ * 1. a running desktop add-on run of that install: Installing (percent clamped to 0..100);
+ * 2. its failed add-on run: Failed with the run's message (even if `startxfce4` is there);
+ * 3. its succeeded add-on run, a session of the active install ([run] not STOPPED), or an
+ *    INSTALLED [detection]: Installed, so the page never flashes "Install" before the re-probe;
+ * 4. an unfinished desktop install (INCOMPLETE): Failed with no message;
+ * 5. [detection] unknown (null, see [provisionalDesktop]): Checking, so a chroot whose flag
+ *    isn't set yet offers no Install during its su probe; otherwise NotInstalled.
+ *
+ * Terminal-only runs and runs for the other install never show here. [otherRunning] (another
+ * install's running desktop) is kept only while this desktop is stopped.
  */
 internal fun desktopAddOnUi(
     install: InstallController.State,
     activeId: String,
-    desktopInstalled: Boolean,
-    desktopIncomplete: Boolean = false,
+    detection: DesktopDetection?,
+    run: DesktopRun = DesktopRun.STOPPED,
+    otherRunning: String? = null,
 ): DesktopAddOnUi {
     val addOn = install.takeIf { it.kind == InstallKind.DESKTOP_ADD_ON && it.distroId == activeId }
     return when {
-        addOn?.isRunning == true -> DesktopAddOnUi.Installing(addOn.percent, addOn.phaseLabel, addOn.detail)
-        desktopInstalled -> DesktopAddOnUi.Installed
+        addOn?.isRunning == true ->
+            DesktopAddOnUi.Installing(addOn.percent.coerceIn(0, 100), addOn.phaseLabel, addOn.detail)
         addOn?.status == InstallController.Status.Failed -> DesktopAddOnUi.Failed(addOn.errorMessage)
-        desktopIncomplete -> DesktopAddOnUi.Failed(null)
+        addOn?.status == InstallController.Status.Succeeded ||
+            run != DesktopRun.STOPPED ||
+            detection == DesktopDetection.INSTALLED ->
+            DesktopAddOnUi.Installed(run, otherRunning.takeIf { run == DesktopRun.STOPPED })
+        detection == DesktopDetection.INCOMPLETE -> DesktopAddOnUi.Failed(null)
+        detection == null -> DesktopAddOnUi.Checking
         else -> DesktopAddOnUi.NotInstalled
     }
 }
@@ -255,18 +283,22 @@ fun HomeScreen(
     val installState by installer.state.collectAsState()
     // The optional desktop, verified off the main thread (UbuntuDesktop.detect): a startxfce4
     // file check (PRoot) or, once root was granted, an su probe of the chroot; both heal the
-    // stored flag. Starts from the stored state so an installed desktop doesn't flash "not
-    // installed". Re-checked when an install run ends (a failed or cancelled one leaves the
-    // desktop incomplete).
-    var desktopDetection by remember(activeId) {
-        mutableStateOf(UbuntuDesktop.storedDetection(context, activeId))
+    // stored flag. Until the first answer the stored state stands in where it can
+    // (provisionalDesktop), so an installed desktop doesn't flash "not installed" and a
+    // not-yet-flagged chroot desktop doesn't flash "Install". Re-checked when an install run
+    // ends (a failed or cancelled one leaves the desktop incomplete); the last answer stays
+    // while a re-check runs.
+    val storedDesktop = remember(activeId, stateRefresh, installState.status) {
+        UbuntuDesktop.storedDetection(context, activeId)
     }
+    var desktopDetection by remember(activeId) { mutableStateOf<DesktopDetection?>(null) }
     LaunchedEffect(installed, activeId, runtime, rootAvailable, stateRefresh, installState.status) {
         if (!installed) return@LaunchedEffect
         val app = context.applicationContext
         val mayAskRoot = rootAvailable == true
         desktopDetection = withContext(Dispatchers.IO) {
-            runCatching { UbuntuDesktop.detect(app, activeId, mayAskRoot) }.getOrElse { desktopDetection }
+            runCatching { UbuntuDesktop.detect(app, activeId, mayAskRoot) }
+                .getOrElse { UbuntuDesktop.storedDetection(app, activeId) }
         }
     }
     var showDesktopInstallConfirm by remember { mutableStateOf(false) }
@@ -464,26 +496,24 @@ fun HomeScreen(
         if (result is InstallController.StartResult.Refused) toast(result.message)
     }
 
-    val status = ubuntuStatus(install, session, activeId)
-    val desktopInstalled = desktopDetection.isInstalled || session?.distroId == activeId
-    val desktop = desktopAddOnUi(
-        installState, activeId, desktopInstalled,
-        desktopIncomplete = desktopDetection == DesktopDetection.INCOMPLETE,
-    )
-    val otherId = otherDesktopId(session, activeId)
-    val otherName = when (otherId) {
+    val otherName = when (otherDesktopId(session, activeId)) {
         null -> null
         UbuntuRuntime.PROOT_ID -> stringResource(R.string.home_other_ubuntu_proot)
         UbuntuRuntime.CHROOT_ID -> stringResource(R.string.home_other_ubuntu_chroot)
         else -> session?.distroName
     }
     val state = UbuntuDashboardState(
-        status = status,
-        otherDesktopRunning = otherName,
+        status = ubuntuStatus(install, session, activeId),
+        desktop = desktopAddOnUi(
+            install = installState,
+            activeId = activeId,
+            detection = desktopDetection ?: provisionalDesktop(storedDesktop, runtime),
+            run = desktopRun(session, activeId),
+            otherRunning = otherName,
+        ),
         storage = storage,
         runtime = runtime,
-        canSwitchRuntime = canSwitchRuntime(otherInstalled, status, desktopActive),
-        desktop = desktop,
+        canSwitchRuntime = canSwitchRuntime(otherInstalled, desktopActive),
     )
     val actions = UbuntuDashboardActions(
         onStartDesktop = { startDesktop() },
