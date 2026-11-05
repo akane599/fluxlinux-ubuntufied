@@ -5,11 +5,25 @@ _State of ongoing work (Current effort), baselines, the append-only decision log
 ## Current effort: terminal-first app (on top of the Ubuntu chroot runtime)
 _Updated: 2026-11-05 · rewrite this section, don't append_
 - **Goal:** the terminal is the product: the app opens on it, XFCE is optional (setup switch off by default, "Install desktop" later), links open on tap, a Paste key, Hold wakelock, a refined dark + cream design; the chroot Ubuntu (the user's daily runtime, KernelSU) behaves like Termux for full-screen programs. Stacked branches: `feat/ubuntu-chroot` ([PR #1](https://github.com/akane599/fluxlinux-ubuntufied/pull/1), kept as a checkpoint) → `feat/terminal-first` ([PR #2](https://github.com/akane599/fluxlinux-ubuntufied/pull/2), base `feat/ubuntu-chroot`).
-- **Done:** PR #2 has every commit (pushed 2026-11-05), including the fixes from the user's phone reports: `2411b03` (chroot sessions reopen their pty on the root side; replaces the `su -W` try in `add617e`), `545b785` (the emulator consumes codex's `CSI <` exit sequences, so no "1uu") and `815e552` (the drawer opens with a swipe towards it anywhere on the terminal, and scrolls keep their sideways drift; follows `9e96e84`). The user confirmed them on the phone with the 815e552 debug APK: codex starts and exits without a key press, no "1uu", and scrolls and the drawer swipe work.
+- **Done:** PR #2 has every commit (pushed through `9014d46` on 2026-11-05).
+  - Fixes from the user's phone reports, confirmed on the phone with the 815e552 debug APK (codex starts and exits without a key press, no "1uu", scrolls and the drawer swipe work):
+    - `2411b03`: chroot sessions reopen their pty on the root side; replaces the `su -W` try in `add617e`.
+    - `545b785`: the emulator consumes codex's `CSI <` exit sequences, so no "1uu".
+    - `815e552`: the drawer opens with a swipe towards it anywhere on the terminal, and scrolls keep their sideways drift; follows `9e96e84`.
+  - Release follow-ups:
+    - `73bce10`: R8 shrinks and optimizes Compose (dex 22.4 → 5.2 MB).
+    - `1b8a826`: `*.p12` and `*.pfx` are gitignored.
+    - `9014d46`: releases are signed with the user's key `Akane.p12`.
+  - The phone now runs the release build of `9014d46`, signed with the user's key (still versionName 2.1.8 (22)). The user reinstalled it over the old debug build, and it works.
 - **Next:**
-  - [ ] Still unverified on the device: links open in the browser (also inside Claude Code / Codex), Paste key, More… menu, Hold wakelock (`dumpsys power | grep FluxLinux`), an existing XFCE install shows Start/Open/Stop, the add-on Installing row. A PRoot flux → akane migration from a v2.1.8 install.
-  - [ ] Merge PR #1, then PR #2 (GitHub retargets it to `main`); release v2.2.0 (`.claude/rules/release.md`).
-- **Open questions:** none.
+  - [ ] Still unverified on the device:
+    - links open in the browser, also inside Claude Code and Codex;
+    - the Paste key and the More… menu;
+    - Hold wakelock (`dumpsys power | grep FluxLinux`);
+    - an existing XFCE install shows Start/Open/Stop, and the add-on Installing row;
+    - a PRoot flux → akane migration from a v2.1.8 install.
+  - [ ] Merge PR #1, then PR #2 (GitHub retargets it to `main`); release v2.2.0 (`.claude/rules/release.md`). Its notes must tell v2.1.x users to uninstall once, because the signing key changed.
+- **Open questions:** should the debug build also be signed with the user's key? The phone now has a release install, so a debug APK (needed for `run-as` diagnosis) can't be installed without wiping app data. Not asked yet.
 
 ## Baseline
 - 2026-11-05 @ 815e552 (feat/terminal-first): 954 unit tests, 0 failing; lint 0 errors; screenshots valid; shell tests pass (scripts unchanged since add617e).
