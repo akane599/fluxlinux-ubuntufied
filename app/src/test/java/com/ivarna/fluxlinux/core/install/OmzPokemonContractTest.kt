@@ -49,11 +49,18 @@ class OmzPokemonContractTest {
 
     @Test
     fun onboardingRunner_doesNotHardcodePokemonSkip() {
-        val text = repoFile(
-            "src/main/kotlin/com/ivarna/fluxlinux/core/install/OnboardingInstallRunner.kt"
-        ).readText()
-        assertFalse(text.contains("FLUX_SKIP_POKEMON=1"))
-        assertTrue(text.contains("FLUX_SKIP_POKEMON=0"))
+        // The PRoot customization env always lets the guest try pokemon, whatever was staged.
+        for (staged in listOf(true, false)) {
+            val env = OnboardingInstallRunner.prootCustomizationEnv(
+                theme = "dark",
+                customizeDesktop = staged,
+                skipThemeIcons = staged,
+                skipOmz = staged,
+                guestUserEnv = emptyList(),
+            )
+            assertFalse(env, env.contains("FLUX_SKIP_POKEMON='1'"))
+            assertTrue(env, env.contains("FLUX_SKIP_POKEMON='0'"))
+        }
     }
 
     @Test

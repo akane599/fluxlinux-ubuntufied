@@ -1,14 +1,14 @@
 package com.ivarna.fluxlinux.core.install
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 /**
- * The runner's terminal-only / add-on wiring (device-only code paths): desktop flags reach
- * both guest scripts, desktop-only steps are gated, and phases come from the plan by id.
+ * The runner's per-kind behaviour lives in [InstallSteps] ([InstallStepsTest] covers every
+ * kind × method). This only pins that the device-only runner branches on those steps and
+ * nothing else: no InstallKind checks in the run bodies, flags straight from the steps.
  */
 class OptionalDesktopRunnerContractTest {
 
@@ -22,36 +22,29 @@ class OptionalDesktopRunnerContractTest {
         src.substringAfter("private fun $name(").substringBefore("\n    }\n")
 
     @Test
-    fun bothRuntimes_passTheDesktopFlagsToFamilyAndCustomization() {
-        val proot = fn("runProot")
-        assertTrue(proot.contains("familySetupB64(appCtx, theme, distroId, installDesktop = desktop)"))
-        assertTrue(proot.contains("\"FLUX_CUSTOMIZE_DESKTOP=\${if (desktop) \"1\" else \"0\"} \""))
-        val chroot = fn("runChroot")
-        assertTrue(chroot.contains("familySetupPayload(appCtx, theme, distroId, installDesktop = desktop)"))
-        assertTrue(chroot.contains("customizationPayload(appCtx, theme, distroId, customizeDesktop = desktop)"))
-    }
-
-    @Test
-    fun desktopOnlySteps_areGated() {
-        for (name in listOf("runProot", "runChroot")) {
-            val body = fn(name)
-            assertTrue(name, body.contains("val hwOk = desktop && runHwAccelIfPresent("))
-            assertTrue(name, body.contains("phaseIdx(phases, BaseDesktopInstallPlan.familyPhaseId("))
-            assertTrue(name, body.contains("markDesktopComponents(distroId, desktop,"))
-            assertTrue(name, body.contains("R.string.install_addon_needs_rootfs"))
-            // Flags are only written through markDesktopComponents (gated on desktop).
-            assertFalse(name, body.contains("\"xfce4_desktop\""))
-            assertFalse(name, body.contains("\"hw_accel\""))
-        }
-        assertTrue(fn("runProot").contains("if (desktop && !isProotXfceInstalled("))
-        assertTrue(fn("runChroot").contains("if (desktop && !TerminalLauncher.isChrootXfceInstalled("))
-        val markFirstLine = fn("markDesktopComponents").substringAfter("{").trim().lineSequence().first()
-        assertEquals("a terminal-only run leaves the flags alone", "if (!desktop) return", markFirstLine.trim())
-    }
-
-    @Test
-    fun runKind_isCoercedForDistrosWithoutTerminalOnly_andPicksThePlan() {
+    fun theRun_isPlannedFromTheEffectiveKind() {
         assertTrue(src.contains("val runKind = InstallKind.effective(distroId, kind)"))
-        assertTrue(src.contains("BaseDesktopInstallPlan.phasesFor(method, profile.displayName, runKind)"))
+        assertTrue(src.contains("val steps = InstallSteps.of(profile.method, runKind)"))
+        assertTrue(src.contains("BaseDesktopInstallPlan.phasesFor(profile.method, profile.displayName, runKind)"))
+    }
+
+    @Test
+    fun runBodies_branchOnlyOnTheSteps() {
+        for (name in listOf("runProot", "runChroot", "markDesktopComponents")) {
+            val body = fn(name)
+            assertFalse("$name must not test InstallKind itself", body.contains("InstallKind."))
+            assertFalse("$name must not test the kind itself", Regex("""\bkind\b""").containsMatchIn(body))
+            assertFalse("$name must not test the method itself", body.contains("\"chroot\""))
+        }
+        assertTrue(fn("runProot").contains("installDesktop = steps.installDesktop"))
+        assertTrue(fn("runProot").contains("customizeDesktop = steps.customizeDesktop"))
+        assertTrue(fn("runChroot").contains("installDesktop = steps.installDesktop"))
+        assertTrue(fn("runChroot").contains("customizeDesktop = steps.customizeDesktop"))
+        assertTrue(fn("markDesktopComponents").contains("if (!steps.markDesktopComponents) return"))
+        // Desktop flags are written only through markDesktopComponents.
+        for (name in listOf("runProot", "runChroot")) {
+            assertFalse(name, fn(name).contains("\"xfce4_desktop\""))
+            assertFalse(name, fn(name).contains("\"hw_accel\""))
+        }
     }
 }
