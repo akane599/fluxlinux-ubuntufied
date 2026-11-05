@@ -54,3 +54,6 @@ design/after/
 
 # Impeccable finish-review captures (local evidence, regenerated per review)
 .impeccable/review/
+
+# Agent worktrees (Claude Code isolation: worktree)
+.claude/worktrees/
