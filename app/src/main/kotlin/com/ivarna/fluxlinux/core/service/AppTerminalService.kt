@@ -26,35 +26,43 @@ import com.ivarna.fluxlinux.core.terminal.TerminalWakeLock
  */
 class AppTerminalService : Service() {
 
+    private val actions = object : TerminalServiceCommands.Actions {
+        override fun liveSessionCount(): Int = SessionRegistry.sessionCount
+        override fun exitAll() = AppExit.exitAll(this@AppTerminalService)
+        override fun toggleWakeLock() = TerminalWakeLock.toggle(this@AppTerminalService)
+        override fun releaseWakeLock() = TerminalWakeLock.release()
+        override fun stop() = leaveForegroundAndStop()
+        override fun showForeground(sessions: Int) = showNotification(sessions)
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_EXIT) {
-            AppExit.exitAll(this)
-            TerminalWakeLock.release()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
-        }
-        val count = if (intent?.action == ACTION_TOGGLE_WAKELOCK) {
-            // The live count, not the last update's: if a background startForegroundService was
-            // refused, sessions run without this service, and the drawer's toggle (app in the
-            // foreground) starts it here. No sessions: release and stop.
-            val live = SessionRegistry.sessionCount
-            if (live > 0) TerminalWakeLock.toggle(this)
-            live
-        } else {
-            intent?.getIntExtra("SESSION_COUNT", 0) ?: 0
-        }
-        if (count <= 0) {
-            TerminalWakeLock.release()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
-        }
+        TerminalServiceCommands.onStartCommand(
+            action = intent?.action,
+            sessionCountExtra = intent?.getIntExtra(EXTRA_SESSION_COUNT, 0) ?: 0,
+            actions = actions,
+        )
+        // Not sticky: terminal sessions live in this process and die with it.
+        return START_NOT_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        TerminalServiceCommands.onDestroy(actions)
+        super.onDestroy()
+    }
+
+    private fun leaveForegroundAndStop() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun showNotification(count: Int) {
         val notification = createNotification(count)
         try {
             startAsForeground(notification)
@@ -66,15 +74,6 @@ class AppTerminalService : Service() {
                 Log.e(TAG, "fallback startForeground failed", e2)
             }
         }
-        // Not sticky: terminal sessions live in this process and die with it.
-        return START_NOT_STICKY
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onDestroy() {
-        TerminalWakeLock.release()
-        super.onDestroy()
     }
 
     private fun startAsForeground(notification: Notification) {
@@ -154,6 +153,9 @@ class AppTerminalService : Service() {
         const val ACTION_TOGGLE_WAKELOCK = "com.ivarna.fluxlinux.action.TOGGLE_WAKELOCK"
         const val ACTION_EXIT = "com.ivarna.fluxlinux.action.EXIT"
 
+        /** The open session count, sent by `SessionRegistry` with every update. */
+        private const val EXTRA_SESSION_COUNT = "SESSION_COUNT"
+
         // New id: IMPORTANCE is immutable once a channel exists on device
         const val CHANNEL_ID = "FluxLinuxAppTerminalServiceChannel_v2"
         private const val NOTIF_ID = 1001
@@ -167,4 +169,53 @@ class AppTerminalService : Service() {
             }.onFailure { Log.e(TAG, "toggleWakeLock failed", it) }
         }
     }
+}
+
+/**
+ * What [AppTerminalService] does with a start command (its action and `SESSION_COUNT` extra)
+ * and on destroy. The side effects sit behind [Actions], so these rules are JVM-tested.
+ */
+internal object TerminalServiceCommands {
+
+    internal interface Actions {
+        /** Sessions open right now (`SessionRegistry`), whatever the last update said. */
+        fun liveSessionCount(): Int
+        /** Notification Exit ([AppExit]): close the terminals and the desktop, finish the UI. */
+        fun exitAll()
+        fun toggleWakeLock()
+        fun releaseWakeLock()
+        /** Leave the foreground and stop the service. */
+        fun stop()
+        /** Enter or stay in the foreground, the notification showing [sessions]. */
+        fun showForeground(sessions: Int)
+    }
+
+    fun onStartCommand(action: String?, sessionCountExtra: Int, actions: Actions) {
+        if (action == AppTerminalService.ACTION_EXIT) {
+            actions.exitAll()
+            actions.releaseWakeLock()
+            actions.stop()
+            return
+        }
+        val count = if (action == AppTerminalService.ACTION_TOGGLE_WAKELOCK) {
+            // The live count, not the last update's: if a background startForegroundService was
+            // refused, sessions run without this service, and the drawer's toggle (app in the
+            // foreground) starts it here. No sessions: release and stop, never acquire.
+            val live = actions.liveSessionCount()
+            if (live > 0) actions.toggleWakeLock()
+            live
+        } else {
+            sessionCountExtra
+        }
+        if (count <= 0) {
+            // The wake lock never outlives the sessions.
+            actions.releaseWakeLock()
+            actions.stop()
+        } else {
+            actions.showForeground(count)
+        }
+    }
+
+    /** The wake lock never outlives the service either. */
+    fun onDestroy(actions: Actions) = actions.releaseWakeLock()
 }

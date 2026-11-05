@@ -54,8 +54,10 @@ class AppExitTest {
         assertTrue("wakelock action present", wakeAction > 0)
         assertTrue("exit action present", exitAction > 0)
         assertTrue("exit action comes before the wakelock action", exitAction < wakeAction)
-        val handler = src.indexOf("if (intent?.action == ACTION_EXIT)")
-        assertTrue("onStartCommand handles ACTION_EXIT", handler > src.indexOf("override fun onStartCommand"))
-        assertTrue("exit runs AppExit", src.indexOf("AppExit.exitAll(this)", handler) > handler)
+        // What ACTION_EXIT does is TerminalServiceCommandsTest's; here: the service routes its
+        // start commands there, and its exitAll runs AppExit.
+        val start = src.indexOf("override fun onStartCommand")
+        assertTrue("onStartCommand goes through TerminalServiceCommands", src.indexOf("TerminalServiceCommands.onStartCommand(", start) > start)
+        assertTrue("exit runs AppExit", src.contains("override fun exitAll() = AppExit.exitAll(this@AppTerminalService)"))
     }
 }
