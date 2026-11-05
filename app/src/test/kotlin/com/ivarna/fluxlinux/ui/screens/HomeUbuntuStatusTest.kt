@@ -127,12 +127,19 @@ class HomeUbuntuStatusTest {
     }
 
     @Test
-    fun desktopAddOn_failedRunShowsFailed_evenWithStartxfce4Present() {
+    fun desktopAddOn_failedRunShowsFailed_unlessTheDesktopIsInstalledAnyway() {
         val failed = run(InstallKind.DESKTOP_ADD_ON, InstallController.Status.Failed)
         assertEquals(DesktopAddOnUi.Failed("exit 100"), desktopAddOnUi(failed, proot, DesktopDetection.NOT_INSTALLED))
+        // A failed run that left startxfce4 behind (dpkg unpacks it early) is INCOMPLETE, not
+        // INSTALLED: UbuntuDesktop.decide handles that (UbuntuDesktopTest), so it stays Failed.
         assertEquals(DesktopAddOnUi.Failed("exit 100"), desktopAddOnUi(failed, proot, DesktopDetection.INCOMPLETE))
-        // dpkg unpacks startxfce4 early, so a detection that finds it can't overrule the run.
-        assertEquals(DesktopAddOnUi.Failed("exit 100"), desktopAddOnUi(failed, proot, DesktopDetection.INSTALLED))
+        // INSTALLED after a failed add-on means a verified install since (e.g. Distro Settings'
+        // XFCE component): offering "Try again" would re-download the desktop for nothing.
+        assertEquals(stopped, desktopAddOnUi(failed, proot, DesktopDetection.INSTALLED))
+        assertEquals(
+            DesktopAddOnUi.Installed(run = DesktopRun.RUNNING),
+            desktopAddOnUi(failed, proot, DesktopDetection.INSTALLED, run = DesktopRun.RUNNING),
+        )
     }
 
     @Test
