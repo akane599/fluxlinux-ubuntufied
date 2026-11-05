@@ -51,4 +51,13 @@ class InstallNotificationContentTest {
         assertEquals("Installing XFCE" to "apt", content(progress(warning = "w")))
         assertEquals("Install failed" to "boom", content(progress(finished = true, failed = true, warning = "w", detail = "boom")))
     }
+
+    /** Only a run that finished with a warning posts the dismissible notice that outlives the FGS. */
+    @Test
+    fun finishedWarning_onlyForAFinishedRunThatDidNotFail() {
+        assertEquals("w", OnboardingInstallRunner.finishedWarning(progress(finished = true, warning = "w")))
+        assertEquals(null, OnboardingInstallRunner.finishedWarning(progress(finished = true)))
+        assertEquals(null, OnboardingInstallRunner.finishedWarning(progress(warning = "w")))
+        assertEquals(null, OnboardingInstallRunner.finishedWarning(progress(finished = true, failed = true, warning = "w")))
+    }
 }

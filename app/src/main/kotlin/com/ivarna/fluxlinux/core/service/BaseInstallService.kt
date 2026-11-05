@@ -29,7 +29,7 @@ class BaseInstallService : Service() {
     override fun onCreate() {
         super.onCreate()
         running.set(true)
-        ensureChannel()
+        ensureChannel(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -161,28 +161,73 @@ class BaseInstallService : Service() {
         return builder.build()
     }
 
-    private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Base desktop install",
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            description =
-                "Shows while Debian rootfs / XFCE install is running so the system does not kill AkaTerminal"
-            setShowBadge(false)
-        }
-        nm.createNotificationChannel(channel)
-    }
-
     private var foregrounded = false
 
     companion object {
         private const val TAG = "BaseInstallService"
         const val CHANNEL_ID = "FluxLinuxBaseInstall_v1"
         private const val NOTIF_ID = 4712
+
+        /** The dismissible "finished with a warning" notice; outlives the keep-alive's [NOTIF_ID]. */
+        private const val DONE_NOTIF_ID = 4713
+
+        private fun ensureChannel(ctx: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (nm.getNotificationChannel(CHANNEL_ID) != null) return
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Base desktop install",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description =
+                    "Shows while Debian rootfs / XFCE install is running so the system does not kill AkaTerminal"
+                setShowBadge(false)
+            }
+            nm.createNotificationChannel(channel)
+        }
+
+        /**
+         * A run finished, but with a warning (part of the setup didn't finish). The keep-alive
+         * notification is removed right after its last update ([stop]), so a warning shown only
+         * there would flash by while the app is in the background; this one stays until tapped
+         * or dismissed, and the next [start] clears it.
+         */
+        fun notifyFinishedWithWarning(context: Context, title: String, text: String) {
+            val app = context.applicationContext
+            runCatching {
+                ensureChannel(app)
+                val open = PendingIntent.getActivity(
+                    app,
+                    DONE_NOTIF_ID,
+                    Intent(app, MainActivity::class.java).apply {
+                        // No navigation (Page.NONE): onboarding's Done page or the app as it was.
+                        putExtra(LaunchTargets.EXTRA_TARGET_PAGE, LaunchTargets.PAGE_INSTALL)
+                        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    },
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                val notification = NotificationCompat.Builder(app, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_stat_flux)
+                    .setContentTitle(title)
+                    .setContentText(text)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                    .setAutoCancel(true)
+                    .setCategory(NotificationCompat.CATEGORY_STATUS)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setContentIntent(open)
+                    .build()
+                val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(DONE_NOTIF_ID, notification)
+            }.onFailure { Log.w(TAG, "finished-with-warning notification failed", it) }
+        }
+
+        private fun cancelFinishedNotice(context: Context) {
+            runCatching {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(DONE_NOTIF_ID)
+            }
+        }
 
         const val ACTION_START = "com.ivarna.fluxlinux.BASE_INSTALL_START"
         const val ACTION_UPDATE = "com.ivarna.fluxlinux.BASE_INSTALL_UPDATE"
@@ -205,6 +250,8 @@ class BaseInstallService : Service() {
             text: String = "Base desktop setup",
             percent: Int = 0
         ) {
+            // A previous run's warning no longer applies once a new run starts.
+            cancelFinishedNotice(context)
             val intent = Intent(context, BaseInstallService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_TITLE, title)

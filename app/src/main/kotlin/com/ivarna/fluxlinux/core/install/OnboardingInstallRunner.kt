@@ -964,6 +964,10 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         } catch (e: Exception) {
             Log.w(TAG, "FGS update failed: ${e.message}")
         }
+        // The keep-alive notification goes with the service right after this last update.
+        finishedWarning(progress)?.let { warning ->
+            BaseInstallService.notifyFinishedWithWarning(appCtx, title = "AkaTerminal — $label", text = warning)
+        }
     }
 
     private fun isProotXfceInstalled(ctx: Context, prootName: String): Boolean =
@@ -986,7 +990,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             fallbackText: String,
             warningLabel: String,
         ): Pair<String, String> {
-            val warning = progress.warning?.takeIf { progress.finished && !progress.failed }
+            val warning = finishedWarning(progress)
             val label = when {
                 progress.failed -> "Install failed"
                 warning != null -> warningLabel
@@ -996,6 +1000,14 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             }
             return label to (warning ?: progress.detail.ifBlank { fallbackText })
         }
+
+        /**
+         * The warning of a run that finished without failing ([Progress.warning]), else null.
+         * It also gets its own dismissible notification
+         * ([BaseInstallService.notifyFinishedWithWarning]).
+         */
+        internal fun finishedWarning(progress: Progress): String? =
+            progress.warning?.takeIf { progress.finished && !progress.failed }
 
         /** String resource (one `%1$s` = distro display name) of the FGS text for [kind]. */
         internal fun notificationTextRes(kind: InstallKind): Int = when (kind) {
