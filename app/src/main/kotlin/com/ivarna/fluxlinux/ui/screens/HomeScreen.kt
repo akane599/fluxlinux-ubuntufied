@@ -1,9 +1,6 @@
 package com.ivarna.fluxlinux.ui.screens
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -66,6 +63,7 @@ import com.ivarna.fluxlinux.ui.components.UbuntuDashboard
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardActions
 import com.ivarna.fluxlinux.ui.components.UbuntuDashboardState
 import com.ivarna.fluxlinux.ui.components.UbuntuStatus
+import com.ivarna.fluxlinux.ui.terminal.TerminalClipboard
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 import kotlinx.coroutines.Dispatchers
@@ -594,13 +592,12 @@ fun HomeScreen(
     }
 }
 
+/**
+ * Copies the newest part of a log (the desktop log can be 512 KiB, more than one Binder call
+ * carries); says "Log copied" below Android 13 and always says when the copy failed.
+ */
 private fun copyLog(context: Context, text: String) {
-    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-    runCatching { cm.setPrimaryClip(ClipData.newPlainText("log", text)) }
-    // Android 13+ shows its own clipboard confirmation.
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-        Toast.makeText(context, R.string.home_log_copied, Toast.LENGTH_SHORT).show()
-    }
+    TerminalClipboard.copy(context, TerminalClipboard.tailForShare(text), R.string.home_log_copied)
 }
 
 /** Confirms the large desktop download and picks its theme (the same two as setup). */
