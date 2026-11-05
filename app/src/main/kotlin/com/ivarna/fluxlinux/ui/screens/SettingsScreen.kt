@@ -113,8 +113,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val SOURCE_URL = "https://github.com/akane599/fluxlinux-ubuntufied"
-private const val ISSUES_URL = "https://github.com/akane599/fluxlinux-ubuntufied/issues"
+private const val SOURCE_URL = "https://github.com/akane599/AkaTerminal"
+private const val ISSUES_URL = "https://github.com/akane599/AkaTerminal/issues"
 private const val AUTHOR_URL = "https://github.com/akane599"
 private const val UPSTREAM_URL = "https://github.com/abhay-byte/fluxlinux"
 

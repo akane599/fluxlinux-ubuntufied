@@ -38,4 +38,4 @@ Changes to this policy are published in this file in the repository.
 
 ## 6. Contact
 
-Questions: open an issue at [github.com/akane599/fluxlinux-ubuntufied/issues](https://github.com/akane599/fluxlinux-ubuntufied/issues).
+Questions: open an issue at [github.com/akane599/AkaTerminal/issues](https://github.com/akane599/AkaTerminal/issues).

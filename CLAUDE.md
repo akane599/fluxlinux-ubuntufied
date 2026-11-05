@@ -3,7 +3,7 @@
 AkaTerminal (package com.ivarna.fluxlinux): runs Ubuntu 26.04 on Android (PRoot, no root; chroot with root): a terminal first, plus an optional XFCE desktop over Termux-X11 with PulseAudio. This fork is Ubuntu-first and terminal-first: setup installs a terminal-only Ubuntu by default (the desktop is a setup switch or a later add-on) and opening the app shows its terminal; other distros' code and existing installs remain but aren't in the main UI.
 Android, developed on Ubuntu from the CLI.
 
-- Origin: fork of abhay-byte/fluxlinux (origin = akane599/fluxlinux-ubuntufied) @ 7f6e61d · Integration branch: main
+- Origin: fork of abhay-byte/fluxlinux (origin = akane599/AkaTerminal) @ 7f6e61d · Integration branch: main
 - Language: mixed — Kotlin (:app is all Kotlin; Java only in :termux-x11, :terminal-emulator, :stub) + C/CMake (:termux-x11 X server) · UI: Compose (+7 XML layouts) · screenshot tests: compose-preview (ivarna flavor)
 - JDK target 17 · Gradle 8.14 · AGP 8.7.3 · Kotlin 2.0.20 · compileSdk 36 · targetSdk 36 · minSdk 26
 - Modules: :app :termux-x11 :terminal-emulator :stub · Architecture: single-activity Compose, no DI framework · DI/DB/Net: none / none / okhttp

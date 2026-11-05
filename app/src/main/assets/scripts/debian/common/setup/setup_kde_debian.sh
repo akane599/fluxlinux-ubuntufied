@@ -78,7 +78,7 @@ handle_error() {
     echo "Log saved to: $LOG_FILE"
     echo ""
     echo "Please copy the log content and report it:"
-    echo "  Issues: https://github.com/akane599/fluxlinux-ubuntufied/issues"
+    echo "  Issues: https://github.com/akane599/AkaTerminal/issues"
     echo "──────────────────────────────────────────────────────"
     read -p "Press Enter to acknowledge error and exit..."
 

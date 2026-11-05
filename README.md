@@ -43,7 +43,7 @@ By [akane599](https://github.com/akane599) · GPLv3 · Android 8.0+ (arm64-v8a)
 
 ## Install
 
-Download the APK from [GitHub Releases](https://github.com/akane599/fluxlinux-ubuntufied/releases).
+Download the APK from [GitHub Releases](https://github.com/akane599/AkaTerminal/releases).
 Open it, finish the short setup (optional desktop, storage access, and PRoot or chroot when
 the phone is rooted) and the terminal opens when Ubuntu is ready.
 
@@ -51,6 +51,11 @@ Releases are signed with this project's own key, and the package name is
 `com.ivarna.fluxlinux`. If you have upstream FluxLinux from F-Droid or its GitHub releases
 installed, it uses the same package name, so uninstall it first. **Uninstalling deletes its
 data.** Upstream's Play build (`com.zenithblue.fluxlinux`) can stay installed alongside.
+
+Coming from "FluxLinux Ubuntu edition" v2.1.x? From v2.2.0 on, releases are signed with a
+new key, so Android won't update a v2.1.x install in place: uninstall it first (this deletes
+its Ubuntu install and home folder, so copy out anything you need), then install AkaTerminal.
+Later updates install over it as usual.
 
 ## Build
 
@@ -76,7 +81,7 @@ You need JDK 17 and the Android SDK (compileSdk 36) in `ANDROID_HOME`.
 
 ## Problems
 
-Open an issue at [github.com/akane599/fluxlinux-ubuntufied/issues](https://github.com/akane599/fluxlinux-ubuntufied/issues).
+Open an issue at [github.com/akane599/AkaTerminal/issues](https://github.com/akane599/AkaTerminal/issues).
 **Troubleshooting** on the Ubuntu page covers the common ones.
 
 ## License
