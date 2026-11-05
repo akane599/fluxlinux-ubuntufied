@@ -51,3 +51,6 @@ design/after/
 *.keystore
 *.p12
 *.pfx
+
+# Impeccable finish-review captures (local evidence, regenerated per review)
+.impeccable/review/

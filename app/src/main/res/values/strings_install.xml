@@ -20,7 +20,7 @@
     <string name="install_cfg_heading_terminal">Terminal only</string>
     <string name="install_cfg_heading_terminal_desktop">Terminal and desktop</string>
     <!-- %1$s = distro name. -->
-    <string name="install_cfg_body_terminal">Runs %1$s setup: base packages, your user, zsh and Oh My Zsh. An installed system and its files are kept. The XFCE desktop can be added later from Home.</string>
+    <string name="install_cfg_body_terminal">Runs %1$s setup: base packages, your user, zsh and Oh My Zsh. An installed system and its files are kept. The XFCE desktop can be added later from the Ubuntu page.</string>
     <string name="install_cfg_body_terminal_desktop">Runs %1$s setup: base packages, your user, zsh and Oh My Zsh, the XFCE4 desktop and the Flux desktop theme. An installed system and its files are kept.</string>
     <string name="install_cfg_bullet_shell">zsh, Oh My Zsh and plugins</string>
     <string name="install_cfg_bullet_xfce">XFCE4 desktop</string>

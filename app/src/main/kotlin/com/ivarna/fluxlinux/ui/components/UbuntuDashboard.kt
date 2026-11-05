@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -196,7 +197,8 @@ fun UbuntuDashboard(
         )
 
         if (ready) {
-            GroupLabel(stringResource(R.string.home_section_desktop))
+            // No group label: the panel's own "XFCE desktop" title heads it.
+            Spacer(Modifier.height(FluxSpacing.lg))
             DesktopPanel(
                 desktop = state.desktop,
                 status = state.status,
@@ -346,7 +348,7 @@ private fun StatusLabel(status: UbuntuStatus, modifier: Modifier = Modifier) {
     val (mark, label) = when (status) {
         UbuntuStatus.CHECKING -> MarkState.WORKING to stringResource(R.string.home_status_checking)
         UbuntuStatus.NEEDS_ROOT -> MarkState.FAILED to stringResource(R.string.home_status_needs_root)
-        UbuntuStatus.NOT_INSTALLED -> MarkState.FAILED to stringResource(R.string.home_status_not_installed)
+        UbuntuStatus.NOT_INSTALLED -> MarkState.IDLE to stringResource(R.string.home_status_not_installed)
         UbuntuStatus.STOPPED -> MarkState.IDLE to stringResource(R.string.home_status_ready)
         UbuntuStatus.STARTING -> MarkState.WORKING to stringResource(R.string.ubuntu_aka_status_starting)
         UbuntuStatus.RUNNING -> MarkState.RUNNING to stringResource(R.string.ubuntu_aka_status_running)

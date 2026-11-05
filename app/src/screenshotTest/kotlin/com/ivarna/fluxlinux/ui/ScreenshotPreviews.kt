@@ -223,7 +223,6 @@ fun SettingsRuntimePreview() {
 fun SettingsPreview() {
     FluxLinuxTheme(themeMode = ThemeMode.DARK, dynamicColor = false) {
         SettingsPageScaffold(title = "Settings", onBack = {}) {
-            SectionLabel("App")
             Box(Modifier.padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)) {
                 UbuntuRuntimeCard(state = UbuntuRuntimeUi(selected = UbuntuRuntimeMode.CHROOT), onSelect = {})
             }

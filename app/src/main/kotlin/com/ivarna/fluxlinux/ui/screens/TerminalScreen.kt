@@ -57,6 +57,7 @@ import androidx.compose.material.icons.sharp.Link
 import androidx.compose.material.icons.sharp.Security
 import androidx.compose.material.icons.sharp.Settings
 import androidx.compose.material.icons.sharp.SpaceDashboard
+import androidx.compose.material.icons.sharp.PlayArrow
 import androidx.compose.material.icons.sharp.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
@@ -232,6 +233,8 @@ fun TerminalScreen(
     var autoOpenTried by rememberSaveable { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
     var openError by rememberSaveable { mutableStateOf<String?>(null) }
+    // The failure is "Ubuntu isn't installed": nothing broke, so the empty state offers setup.
+    var openMissing by rememberSaveable { mutableStateOf(false) }
     var rootAvailable by remember { mutableStateOf(false) }
     // Bumped when the off-main root + chroot detection finishes, so remembered choices
     // (the shell menu) recompute: ChrootDetection only answers from its cache on main.
@@ -318,6 +321,7 @@ fun TerminalScreen(
     fun openUbuntu(fromEmptyState: Boolean) {
         val card = resolveChoices().defaultUser
         if (card == null || !card.enabled) {
+            val missing = runtime != UbuntuRuntimeMode.CHROOT || rootAvailable
             val reason = context.getString(
                 when {
                     runtime != UbuntuRuntimeMode.CHROOT -> R.string.terminal_error_ubuntu_missing
@@ -326,12 +330,16 @@ fun TerminalScreen(
                 }
             )
             toast(reason)
-            if (fromEmptyState) openError = reason
+            if (fromEmptyState) {
+                openError = reason
+                openMissing = missing
+            }
             return
         }
         if (fromEmptyState) {
             opening = true
             openError = null
+            openMissing = false
         }
         openShell(card) { reason ->
             if (fromEmptyState) {
@@ -655,6 +663,7 @@ fun TerminalScreen(
                         // Before the first-frame auto-open fires, show "opening" rather than "closed".
                         opening = opening || !autoOpenTried,
                         errorMessage = openError,
+                        notInstalled = openMissing,
                         onOpen = { openUbuntu(fromEmptyState = true) },
                         modifier = Modifier.fillMaxSize(),
                         onOpenDashboard = onOpenDashboard?.let { leaveTerminal(it) },
@@ -1327,18 +1336,26 @@ fun TerminalEmptyState(
     errorMessage: String?,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * [errorMessage] says Ubuntu isn't installed: nothing failed, so the line takes the idle
+     * mark in body ink and the primary plate goes to setup on the Ubuntu page.
+     */
+    notInstalled: Boolean = false,
     // With no session there is no extra-keys bar (no ☰) and the edge swipe is hidden, so the
     // other destinations, e.g. "Repair host files" on the Ubuntu page, need a visible way in.
     onOpenDashboard: (() -> Unit)? = null,
     onOpenSettings: (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
-    val failed = !opening && errorMessage != null
+    val missing = !opening && notInstalled && errorMessage != null
+    val failed = !opening && errorMessage != null && !missing
     val mark = when {
         opening -> MarkState.WORKING
         failed -> MarkState.FAILED
         else -> MarkState.IDLE
     }
+    // Setting up only helps when there is somewhere to set up from.
+    val setUp = if (missing) onOpenDashboard else null
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -1376,22 +1393,35 @@ fun TerminalEmptyState(
                         else -> stringResource(R.string.terminal_empty_closed)
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (failed) colors.error else colors.onSurfaceVariant
+                    color = when {
+                        failed -> colors.error
+                        missing -> colors.onSurface
+                        else -> colors.onSurfaceVariant
+                    }
                 )
             }
-            PlatedButton(
-                text = stringResource(R.string.terminal_open_ubuntu),
-                onClick = onOpen,
-                icon = Icons.Sharp.Terminal,
-                enabled = !opening,
-                modifier = Modifier.padding(top = FluxSpacing.xl)
-            )
-            if (onOpenDashboard != null || onOpenSettings != null) {
+            if (setUp != null) {
+                PlatedButton(
+                    text = stringResource(R.string.home_action_set_up),
+                    onClick = setUp,
+                    icon = Icons.Sharp.PlayArrow,
+                    modifier = Modifier.padding(top = FluxSpacing.xl)
+                )
+            } else {
+                PlatedButton(
+                    text = stringResource(R.string.terminal_open_ubuntu),
+                    onClick = onOpen,
+                    icon = Icons.Sharp.Terminal,
+                    enabled = !opening,
+                    modifier = Modifier.padding(top = FluxSpacing.xl)
+                )
+            }
+            if ((onOpenDashboard != null && setUp == null) || onOpenSettings != null) {
                 Row(
                     modifier = Modifier.padding(top = FluxSpacing.sm),
                     horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
                 ) {
-                    onOpenDashboard?.let {
+                    onOpenDashboard?.takeIf { setUp == null }?.let {
                         TextButton(onClick = it, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
                             Text(stringResource(R.string.terminal_drawer_ubuntu))
                         }

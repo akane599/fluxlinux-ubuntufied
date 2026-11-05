@@ -27,6 +27,10 @@ object Riso {
     val FederalFieldHigh = Color(0xFF243670)
     /** Federal ink tint that reads as text on dark stock. */
     val FederalTint = Color(0xFFA9BCF2)
+    /** The one hairline: outlines, unchecked controls (≥ 3:1 on dark stock). */
+    val FederalLine = Color(0xFF5D78C4)
+    /** The hairline on light stock. */
+    val FederalLineDeep = Color(0xFF3F5AA8)
 
     /** Bright Red: aka, the brand ink. */
     val Red = Color(0xFFF15060)

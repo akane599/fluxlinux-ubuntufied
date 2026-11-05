@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Settings family (AkaTerminal redesign): About and other new copy. -->
 <resources>
-    <string name="settings_aka_about_header">About</string>
     <string name="settings_aka_version">v%1$s</string>
     <string name="settings_aka_tagline">Ubuntu terminal for Android</string>
     <string name="settings_aka_source">Source code</string>

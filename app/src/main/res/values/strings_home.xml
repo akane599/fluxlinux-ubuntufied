@@ -39,7 +39,6 @@
     <string name="home_action_use_proot">Use PRoot</string>
 
     <!-- Desktop (optional XFCE add-on) -->
-    <string name="home_section_desktop">Desktop</string>
     <string name="home_desktop_title">XFCE desktop</string>
     <string name="home_desktop_not_installed">Not installed. The terminal works without it.</string>
     <string name="home_desktop_value">A full Linux desktop with windows and apps, shown in a separate display app.</string>

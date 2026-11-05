@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -110,8 +111,10 @@ fun PlatedButton(
     val pressed by interaction.collectIsPressedAsState()
     val ink = plateInks(kind)
     val offset = plateOffset(registered = pressed || !enabled)
-    val fill = if (enabled) ink.fill else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-    val content = if (enabled) ink.onFill else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    // Disabled: an unprinted plate on the shell field (no fringes), not Material's grey.
+    val inks = AkaTheme.inks
+    val fill = if (enabled) ink.fill else inks.shellField
+    val content = if (enabled) ink.onFill else inks.onShellFieldMuted.copy(alpha = 0.6f)
 
     Box(
         modifier = modifier
@@ -260,7 +263,8 @@ fun AkaWordmark(
         withStyle(SpanStyle(color = red)) { append("Aka") }
         withStyle(SpanStyle(color = restColor)) { append("Terminal") }
     }
-    Box(modifier = modifier.semantics(mergeDescendants = true) { contentDescription = "AkaTerminal" }) {
+    // One node for accessibility: the two printed passes are one word.
+    Box(modifier = modifier.clearAndSetSemantics { contentDescription = "AkaTerminal" }) {
         // Under plate: offset down-end, and further out while printing.
         Text(
             text = "AkaTerminal",

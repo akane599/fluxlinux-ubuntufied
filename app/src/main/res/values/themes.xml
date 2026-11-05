@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- The app is always dark (MainActivity pins ThemeMode.DARK): the window and the launch
-         splash use the same warm dark background, so light-mode phones don't flash white. -->
+         splash use the blue-black stock (Riso.Stock), so light-mode phones don't flash white. -->
     <style name="Theme.FluxLinux" parent="android:Theme.Material.NoActionBar">
-        <item name="android:colorBackground">#FF131211</item>
-        <item name="android:windowBackground">#FF131211</item>
+        <item name="android:colorBackground">#FF0F1326</item>
+        <item name="android:windowBackground">#FF0F1326</item>
     </style>
 </resources>

@@ -154,8 +154,7 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     SettingsPageScaffold(title = "Settings", onBack = onBack) {
-        SectionLabel("App")
-
+        // The first group needs no label: the runtime card's own title heads it.
         Box(Modifier.padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)) {
             UbuntuRuntimeRow()
         }
@@ -265,11 +264,11 @@ fun SettingsScreen(
 /** About: the mark and wordmark, the fork's links, credits, and one small upstream line. */
 @Composable
 internal fun SettingsAboutSection(open: (String) -> Unit) {
-    SectionLabel(stringResource(R.string.settings_aka_about_header))
+    // The mark and wordmark head this block; a label above them would only repeat it.
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md)
+            .padding(start = FluxSpacing.lg, end = FluxSpacing.lg, top = FluxSpacing.xxl, bottom = FluxSpacing.md)
             .semantics(mergeDescendants = true) {},
     ) {
         Image(

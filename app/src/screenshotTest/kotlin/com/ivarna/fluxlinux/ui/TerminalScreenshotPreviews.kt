@@ -197,3 +197,20 @@ fun TerminalAccelerateSwitchDarkPreview() {
 fun TerminalAccelerateSwitchLightPreview() {
     AccelerateSwitchPreview(ThemeMode.LIGHT)
 }
+
+// Ubuntu isn't installed yet: an idle line in body ink and the plate goes to setup.
+@PreviewTest
+@Preview(name = "TerminalEmptyNotInstalled", showBackground = true, widthDp = 360, heightDp = 420)
+@Composable
+fun TerminalEmptyNotInstalledPreview() {
+    TerminalPreviewHost {
+        TerminalEmptyState(
+            opening = false,
+            errorMessage = "Ubuntu is not installed yet. Install it from the Ubuntu page, then try again.",
+            notInstalled = true,
+            onOpen = {},
+            onOpenDashboard = {},
+            onOpenSettings = {},
+        )
+    }
+}

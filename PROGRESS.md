@@ -1,31 +1,26 @@
-# PROGRESS.md — FluxLinux (ubuntufied fork)
+# PROGRESS.md — AkaTerminal (FluxLinux ubuntufied fork)
 
 _State of ongoing work (Current effort), baselines, the append-only decision log, audit status and known issues._
 
-## Current effort: terminal-first app (on top of the Ubuntu chroot runtime)
+## Current effort: AkaTerminal rename + risograph redesign (on top of terminal-first)
 _Updated: 2026-11-05 · rewrite this section, don't append_
-- **Goal:** the terminal is the product: the app opens on it, XFCE is optional (setup switch off by default, "Install desktop" later), links open on tap, a Paste key, Hold wakelock, a refined dark + cream design; the chroot Ubuntu (the user's daily runtime, KernelSU) behaves like Termux for full-screen programs. Stacked branches: `feat/ubuntu-chroot` ([PR #1](https://github.com/akane599/fluxlinux-ubuntufied/pull/1), kept as a checkpoint) → `feat/terminal-first` ([PR #2](https://github.com/akane599/fluxlinux-ubuntufied/pull/2), base `feat/ubuntu-chroot`).
-- **Done:** PR #2 has every commit (pushed through `9014d46` on 2026-11-05).
-  - Fixes from the user's phone reports, confirmed on the phone with the 815e552 debug APK (codex starts and exits without a key press, no "1uu", scrolls and the drawer swipe work):
-    - `2411b03`: chroot sessions reopen their pty on the root side; replaces the `su -W` try in `add617e`.
-    - `545b785`: the emulator consumes codex's `CSI <` exit sequences, so no "1uu".
-    - `815e552`: the drawer opens with a swipe towards it anywhere on the terminal, and scrolls keep their sideways drift; follows `9e96e84`.
-  - Release follow-ups:
-    - `73bce10`: R8 shrinks and optimizes Compose (dex 22.4 → 5.2 MB).
-    - `1b8a826`: `*.p12` and `*.pfx` are gitignored.
-    - `9014d46`: releases are signed with the user's key `Akane.p12`.
-  - The phone now runs the release build of `9014d46`, signed with the user's key (still versionName 2.1.8 (22)). The user reinstalled it over the old debug build, and it works.
+- **Goal (user request):** an Exit action next to Hold wakelock; rename the app to AkaTerminal (package and launcher icon unchanged), remove the original author's name and images, akane599 as author, one small upstream credit; a complete redesign that satisfies /impeccable. Continues on `feat/terminal-first` (PR #2), no new branch.
+- **Done (local commits, not pushed):**
+  - `01ed6ae`: notification Exit (closes terminals, the desktop, the wakelock and the UI; `AppExit`).
+  - `c55b3d2`: rename to AkaTerminal; the upstream author's contact lines removed from scripts, store metadata and privacy policy. Download URLs (rootfs, assets) still point at upstream, by the user's choice.
+  - `1069821`: risograph redesign (direction in `.impeccable/surfaces/…ui.md`, PRODUCT.md); 961 unit tests, lint, assemble and screenshot validation pass.
+  - Emulator captures for the finish review are in `.impeccable/review/` (akane-linux, pixel-api35 over Tailscale SSH; host binaries can't run there, so live-shell states come from previews).
 - **Next:**
-  - [ ] Still unverified on the device:
-    - links open in the browser, also inside Claude Code and Codex;
-    - the Paste key and the More… menu;
-    - Hold wakelock (`dumpsys power | grep FluxLinux`);
-    - an existing XFCE install shows Start/Open/Stop, and the add-on Installing row;
-    - a PRoot flux → akane migration from a v2.1.8 install.
-  - [ ] Merge PR #1, then PR #2 (GitHub retargets it to `main`); release v2.2.0 (`.claude/rules/release.md`). Its notes must tell v2.1.x users to uninstall once, because the signing key changed.
+  - [ ] Finish review verdict, its fixes, then DESIGN.md + `.impeccable/design.json` (impeccable documenter).
+  - [ ] Check on the phone (signed release): the welcome wordmark print, plate registration on press, the notification Exit, the drawer with live sessions.
+  - [ ] Still unverified on the device from the terminal-first work: links open in the browser (also in Claude Code and Codex), the Paste key and More… menu, Hold wakelock (`dumpsys power | grep AkaTerminal`), an existing XFCE install's Start/Open/Stop and the add-on Installing row, a PRoot flux → akane migration from v2.1.8.
+  - [ ] Merge PR #1, then PR #2; release v2.2.0 (`.claude/rules/release.md`); its notes tell v2.1.x users to uninstall once (signing key changed).
+  - [ ] Store screenshots (`fastlane/…/phoneScreenshots`, featureGraphic) still show FluxLinux; replace them from real captures.
+  - [ ] Push and PR updates only with the user's approval.
 - **Open questions:** should the debug build also be signed with the user's key? The phone now has a release install, so a debug APK (needed for `run-as` diagnosis) can't be installed without wiping app data. Not asked yet.
 
 ## Baseline
+- 2026-11-05 @ 1069821 (feat/terminal-first): 961 unit tests, 0 failing; lint, assemble, screenshots valid; shell tests pass.
 - 2026-11-05 @ 815e552 (feat/terminal-first): 954 unit tests, 0 failing; lint 0 errors; screenshots valid; shell tests pass (scripts unchanged since add617e).
 - 2026-10-19 @ 7f6e61d: `:app:assembleIvarnaDebug` ok, 402 unit tests (`:app:testIvarnaDebugUnitTest`), 2 failing (pre-existing, not ours):
   - `ui.OnboardingConsentContractTest.optionsPage_requiresDownloadConsentBeforeInstall`: AssertionError (cause not yet investigated)
@@ -72,13 +67,17 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 - 2026-11-05: the terminal claims a gesture only when it isn't a one-finger swipe towards the drawer (within 45°), decided in the Initial pass once the finger has moved half the touch slop (`keepTerminalGestures`), because claiming on ACTION_DOWN left the drawer opening only from the edge strip (user report). Supersedes the claim-every-gesture line above.
 - 2026-11-05: release R8 now shrinks and optimizes Compose. Upstream's blanket `-keep class androidx.compose.**` (and its material-icons twin) is gone: it kept all ~11.4k icon classes (half of the 22.8k it kept) and blocked Compose's optimizations, and Compose ships its own consumer rules. Release dex 22.4 → 5.2 MB, APK 65 → 60 MB; the release build passes an emulator smoke test (it launches and the onboarding works). The app, termux-x11 and OkHttp keeps stay, and ART baseline profiles stay off (`fix-baseline-profiles.gradle`, for F-Droid reproducible builds).
 - 2026-11-05: release builds are signed with the user's own key (`Akane.p12` in `~/.config/fluxlinux-ubuntufied/signing/`, used through the repo-root `keystore.properties`) instead of the fork key (`release.jks`, which is kept). This was the user's choice. Installs of the v2.1.x GitHub releases have to uninstall once (or use APK v3 key rotation) to move to the new key. Supersedes the signing part of the 2026-10-19 line.
+- 2026-11-05: the app is AkaTerminal by akane599 (user request); package `com.ivarna.fluxlinux`, the launcher icon and the notification channel IDs are unchanged, and the original project is credited once, in Settings → About ("Forked from FluxLinux") and the README footer. The wakelock tag is now `AkaTerminal:terminal`.
+- 2026-11-05: notification Exit closes the terminals and the desktop (user's choice of scope), then releases the wakelock and finishes the task; each step is independent so one failure doesn't block the rest (`AppExit`).
+- 2026-11-05: the whole UI moves to a risograph two-ink world (user's pick from the impeccable direction round; supersedes the dark + cream refresh line): blue-black stock, Federal Blue shell field, Bright Red primary, plum overprint for selection, Yellow held, Green running, Pink failed; Archivo by width/weight plus JetBrains Mono for code; selected and primary plates rest 2dp out of register and register on press with a spring. State is carried by mark form (StatusMark), not hue alone. Dark only, as before.
+- 2026-11-05: screenshot previews load the fonts from `src/main/res/font` on disk in inspection mode (`usePreviewFontFiles`), because layoutlib in screenshot plugin alpha10 throws `Resources$NotFoundException` for font resources and renders blank text.
 
 ## Audit status
 | Area | Last run | Result | How |
 |---|---|---|---|
 | Repository audit | 2026-10-20 | 4 high, 23 medium, 33 low (AUDIT_REPORT.md) | `/full-repo-audit` |
 | Audit fixes | 2026-10-20 | 57 fixed, M14/L8 partial, L29 blocked; device-unverified | `/audit-remediate` |
-| UI / design | — | — | `compose-design` skill + screenshot review |
+| UI / design | 2026-11-05 | risograph redesign; impeccable finish review in progress | `/impeccable` + screenshot and emulator review |
 | Lint | 2026-10-20 | 0 errors | `./gradlew :app:lintIvarnaDebug -q` |
 | Device QA | 2026-10-20 | SM-S938B (Android 17): v2.1.4 fresh install OK, customization in about 2.5 min, bundled Papirus-Dark passes the icon check; desktop start not checked | adb + debug run-as |
 

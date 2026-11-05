@@ -443,7 +443,7 @@ private fun WelcomeTerminalPlate() {
     }
 }
 
-/** The waiting block cursor, in the red plate's ink (Vermilion reads on both shell fields). */
+/** The waiting block cursor, in the red plate's ink (it reads on both shell fields). */
 @Composable
 private fun ExcerptCursor() {
     Box(
