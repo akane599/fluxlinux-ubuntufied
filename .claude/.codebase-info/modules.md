@@ -5,7 +5,7 @@
 | Module | Lang | Purpose | Used by |
 |---|---|---|---|
 | `:app` | Kotlin (all) | The app. Compose UI plus `core/*` logic | — |
-| `:terminal-emulator` | Java + JNI (`src/main/jni/termux.c`, ndkBuild, arm64) | termux-app `terminal-emulator` v0.118.0, vendored unmodified (GPLv3) and built from source for 16 KB page alignment. Package `com.termux.terminal` (`TerminalSession`, `TerminalEmulator`, `TerminalBuffer`, ...) | `:app` `implementation`. Replaces the jitpack copy pulled by `terminal-view` |
+| `:terminal-emulator` | Java + JNI (`src/main/jni/termux.c`, ndkBuild, arm64) | termux-app `terminal-emulator` v0.118.0, vendored (GPLv3) and built from source for 16 KB page alignment, with small local fixes listed in its `build.gradle.kts` header (e.g. `CSI <` / `CSI =` kitty keyboard sequences consumed, not printed). Package `com.termux.terminal` (`TerminalSession`, `TerminalEmulator`, `TerminalBuffer`, ...) | `:app` `implementation`. Replaces the jitpack copy pulled by `terminal-view` |
 | `:termux-x11` | Java + C/CMake (`src/main/cpp/CMakeLists.txt`, `lorie/`, `patches/`, `recipes/`, 16 xorg submodules) | Embedded Termux:X11 1.03.01 fork: X server `libXlorie.so` plus the client Activity. The activity-to-server event socket uses full-length framed I/O from `src/main/cpp/lorie/conn_io.h` (`lorie_read_full`/`write_full`/`skip_full`, `LORIE_MAX_PAYLOAD` 16 MiB). Packages `com.termux.x11` (`MainActivity`, `LorieView`, `CmdEntryPoint`, `Prefs`, `LoriePreferences`), `.input`, `.utils` | `:app` `implementation` |
 | `:stub` | Java | Hidden-API compile stubs (`android.app.ActivityThread`, `IActivityManager`, `IPackageManager`, ...) | `:termux-x11` `compileOnly` only |
 
