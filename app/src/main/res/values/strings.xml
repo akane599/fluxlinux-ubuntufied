@@ -1,6 +1,6 @@
 <resources>
-    <string name="app_name">FluxLinux</string>
-    <string name="accessibility_service_description">FluxLinux Keyboard Toggle allows you to toggle the keyboard in Termux:X11 using a floating button.</string>
+    <string name="app_name">AkaTerminal</string>
+    <string name="accessibility_service_description">AkaTerminal Keyboard Toggle allows you to toggle the keyboard in Termux:X11 using a floating button.</string>
 
     <!-- Terminal -->
     <string name="terminal_drawer_title">Sessions</string>
@@ -27,14 +27,14 @@
     <string name="terminal_empty_closed">All tabs are closed.</string>
     <string name="terminal_open_ubuntu">Open Ubuntu terminal</string>
     <string name="terminal_error_tab_limit">Tab limit reached (%1$d)</string>
-    <string name="terminal_error_host_bootstrap">FluxLinux\'s host tools aren\'t ready. Use Repair host files on the Ubuntu page.</string>
+    <string name="terminal_error_host_bootstrap">AkaTerminal\'s host tools aren\'t ready. Use Repair host files on the Ubuntu page.</string>
     <string name="terminal_error_host_not_ready">Host not ready — check Settings</string>
     <string name="terminal_error_host_failed">Host shell failed to open</string>
     <string name="terminal_error_chroot_failed">Chroot session failed to open</string>
     <string name="terminal_error_session_failed">Session failed to open</string>
     <string name="terminal_error_ubuntu_missing">Ubuntu is not installed yet. Install it from Home, then try again.</string>
     <string name="terminal_error_ubuntu_chroot_missing">Ubuntu chroot is not installed yet. Set it up from Home, then try again.</string>
-    <string name="terminal_error_chroot_no_root">Ubuntu chroot needs root. Allow FluxLinux in your root manager, or switch to PRoot in Settings.</string>
+    <string name="terminal_error_chroot_no_root">Ubuntu chroot needs root. Allow AkaTerminal in your root manager, or switch to PRoot in Settings.</string>
     <string name="install_starting">Starting…</string>
     <string name="install_base_desktop_done">Base desktop installed</string>
     <string name="home_repair_blocked_install">Host files are in use by an install or another repair. Try again when it finishes.</string>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AkaTerminal mark: a prompt printed on two misregistered plates (red top-start,
+     Federal Blue bottom-end, their plum overprint in the middle). Authored for this app. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <path android:fillColor="#FF3255A4" android:pathData="M20,18h62a2,2 0 0 1 2,2v62a2,2 0 0 1 -2,2h-62a2,2 0 0 1 -2,-2v-62a2,2 0 0 1 2,-2z" />
+    <path android:fillColor="#FFF15060" android:pathData="M14,12h62a2,2 0 0 1 2,2v62a2,2 0 0 1 -2,2h-62a2,2 0 0 1 -2,-2v-62a2,2 0 0 1 2,-2z" />
+    <path android:fillColor="#FF4A2150" android:pathData="M18,18h60v60h-60z" />
+    <path android:strokeColor="#FFE9ECF2" android:strokeWidth="7" android:strokeLineCap="square" android:strokeLineJoin="miter" android:fillColor="#00000000" android:pathData="M31,36L45,48L31,60" />
+    <path android:strokeColor="#FFE9ECF2" android:strokeWidth="7" android:strokeLineCap="square" android:fillColor="#00000000" android:pathData="M53,60H65" />
+</vector>

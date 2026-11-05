@@ -45,7 +45,7 @@
     <string name="onboarding_storage_link_music">Music</string>
     <string name="onboarding_storage_link_movies">Movies</string>
     <string name="onboarding_storage_file_manager">It works the other way too: your phone\'s file manager can browse Ubuntu\'s home folder.</string>
-    <string name="onboarding_storage_settings_hint">Android opens Settings. Turn on file access for FluxLinux, then come back here.</string>
+    <string name="onboarding_storage_settings_hint">Android opens Settings. Turn on file access for AkaTerminal, then come back here.</string>
     <string name="onboarding_storage_later">You can change this later in Settings › Shared storage.</string>
     <string name="onboarding_storage_granted">Access granted</string>
     <string name="onboarding_storage_grant">Grant access</string>
@@ -62,7 +62,7 @@
     <string name="onboarding_done_start_desktop">Start desktop</string>
     <string name="onboarding_done_open_terminal">Open terminal</string>
     <string name="onboarding_done_icon_desc">Ubuntu installed</string>
-    <string name="onboarding_notice_body">The Linux host tools ship inside the app. To provide a complete Linux environment, FluxLinux downloads the Ubuntu rootfs directly from GitHub Releases upon continuation. It is not bundled in the F-Droid APK:</string>
+    <string name="onboarding_notice_body">The Linux host tools ship inside the app. To provide a complete Linux environment, AkaTerminal downloads the Ubuntu rootfs directly from GitHub Releases upon continuation. It is not bundled in the F-Droid APK:</string>
     <string name="onboarding_notice_chip_host">Host tools</string>
     <string name="onboarding_notice_chip_host_size">Included</string>
     <string name="onboarding_notice_chip_rootfs">Ubuntu Rootfs</string>

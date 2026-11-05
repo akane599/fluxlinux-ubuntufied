@@ -419,7 +419,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         if (!RootShell.isRootAvailable()) {
             postFail(
                 onProgress, phases,
-                "Root not available. Grant superuser to FluxLinux, then retry."
+                "Root not available. Grant superuser to AkaTerminal, then retry."
             )
             return
         }
@@ -1007,7 +1007,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         try {
             BaseInstallService.update(
                 appCtx,
-                title = "FluxLinux — $label",
+                title = "AkaTerminal — $label",
                 text = detail,
                 percent = percent
             )

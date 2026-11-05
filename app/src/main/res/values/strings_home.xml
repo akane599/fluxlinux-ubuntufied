@@ -28,7 +28,7 @@
     <string name="home_hero_not_installed">Ubuntu isn\'t set up on this device yet. Other installed distros are kept.</string>
     <string name="home_hero_not_installed_chroot">Ubuntu chroot isn\'t set up on this device yet. It runs with root, separate from PRoot.</string>
     <string name="home_hero_checking">Checking the Ubuntu chroot install…</string>
-    <string name="home_hero_needs_root">Chroot mode needs root. Allow FluxLinux in your root manager, or switch to PRoot.</string>
+    <string name="home_hero_needs_root">Chroot mode needs root. Allow AkaTerminal in your root manager, or switch to PRoot.</string>
     <string name="home_hero_other_running">%1$s desktop is running. Stop it to start Ubuntu.</string>
 
     <string name="home_action_start_desktop">Start desktop</string>
@@ -103,7 +103,7 @@
     <string name="home_recovery_stop_all_sub">Close terminals and stop the desktop</string>
     <string name="home_recovery_stop_all_done">Terminals closed and desktop stopped</string>
     <string name="home_recovery_repair">Repair host files</string>
-    <string name="home_recovery_repair_sub">Re-extract FluxLinux\'s built-in tools. Ubuntu and your files are kept.</string>
+    <string name="home_recovery_repair_sub">Re-extract AkaTerminal\'s built-in tools. Ubuntu and your files are kept.</string>
     <string name="home_recovery_rerun">Re-run Ubuntu setup</string>
     <string name="home_recovery_rerun_sub">Reinstall Ubuntu\'s packages. Your files are kept.</string>
     <string name="home_recovery_settings">Ubuntu settings</string>
@@ -112,7 +112,7 @@
     <string name="home_recovery_troubleshooting_sub">Fixes for common problems</string>
 
     <string name="home_repair_dialog_title">Repair host files?</string>
-    <string name="home_repair_dialog_body">FluxLinux closes its terminals, stops the desktop and re-extracts its built-in Linux tools. Installed Ubuntu and your files are kept.</string>
+    <string name="home_repair_dialog_body">AkaTerminal closes its terminals, stops the desktop and re-extracts its built-in Linux tools. Installed Ubuntu and your files are kept.</string>
     <string name="home_repair_dialog_confirm">Repair</string>
     <string name="home_repair_dialog_cancel">Cancel</string>
     <string name="home_repair_running">Repairing host files…</string>
@@ -127,7 +127,7 @@
     <string name="settings_runtime_proot_sub">PRoot: works on any phone, no root needed.</string>
     <string name="settings_runtime_chroot_sub">Chroot: faster and a full system, needs root.</string>
     <string name="settings_runtime_checking">Checking root access…</string>
-    <string name="settings_runtime_no_root">Root access was denied or isn\'t available. Ubuntu stays on PRoot. Allow FluxLinux in your root manager (Magisk, KernelSU) and try again.</string>
+    <string name="settings_runtime_no_root">Root access was denied or isn\'t available. Ubuntu stays on PRoot. Allow AkaTerminal in your root manager (Magisk, KernelSU) and try again.</string>
     <string name="settings_runtime_chroot_missing">Ubuntu chroot isn\'t set up yet. Set it up from the Ubuntu page.</string>
     <string name="settings_runtime_proot_missing">Ubuntu PRoot isn\'t set up yet. Set it up from the Ubuntu page.</string>
     <string name="settings_runtime_stop_title">Stop the desktop first?</string>
@@ -152,5 +152,5 @@
     <string name="trouble_phantom_title">Android 12+ closes Linux apps</string>
     <string name="trouble_phantom_body">Android\'s phantom process killer can stop the desktop or terminal. Settings > Process killer fix turns it off with root, Shizuku or adb.</string>
     <string name="trouble_reinstall_title">Reinstall without losing files</string>
-    <string name="trouble_reinstall_body">Re-run Ubuntu setup reinstalls Ubuntu\'s packages and keeps your files. Repair host files re-extracts FluxLinux\'s tools and keeps Ubuntu too. Only Uninstall in Ubuntu settings deletes Ubuntu.</string>
+    <string name="trouble_reinstall_body">Re-run Ubuntu setup reinstalls Ubuntu\'s packages and keeps your files. Repair host files re-extracts AkaTerminal\'s tools and keeps Ubuntu too. Only Uninstall in Ubuntu settings deletes Ubuntu.</string>
 </resources>

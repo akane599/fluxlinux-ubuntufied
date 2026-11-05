@@ -1,1 +1,1 @@
-Run full Linux desktop environments on Android with GPU acceleration
+Ubuntu terminal for Android, PRoot or root chroot, optional XFCE desktop

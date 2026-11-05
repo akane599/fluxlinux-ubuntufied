@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Install foreground-service notification (OnboardingInstallRunner). %1$s = distro name. -->
-    <string name="install_notif_title">FluxLinux — Installing</string>
+    <string name="install_notif_title">AkaTerminal — Installing</string>
     <string name="install_notif_terminal">%1$s terminal</string>
     <string name="install_notif_terminal_desktop">%1$s terminal and desktop</string>
     <string name="install_notif_desktop_addon">%1$s desktop</string>

@@ -1,12 +1,12 @@
-FluxLinux brings full Linux desktops to Android. Install a guest distro, run XFCE, and use GPU acceleration — no external Termux app required.
+AkaTerminal is an Ubuntu 26.04 terminal for Android. Open the app and you are in an Ubuntu shell: no Termux, no separate X11 app, no proot-distro commands.
 
 <b>Features:</b>
-• Embedded host terminal and X11 display
-• Twelve distros (Debian, Alpine, Fedora, Ubuntu, Arch, and more)
-• GPU acceleration (Turnip/VirGL)
-• Host PulseAudio for guest sound
-• Web, App, and Data Science stacks
-• XFCE desktop with themes
-• Rooted (chroot) and non-rooted (proot) support
+• Ubuntu without root (PRoot), or as a chroot on rooted phones
+• Zsh with Oh My Zsh, tabs, two rows of extra keys, a Paste key, tap-to-open links
+• Hold wakelock and Exit from the notification, for long jobs with the screen off
+• Your phone's folders in ~/storage, and Ubuntu's home in Android's Files app
+• Optional XFCE desktop over an embedded X11 server with sound, added during setup or later
 
-<b>Note:</b> Distro rootfs archives download from GitHub after an in-app opt-in. No data is collected.
+<b>Note:</b> The Ubuntu rootfs downloads from GitHub after an in-app opt-in. No data is collected.
+
+AkaTerminal is a fork of FluxLinux.

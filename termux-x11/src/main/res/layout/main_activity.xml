@@ -80,7 +80,7 @@
                 android:layout_width="160dp"
                 android:layout_height="160dp"
                 android:scaleType="fitCenter"
-                app:srcCompat="@drawable/x11_idle_mascot"
+                app:srcCompat="@drawable/x11_idle_mark"
                 android:contentDescription="@string/x11_idle_mascot_cd" />
 
             <Space

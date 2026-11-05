@@ -1,52 +1,32 @@
-# Privacy Policy for FluxLinux
+# Privacy Policy for AkaTerminal
 
-**Last Updated:** January 5, 2026
+**Last updated:** November 5, 2026
 
-FluxLinux ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how our application handling your data.
+AkaTerminal runs Ubuntu on your device. This policy explains what the app does with your data.
 
-## 1. Information Collection and Use
+## 1. No data collection
 
-**We do not collect, store, or share any personal information about you.**
+AkaTerminal works entirely on your device. There is no backend server, no account, and no analytics, tracking or crash-reporting service.
 
-FluxLinux operates entirely locally on your device. We do not have a backend server, and we do not use any third-party analytics or tracking services (such as Firebase Analytics, Google Analytics, or Crashlytics).
+## 2. Network use
 
-### Personal Data
-We do not collect names, email addresses, phone numbers, location data, or any other personally identifiable information.
+After you agree in setup, the app downloads the Ubuntu rootfs (and, if you choose them, desktop theme assets or GPU driver archives) from GitHub Releases. Programs you run inside Ubuntu (apt, git, curl, …) use the network as you tell them to.
 
-### Usage Data
-We do not track or log how you use the application. All app logs are stored locally on your device for debugging purposes only and are never transmitted to us.
+## 3. Permissions
 
-## 2. Permissions and Their Usage
+- **All files access** (GitHub/F-Droid build, Android 11+) or storage read/write (Android 8–10): links your phone's folders into `~/storage` inside Ubuntu. Only when you allow it.
+- **Notifications**: the ongoing notification that keeps terminal sessions alive, with Hold wakelock and Exit.
+- **Wake lock**: only while you turn on Hold wakelock.
+- **Root** (optional): only for the chroot runtime on rooted phones.
 
-FluxLinux requires specific Android permissions to function correctly. Here is how we use them:
+## 4. Your data
 
-*   **INTERNET (`android.permission.INTERNET`)**: Used solely to download necessary assets (Linux distribution rootfs, installation scripts, graphics) from public repositories (e.g., GitHub) directly to your device *upon your explicit request*. We do not send data to any server.
-*   **Run Command (`com.termux.permission.RUN_COMMAND`)**: Required to execute commands in the Termux app to install and launch Linux distributions. This is the core functionality of FluxLinux.
-*   **Foreground Service (`android.permission.FOREGROUND_SERVICE`)**: Used to keep the "Floating Keyboard" toggle button active while you are using a Linux environment.
-*   **Display Over Apps (`android.permission.SYSTEM_ALERT_WINDOW`)**: Required to display the floating button that allows you to toggle the keyboard while using X11/GUI environments.
+Everything the app creates (the Ubuntu filesystem, your home folder, settings) stays on your device. Uninstalling the app or clearing its data deletes it. Files you keep in shared storage through `~/storage` are not deleted.
 
-## 3. Third-Party Services
+## 5. Changes
 
-FluxLinux interacts with the following third-party services/apps to function:
+Changes to this policy are published in this file in the repository.
 
-*   **GitHub**: When you choose to install a distribution or tool, the app downloads files directly from GitHub releases. Please refer to GitHub's privacy policy for data handling regarding downloads.
-*   **Termux & Termux:X11**: FluxLinux acts as an orchestrator for these applications. We rely on them to run the Linux environment. Please refer to their respective privacy policies.
+## 6. Contact
 
-## 4. Data Storage
-
-All data created or downloaded by FluxLinux (such as Linux file systems, scripts, and settings) is stored locally on your device. You have full control over this data and can delete it at any time by clearing the app data or uninstalling the application.
-
-## 5. Children's Privacy
-
-FluxLinux is not intended for use by children under the age of 13. We do not knowingly collect personal information from children under 13.
-
-## 6. Changes to This Privacy Policy
-
-We may update our Privacy Policy from time to time. Thus, you are advised to review this page periodically for any changes. We will notify you of any changes by posting the new Privacy Policy on this page.
-
-## 7. Contact Us
-
-If you have any questions or suggestions about our Privacy Policy, do not hesitate to contact us at:
-
-**Email**: abhay02delhi@gmail.com
-**GitHub**: [https://github.com/abhay-byte](https://github.com/abhay-byte)
+Questions: open an issue at [github.com/akane599/fluxlinux-ubuntufied/issues](https://github.com/akane599/fluxlinux-ubuntufied/issues).

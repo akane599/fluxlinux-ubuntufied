@@ -77,9 +77,8 @@ handle_error() {
     echo "──────────────────────────────────────────────────────"
     echo "Log saved to: $LOG_FILE"
     echo ""
-    echo "Please copy the log content and send it to the developer:"
-    echo "  Email: abhay02delhi@gmail.com"
-    echo "  GitHub: https://github.com/abhay-byte/fluxlinux/issues"
+    echo "Please copy the log content and report it:"
+    echo "  Issues: https://github.com/akane599/fluxlinux-ubuntufied/issues"
     echo "──────────────────────────────────────────────────────"
     read -p "Press Enter to acknowledge error and exit..."
 

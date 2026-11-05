@@ -63,7 +63,7 @@ object TerminalWakeLock {
     @SuppressLint("WakelockTimeout")
     private fun platformLock(ctx: Context): Lock {
         val pm = ctx.applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
-        val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FluxLinux:terminal").apply {
+        val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AkaTerminal:terminal").apply {
             setReferenceCounted(false)
         }
         return object : Lock {
