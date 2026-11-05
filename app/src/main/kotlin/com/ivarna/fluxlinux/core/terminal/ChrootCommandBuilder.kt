@@ -51,17 +51,16 @@ object ChrootCommandBuilder {
             RootShell.cachedBusyBox(),
             RootShell.helperExecGuard(),
         )
-        // Unwrapped terminal (KernelSU `su -W`) so full-screen programs' non-blocking reads work.
-        val cmd = RootShell.shellRootCommand(withPath, noFdWrapper = RootShell.supportsNoFdWrapper())
+        val cmd = RootShell.shellRootCommand(withPath)
         // Inline WINCH trap on outer sh (mShellPid). Keep this shell as parent (no leading exec).
         val winchCmd = winchWrap(cmd)
         return arrayOf(SESSION_EXEC, "-c", winchCmd) to buildEnv(guestUser, chrootPath)
     }
 
     /**
-     * Root-side session command: pin FLUX_BB / FLUX_CHROOT (Alpine/Debian multi-chroot
-     * coexistence), then [helperGuard] ([RootShell.helperExecGuard]: SHA-256 re-check of the
-     * helper and its resolver, exit 127 on mismatch, M14) right before `exec sh $helper …`.
+     * Root-side session command: [REATTACH_TERMINAL], pin FLUX_BB / FLUX_CHROOT (Alpine/Debian
+     * multi-chroot coexistence), then [helperGuard] ([RootShell.helperExecGuard]: SHA-256 re-check
+     * of the helper and its resolver, exit 127 on mismatch, M14) right before `exec sh $helper …`.
      */
     internal fun rootSessionCommand(
         rootInner: String,
@@ -70,8 +69,28 @@ object ChrootCommandBuilder {
         helperGuard: String,
     ): String {
         val exportBb = if (!bb.isNullOrEmpty()) "export FLUX_BB='$bb'; " else ""
-        return "${exportBb}export FLUX_CHROOT='$chrootPath'; $helperGuard$rootInner"
+        return "$REATTACH_TERMINAL${exportBb}export FLUX_CHROOT='$chrootPath'; $helperGuard$rootInner"
     }
+
+    /**
+     * First step on the root side: when stdin is a pty, reopen it by path as fds 0-2.
+     *
+     * KernelSU's `su` gives root a kernel wrapper of the app's terminal instead of the terminal
+     * itself (so root in a restricted App Profile domain can still use it). Reads through the
+     * wrapper ignore O_NONBLOCK, so a program that reads the terminal until EAGAIN blocks until
+     * the next key: codex's startup and exit probes froze it on start and exit in chroot
+     * sessions. The wrapper still reports the terminal's path (`/proc/self/fd/0` →
+     * `/dev/pts/N`), and root in KernelSU's default domain can open it, so the session runs on
+     * the real pty. Unlike KernelSU's `su -W`, this works with any su build. With Magisk, whose
+     * su relays through its own pty, it reopens that pty, which changes nothing. A pipe, or an
+     * open that fails (a restricted domain), leaves the fds as they were.
+     */
+    internal const val REATTACH_TERMINAL =
+        "_flux_tty=\$(readlink /proc/\$\$/fd/0 2>/dev/null); " +
+            "case \$_flux_tty in /dev/pts/[0-9]*) " +
+            "if [ -t 0 ] && [ -c \"\$_flux_tty\" ] && (: <>\"\$_flux_tty\") 2>/dev/null; " +
+            "then exec 0<>\"\$_flux_tty\" 1>&0 2>&0; fi;; " +
+            "esac; unset _flux_tty; "
 
     /** Inline WINCH trap prefix for the outer `/system/bin/sh` session. */
     fun winchWrap(cmd: String): String =

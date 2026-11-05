@@ -184,7 +184,51 @@ class ChrootCommandBuilderTest {
         val g = cmd.indexOf(guard)
         assertTrue(g >= 0)
         assertTrue(cmd.indexOf("exec sh $helper") > g)
-        assertTrue(cmd.startsWith("export FLUX_BB='/data/adb/ksu/bin/busybox'; export FLUX_CHROOT="))
+        assertTrue(
+            cmd.startsWith(
+                ChrootCommandBuilder.REATTACH_TERMINAL +
+                    "export FLUX_BB='/data/adb/ksu/bin/busybox'; export FLUX_CHROOT="
+            )
+        )
+    }
+
+    /** Runs `/bin/sh -c [script]` inside a fresh pty (util-linux `script`) and returns its output. */
+    private fun runInPty(script: String): String {
+        val file = java.io.File.createTempFile("reattach", ".sh")
+        try {
+            file.writeText(script)
+            val p = ProcessBuilder("script", "-qec", "/bin/sh ${file.absolutePath} >/dev/null 2>&1", "/dev/null")
+                .redirectErrorStream(true)
+                .start()
+            p.outputStream.close()
+            val out = String(p.inputStream.readBytes())
+            assertEquals(out, 0, p.waitFor())
+            return out
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun reattachTerminal_reopensThePtyAsAllThreeFds() {
+        assumeTrue(java.io.File("/bin/sh").canExecute())
+        assumeTrue(listOf("/usr/bin/script", "/bin/script").any { java.io.File(it).canExecute() })
+        // stdout/stderr start on /dev/null: the echo is only seen if fds 1-2 now point at the pty.
+        val out = runInPty(ChrootCommandBuilder.REATTACH_TERMINAL + "echo \"on-pty:\$(readlink /proc/\$\$/fd/1)\"")
+        assertTrue(out, Regex("on-pty:/dev/pts/[0-9]+").containsMatchIn(out))
+    }
+
+    @Test
+    fun reattachTerminal_leavesPipesAlone() {
+        assumeTrue(java.io.File("/bin/sh").canExecute())
+        val p = ProcessBuilder(
+            "/bin/sh", "-c",
+            ChrootCommandBuilder.REATTACH_TERMINAL + "echo \"still:\$(readlink /proc/\$\$/fd/1)\"",
+        ).start()
+        p.outputStream.close()
+        val out = String(p.inputStream.readBytes())
+        assertEquals(0, p.waitFor())
+        assertTrue(out, out.startsWith("still:pipe:"))
     }
 
     @Test

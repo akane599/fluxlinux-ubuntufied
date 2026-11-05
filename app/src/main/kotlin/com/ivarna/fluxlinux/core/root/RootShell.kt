@@ -26,7 +26,6 @@ import java.util.concurrent.atomic.AtomicReference
 object RootShell {
 
     private const val TAG = "RootShell"
-    private const val KSU_DEFAULT_DOMAIN = "u:r:su:s0"
     private val executor = Executors.newCachedThreadPool()
     // Lazy so JVM unit tests never touch Looper unless a callback path runs.
     private val mainHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
@@ -43,10 +42,6 @@ object RootShell {
 
     @Volatile
     private var cachedBusyBoxPath: String? = null
-
-    /** [supportsNoFdWrapper]'s answer; null until a probe finished. */
-    @Volatile
-    private var cachedNoFdWrapper: Boolean? = null
 
     /** [ensureChrootHelper] succeeded this process (helper + resolver staged). */
     private val chrootHelperReady = AtomicBoolean(false)
@@ -433,75 +428,6 @@ object RootShell {
         cachedSuInvocation = invocation
     }
 
-    internal fun seedNoFdWrapperForTest(value: Boolean?) {
-        cachedNoFdWrapper = value
-    }
-
-    /**
-     * Whether interactive chroot sessions should run `su -W` (KernelSU's `--no-wrapper`).
-     *
-     * By default KernelSU's `su` replaces a terminal's stdin/stdout/stderr with a kernel "fd
-     * wrapper" whose reads go to the original file, so a program's `fcntl(O_NONBLOCK)` on stdin
-     * only flags the wrapper and a "read until EAGAIN" loop blocks until the next key press:
-     * codex (and other full-screen programs) froze on start and exit until a key was pressed.
-     * The wrapper exists for App Profile domains that cannot reach the app's terminal, so `-W`
-     * is used only when this su accepts it and root runs in KernelSU's default `u:r:su:s0`
-     * domain. Magisk and KernelSU builds without the option reject `-W` (false).
-     *
-     * Blocking (su): background thread only. Cached once answered; a timeout is retried later.
-     */
-    fun supportsNoFdWrapper(): Boolean {
-        cachedNoFdWrapper?.let { return it }
-        val inv = (cachedSuInvocation ?: resolveSuInvocation())?.let(::noWrapperInvocation)
-        if (inv == null) {
-            cachedNoFdWrapper = false
-            return false
-        }
-        val run = try {
-            runShort(buildSuArgs(inv, "cat /proc/self/attr/current"), timeoutSec = 3)
-        } catch (e: Exception) {
-            Log.w(TAG, "no-fd-wrapper probe failed: ${e.message}")
-            ShortRun(-1, "")
-        } ?: return false // timeout: not cached, asked again for the next session
-        val ok = parseNoFdWrapperProbe(run.exitCode, run.output)
-        Log.i(TAG, "su -W (no fd wrapper): $ok (exit=${run.exitCode})")
-        cachedNoFdWrapper = ok
-        return ok
-    }
-
-    /** True when `su -W -c 'cat /proc/self/attr/current'` ran in KernelSU's default domain. */
-    internal fun parseNoFdWrapperProbe(exitCode: Int, output: String): Boolean =
-        exitCode == 0 && output.lineSequence().any { it.trim { c -> c <= ' ' } == KSU_DEFAULT_DOMAIN }
-
-    /** [invocation] with KernelSU's `-W`; null for forms that never take it (Magisk `su 0 -c`). */
-    internal fun noWrapperInvocation(invocation: List<String>): List<String>? = when {
-        invocation.size == 2 && invocation[1] == "-c" -> listOf(invocation[0], "-W", "-c")
-        invocation.size == 3 && invocation[2].startsWith("SU_WRAP:") ->
-            listOf(invocation[0], invocation[1], invocation[2] + " -W")
-        else -> null
-    }
-
-    private class ShortRun(val exitCode: Int, val output: String)
-
-    /** Runs [args] (stdin closed, stderr merged) for at most [timeoutSec]; null on timeout. */
-    private fun runShort(args: List<String>, timeoutSec: Long): ShortRun? {
-        val pb = ProcessBuilder(args).redirectErrorStream(true).start()
-        try { pb.outputStream.close() } catch (_: Exception) {}
-        val outFuture = executor.submit<String> {
-            pb.inputStream.bufferedReader().use { it.readText() }
-        }
-        if (!pb.waitFor(timeoutSec, TimeUnit.SECONDS)) {
-            pb.destroyForcibly()
-            return null
-        }
-        val out = try {
-            outFuture.get(1, TimeUnit.SECONDS)
-        } catch (_: Exception) {
-            ""
-        }
-        return ShortRun(pb.exitValue(), out)
-    }
-
     /**
      * Resolve a root-capable BusyBox via the staged shell resolver (su only).
      * Does not stage the sidecar — callers must [ensureBusyBoxResolver] first.
@@ -569,11 +495,9 @@ object RootShell {
      * Single shell snippet that runs [cmd] as root — for TerminalSession / `sh -c` only.
      * Escapes [cmd] in single quotes so `;` `&&` `$` inside the guest chain stay intact.
      */
-    fun shellRootCommand(cmd: String, noFdWrapper: Boolean = false): String {
+    fun shellRootCommand(cmd: String): String {
         val escaped = cmd.replace("'", "'\\''")
-        val base = cachedSuInvocation ?: resolveSuInvocation()
-        // [noFdWrapper]: see [supportsNoFdWrapper]; forms without the option stay as they are.
-        val inv = if (noFdWrapper) base?.let(::noWrapperInvocation) ?: base else base
+        val inv = cachedSuInvocation ?: resolveSuInvocation()
         return when {
             inv != null && inv.size >= 3 && inv[2].startsWith("SU_WRAP:") -> {
                 val suBin = inv[2].removePrefix("SU_WRAP:")
