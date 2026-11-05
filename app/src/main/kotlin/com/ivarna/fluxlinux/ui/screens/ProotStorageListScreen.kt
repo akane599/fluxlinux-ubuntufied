@@ -45,7 +45,7 @@ import com.ivarna.fluxlinux.core.proot.ProotSettingsModel
 import com.ivarna.fluxlinux.core.terminal.TerminalLauncher
 import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
 import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
@@ -242,7 +242,7 @@ internal fun SettingsStorageRow(
     }
 }
 
-/** Nothing installed: what that means, and the one way forward (a printed primary). */
+/** Nothing installed: what that means, and the one way forward (the akane primary). */
 @Composable
 internal fun SettingsStorageEmpty(
     title: String,
@@ -259,7 +259,7 @@ internal fun SettingsStorageEmpty(
         Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         Text(hint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(FluxSpacing.xs))
-        PlatedButton(text = action, onClick = onAction)
+        AkaButton(text = action, onClick = onAction)
     }
 }
 

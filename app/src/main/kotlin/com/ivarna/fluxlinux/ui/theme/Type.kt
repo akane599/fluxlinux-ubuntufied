@@ -11,9 +11,9 @@ import com.ivarna.fluxlinux.R
 import java.io.File
 
 /**
- * One family, Archivo, ranked by width and weight like a riso zine's type case: the
- * expanded ExtraBold cut is the display voice (headlines, the wordmark), the semi-expanded
- * SemiBold cut sets titles, the normal width sets body and labels. JetBrains Mono is only for
+ * One family, Archivo, ranked by width and weight: the semi-expanded SemiBold cut is the
+ * display voice (headlines, titles, the wordmark), calm rather than shouted at night; the
+ * normal width sets body and labels. JetBrains Mono is only for
  * code, paths and key caps. Static instances live in res/font (subset to Latin + Latin
  * Extended); see third_party/fonts/README.md for their provenance.
  *
@@ -26,7 +26,6 @@ private class AkaFamilies(private val fromFiles: Boolean) {
     private fun font(res: Int, file: String, weight: FontWeight): Font =
         if (fromFiles) fileFont(file, weight) else Font(res, weight)
 
-    val expanded = FontFamily(font(R.font.archivo_expanded_extrabold, "archivo_expanded_extrabold", FontWeight.ExtraBold))
     val wide = FontFamily(font(R.font.archivo_semiexpanded_semibold, "archivo_semiexpanded_semibold", FontWeight.SemiBold))
     val text = FontFamily(
         font(R.font.archivo_regular, "archivo_regular", FontWeight.Normal),
@@ -59,8 +58,6 @@ internal fun usePreviewFontFiles() {
     if (!previewFiles && File(PREVIEW_FONT_DIR, "archivo_regular.ttf").isFile) previewFiles = true
 }
 
-val ArchivoExpanded: FontFamily get() = families.expanded
-
 val ArchivoWide: FontFamily get() = families.wide
 
 val Archivo: FontFamily get() = families.text
@@ -68,8 +65,8 @@ val Archivo: FontFamily get() = families.text
 val AkaMono: FontFamily get() = families.mono
 
 private fun display(f: AkaFamilies, size: Int, line: Int, tracking: Double) = TextStyle(
-    fontFamily = f.expanded,
-    fontWeight = FontWeight.ExtraBold,
+    fontFamily = f.wide,
+    fontWeight = FontWeight.SemiBold,
     fontSize = size.sp,
     lineHeight = line.sp,
     letterSpacing = tracking.sp,

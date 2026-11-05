@@ -71,7 +71,7 @@ import com.ivarna.fluxlinux.core.legacy.LegacyTermuxStore
 import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.ui.components.aka.AkaRow
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
 import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
 import com.ivarna.fluxlinux.ui.components.aka.StatusMark
 import com.ivarna.fluxlinux.ui.theme.AkaTheme
@@ -481,7 +481,7 @@ fun LegacyTermuxSettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    PlatedButton(
+                    AkaButton(
                         text = "Copy & open Termux",
                         onClick = { copyAndOpenTermux() },
                         icon = Icons.Sharp.ContentCopy,
@@ -578,7 +578,7 @@ fun LegacyTermuxSettingsScreen(
         // Bottom scan action
         if (termuxInstalled && termuxVersionOk && runCommandGranted) {
             Spacer(Modifier.height(FluxSpacing.md))
-            PlatedButton(
+            AkaButton(
                 text = if (pageState == LegacyPageState.SCANNING) "Scanning Termux…" else "Scan leftovers",
                 onClick = { triggerScan() },
                 enabled = !isBusy,

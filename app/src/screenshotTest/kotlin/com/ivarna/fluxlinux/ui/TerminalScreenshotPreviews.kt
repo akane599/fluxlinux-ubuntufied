@@ -198,7 +198,7 @@ fun TerminalAccelerateSwitchLightPreview() {
     AccelerateSwitchPreview(ThemeMode.LIGHT)
 }
 
-// Ubuntu isn't installed yet: an idle line in body ink and the plate goes to setup.
+// Ubuntu isn't installed yet: an idle line in body ink and the primary button goes to setup.
 @PreviewTest
 @Preview(name = "TerminalEmptyNotInstalled", showBackground = true, widthDp = 360, heightDp = 420)
 @Composable

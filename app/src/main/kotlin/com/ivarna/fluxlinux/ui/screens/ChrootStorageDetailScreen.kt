@@ -34,7 +34,7 @@ import com.ivarna.fluxlinux.core.chroot.GuestStorageCatalog
 import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.root.ChrootPaths
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
 import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
@@ -321,7 +321,7 @@ fun ChrootStorageDetailScreen(
         )
 
         if (!isUniversal && !sizeUi.installed && onNavigateToInstall != null) {
-            PlatedButton(
+            AkaButton(
                 text = "Install chroot",
                 onClick = { onNavigateToInstall() },
                 modifier = Modifier

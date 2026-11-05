@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,7 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,15 +45,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
-import com.ivarna.fluxlinux.ui.components.aka.PlateKind
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButtonKind
 import com.ivarna.fluxlinux.ui.components.aka.StatusMark
 import com.ivarna.fluxlinux.ui.components.aka.markColor
-import com.ivarna.fluxlinux.ui.components.aka.plateInks
-import com.ivarna.fluxlinux.ui.components.aka.plateOffset
+import com.ivarna.fluxlinux.ui.components.aka.selectionInks
+import com.ivarna.fluxlinux.ui.components.aka.akaSelection
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
-import com.ivarna.fluxlinux.ui.theme.misregistered
 
 /**
  * Shared install progress UI for onboarding + Distros [InstallConfigScreen].
@@ -215,12 +214,12 @@ fun InstallProgressPanel(
                 color = colors.onBackground,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onToggleLog, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
-                Text(
-                    stringResource(if (showLog) R.string.aka_install_hide_log else R.string.aka_install_show_log),
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
+            AkaButton(
+                text = stringResource(if (showLog) R.string.aka_install_hide_log else R.string.aka_install_show_log),
+                onClick = onToggleLog,
+                kind = AkaButtonKind.SECONDARY,
+                contentPadding = PaddingValues(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+            )
         }
 
         // The live log, in the deepest well.
@@ -258,7 +257,7 @@ fun InstallProgressPanel(
         // Actions
         when {
             failed -> {
-                PlatedButton(
+                AkaButton(
                     text = stringResource(R.string.aka_install_retry),
                     icon = Icons.Sharp.Refresh,
                     onClick = onRetry,
@@ -267,19 +266,17 @@ fun InstallProgressPanel(
 
                 if (onBack != null) {
                     Spacer(Modifier.height(FluxSpacing.xs))
-                    TextButton(
+                    AkaButton(
+                        text = stringResource(R.string.aka_install_back_to_options),
                         onClick = onBack,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = FluxSpacing.touch)
-                    ) {
-                        Text(stringResource(R.string.aka_install_back_to_options), style = MaterialTheme.typography.labelLarge)
-                    }
+                        kind = AkaButtonKind.SECONDARY,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
             isDone && onDone != null -> {
-                PlatedButton(
+                AkaButton(
                     text = stringResource(R.string.onboarding_continue),
                     onClick = onDone,
                     modifier = Modifier.fillMaxWidth()
@@ -290,8 +287,8 @@ fun InstallProgressPanel(
 }
 
 /**
- * Shared dark/light theme option for install wizards. Selected: the plum overprint, its
- * plates resting out of register and registering while pressed. Unselected: a row on the stock.
+ * Shared dark/light theme option for install wizards, in its tile. Selected: konjō with the ai
+ * edge and its horizon risen.
  */
 @Composable
 fun InstallThemePickRow(
@@ -305,19 +302,14 @@ fun InstallThemePickRow(
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val ink = plateInks(PlateKind.SELECTION)
-    val offset = plateOffset(registered = pressed)
+    val ink = selectionInks()
     val titleColor = if (selected) ink.onFill else colors.onSurface
     val mutedColor = if (selected) ink.onFill.copy(alpha = 0.82f) else colors.onSurfaceVariant
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (selected) Modifier.misregistered(shape, ink.fill, ink.plateA, ink.plateB) { offset }
-                else Modifier
-            )
-            .clip(shape)
+            .akaSelection(selected, pressed, shape)
             .selectable(
                 selected = selected,
                 interactionSource = interaction,

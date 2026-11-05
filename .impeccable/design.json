@@ -1,612 +1,468 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-05T14:04:43+00:00",
+  "generatedAt": "2026-11-05T16:03:40+00:00",
   "title": "Design System: AkaTerminal",
   "extensions": {
     "colorMeta": {
-      "stock": {
+      "sumi": {
         "role": "neutral",
-        "displayName": "Dark Stock",
+        "displayName": "墨 Sumi",
+        "canonical": "#05060B",
+        "oklch": "oklch(12.4% 0.013 273.4)",
+        "tonalRamp": [
+          "#000000",
+          "#05060B",
+          "#0B0F1E",
+          "#0F1528",
+          "#131B36",
+          "#1B2852",
+          "#2E4377",
+          "#4A66AA"
+        ]
+      },
+      "terminal-black": {
+        "role": "neutral",
+        "displayName": "Terminal Black",
         "canonical": "#000000",
-        "oklch": "oklch(19.4% 0.039 273.3)",
+        "oklch": "oklch(0.0% 0.000 0.0)",
         "tonalRamp": [
           "#000000",
-          "#000000",
-          "#0F1012",
-          "#151619",
-          "#1C1D21",
-          "#24262B",
-          "#2D2F35",
-          "#2A2C33"
+          "#05060B",
+          "#0B0F1E",
+          "#0F1528",
+          "#131B36",
+          "#1B2852",
+          "#2E4377",
+          "#4A66AA"
         ]
       },
-      "stock-deep": {
+      "kachi": {
         "role": "neutral",
-        "displayName": "Deep Stock",
-        "canonical": "#000000",
-        "oklch": "oklch(16.5% 0.032 273.8)",
+        "displayName": "褐色 Kachi",
+        "canonical": "#0B0F1E",
+        "oklch": "oklch(17.3% 0.032 271.4)",
         "tonalRamp": [
           "#000000",
-          "#000000",
-          "#0F1012",
-          "#151619",
-          "#1C1D21",
-          "#24262B",
-          "#2D2F35",
-          "#2A2C33"
+          "#05060B",
+          "#0B0F1E",
+          "#0F1528",
+          "#131B36",
+          "#1B2852",
+          "#2E4377",
+          "#4A66AA"
         ]
       },
-      "surface-container-low": {
+      "kachi-2": {
         "role": "neutral",
-        "displayName": "Printed Tint 1",
-        "canonical": "#0F1012",
-        "oklch": "oklch(21.8% 0.048 273.0)",
+        "displayName": "Kachi 2",
+        "canonical": "#0F1528",
+        "oklch": "oklch(20.1% 0.039 269.4)",
         "tonalRamp": [
           "#000000",
-          "#000000",
-          "#0F1012",
-          "#151619",
-          "#1C1D21",
-          "#24262B",
-          "#2D2F35",
-          "#2A2C33"
+          "#05060B",
+          "#0B0F1E",
+          "#0F1528",
+          "#131B36",
+          "#1B2852",
+          "#2E4377",
+          "#4A66AA"
         ]
       },
-      "surface-container": {
-        "role": "neutral",
-        "displayName": "Printed Tint 2",
-        "canonical": "#151619",
-        "oklch": "oklch(24.0% 0.052 272.5)",
-        "tonalRamp": [
-          "#000000",
-          "#000000",
-          "#0F1012",
-          "#151619",
-          "#1C1D21",
-          "#24262B",
-          "#2D2F35",
-          "#2A2C33"
-        ]
-      },
-      "surface-container-high": {
-        "role": "neutral",
-        "displayName": "Printed Tint 3",
-        "canonical": "#1C1D21",
-        "oklch": "oklch(27.1% 0.058 272.4)",
-        "tonalRamp": [
-          "#000000",
-          "#000000",
-          "#0F1012",
-          "#151619",
-          "#1C1D21",
-          "#24262B",
-          "#2D2F35",
-          "#2A2C33"
-        ]
-      },
-      "surface-container-highest": {
-        "role": "neutral",
-        "displayName": "Printed Tint 4",
-        "canonical": "#24262B",
-        "oklch": "oklch(30.5% 0.066 272.5)",
-        "tonalRamp": [
-          "#000000",
-          "#000000",
-          "#0F1012",
-          "#151619",
-          "#1C1D21",
-          "#24262B",
-          "#2D2F35",
-          "#2A2C33"
-        ]
-      },
-      "surface-bright": {
-        "role": "neutral",
-        "displayName": "Printed Tint 5",
-        "canonical": "#2D2F35",
-        "oklch": "oklch(34.0% 0.078 272.9)",
-        "tonalRamp": [
-          "#000000",
-          "#000000",
-          "#0F1012",
-          "#151619",
-          "#1C1D21",
-          "#24262B",
-          "#2D2F35",
-          "#2A2C33"
-        ]
-      },
-      "outline-variant": {
-        "role": "neutral",
-        "displayName": "Quiet Divider",
-        "canonical": "#2A2C33",
-        "oklch": "oklch(35.0% 0.072 272.8)",
-        "tonalRamp": [
-          "#06091C",
-          "#1D233D",
-          "#374061",
-          "#545F88",
-          "#7480AC",
-          "#98A3CB",
-          "#BEC8EB",
-          "#E5EDFF"
-        ]
-      },
-      "federal": {
+      "kon": {
         "role": "secondary",
-        "displayName": "Federal Blue",
-        "canonical": "#3255A4",
-        "oklch": "oklch(46.7% 0.134 264.0)",
+        "displayName": "紺 Kon",
+        "canonical": "#131B36",
+        "oklch": "oklch(23.0% 0.054 269.4)",
         "tonalRamp": [
-          "#00062A",
-          "#0D2151",
-          "#233E7B",
-          "#3C5DA8",
-          "#5B80CD",
-          "#82A4EA",
-          "#ABC9FF",
-          "#D5EFFF"
+          "#000000",
+          "#05060B",
+          "#0B0F1E",
+          "#0F1528",
+          "#131B36",
+          "#1B2852",
+          "#2E4377",
+          "#4A66AA"
         ]
       },
-      "federal-field": {
+      "konjo": {
         "role": "secondary",
-        "displayName": "Federal Field",
-        "canonical": "#1B2A5C",
-        "oklch": "oklch(30.3% 0.092 268.0)",
+        "displayName": "紺青 Konjō",
+        "canonical": "#1B2852",
+        "oklch": "oklch(29.0% 0.078 268.3)",
         "tonalRamp": [
-          "#040921",
-          "#182343",
-          "#31406A",
-          "#4C5F92",
-          "#6C80B6",
-          "#91A4D5",
-          "#B7C8F3",
-          "#E0EEFF"
+          "#000000",
+          "#05060B",
+          "#0B0F1E",
+          "#0F1528",
+          "#131B36",
+          "#1B2852",
+          "#2E4377",
+          "#4A66AA"
         ]
       },
-      "federal-field-high": {
+      "hanada": {
         "role": "secondary",
-        "displayName": "Federal Field High",
-        "canonical": "#243670",
-        "oklch": "oklch(35.2% 0.103 267.9)",
+        "displayName": "縹 Hanada",
+        "canonical": "#2E4377",
+        "oklch": "oklch(39.3% 0.092 265.8)",
         "tonalRamp": [
-          "#030823",
-          "#162247",
-          "#2F3F6E",
-          "#495E98",
-          "#6980BC",
-          "#8EA4DA",
-          "#B5C8F8",
-          "#DEEEFF"
+          "#000000",
+          "#05060B",
+          "#0B0F1E",
+          "#0F1528",
+          "#131B36",
+          "#1B2852",
+          "#2E4377",
+          "#4A66AA"
         ]
       },
-      "federal-tint": {
+      "ai": {
         "role": "secondary",
-        "displayName": "Federal Tint",
-        "canonical": "#A9BCF2",
-        "oklch": "oklch(80.0% 0.080 269.5)",
+        "displayName": "藍 Ai",
+        "canonical": "#4A66AA",
+        "oklch": "oklch(52.1% 0.113 265.8)",
         "tonalRamp": [
-          "#05091E",
-          "#1A2340",
-          "#344065",
-          "#505F8C",
-          "#7081B0",
-          "#95A4CF",
-          "#BBC8EE",
-          "#E2EEFF"
+          "#000000",
+          "#05060B",
+          "#0B0F1E",
+          "#0F1528",
+          "#131B36",
+          "#1B2852",
+          "#2E4377",
+          "#4A66AA"
         ]
       },
-      "federal-line": {
+      "shiro-ai": {
         "role": "secondary",
-        "displayName": "Federal Line",
-        "canonical": "#5D78C4",
-        "oklch": "oklch(58.6% 0.121 267.8)",
+        "displayName": "白藍 Shiro-ai",
+        "canonical": "#A3B8EC",
+        "oklch": "oklch(78.5% 0.078 267.5)",
         "tonalRamp": [
-          "#030627",
-          "#14214D",
-          "#2B3E76",
-          "#455DA1",
-          "#657FC6",
-          "#8AA3E3",
-          "#B2C8FF",
-          "#DBEEFF"
+          "#050A1B",
+          "#1A243D",
+          "#344163",
+          "#4F608B",
+          "#6F81AE",
+          "#94A4CC",
+          "#BBC9EA",
+          "#E3EEFF"
         ]
       },
-      "red": {
+      "akane": {
         "role": "primary",
-        "displayName": "Bright Red (aka)",
-        "canonical": "#F15060",
-        "oklch": "oklch(65.7% 0.196 18.8)",
+        "displayName": "茜 Akane",
+        "canonical": "#D2383F",
+        "oklch": "oklch(57.6% 0.190 23.3)",
         "tonalRamp": [
-          "#2B0000",
-          "#550007",
-          "#82001D",
-          "#B21835",
-          "#DA4655",
-          "#F9767D",
-          "#FFA4A6",
-          "#FFD1D1"
+          "#270000",
+          "#510004",
+          "#7F0617",
+          "#AF222C",
+          "#D84B4D",
+          "#F47B78",
+          "#FFA9A4",
+          "#FFD6D1"
         ]
       },
-      "red-deep": {
+      "kokiake": {
         "role": "primary",
-        "displayName": "Deep Red",
-        "canonical": "#C62E3F",
-        "oklch": "oklch(54.6% 0.187 20.4)",
+        "displayName": "深緋 Kokiake",
+        "canonical": "#9E2A33",
+        "oklch": "oklch(46.9% 0.151 21.2)",
         "tonalRamp": [
-          "#2A0000",
-          "#530006",
-          "#80001C",
-          "#AF2134",
-          "#D74B54",
-          "#F57A7C",
-          "#FFA6A6",
-          "#FFD2D1"
+          "#220001",
+          "#49070F",
+          "#741F25",
+          "#A2383D",
+          "#C95B5D",
+          "#E68684",
+          "#FFB0AE",
+          "#FFDBD9"
         ]
       },
-      "overprint": {
+      "shu": {
         "role": "primary",
-        "displayName": "Overprint Plum",
-        "canonical": "#4A2150",
-        "oklch": "oklch(32.6% 0.093 322.4)",
+        "displayName": "朱 Shu",
+        "canonical": "#EE6A2E",
+        "oklch": "oklch(67.7% 0.178 42.4)",
         "tonalRamp": [
-          "#150318",
-          "#331937",
-          "#55335A",
-          "#79507E",
-          "#9B70A1",
-          "#BC95C1",
-          "#DEBCE2",
-          "#FFE3FF"
+          "#250000",
+          "#4D0200",
+          "#7A1A00",
+          "#A93400",
+          "#D05920",
+          "#ED855B",
+          "#FFB08E",
+          "#FFDCC1"
         ]
       },
-      "on-overprint-container": {
+      "akane-well": {
         "role": "primary",
-        "displayName": "Overprint Text",
-        "canonical": "#FFD9DD",
-        "oklch": "oklch(91.8% 0.043 10.8)",
+        "displayName": "Akane Well",
+        "canonical": "#3A1218",
+        "oklch": "oklch(24.9% 0.063 13.9)",
         "tonalRamp": [
-          "#140709",
-          "#321F22",
-          "#533A3D",
-          "#76585C",
-          "#99797C",
-          "#BA9DA0",
-          "#DBC2C4",
-          "#FEE8EA"
+          "#160607",
+          "#361D1F",
+          "#59373A",
+          "#7F5357",
+          "#A37478",
+          "#C2999C",
+          "#E2BFC1",
+          "#FFE7E8"
         ]
       },
-      "yellow": {
-        "role": "tertiary",
-        "displayName": "Riso Yellow",
-        "canonical": "#FFE800",
-        "oklch": "oklch(92.1% 0.193 102.2)",
-        "tonalRamp": [
-          "#150800",
-          "#332300",
-          "#544100",
-          "#776000",
-          "#998300",
-          "#B9A700",
-          "#DACC5D",
-          "#FDF29A"
-        ]
-      },
-      "tertiary-container": {
-        "role": "tertiary",
-        "displayName": "Held Container",
-        "canonical": "#3D3A12",
-        "oklch": "oklch(34.2% 0.058 105.0)",
-        "tonalRamp": [
-          "#0D0C00",
-          "#28260D",
-          "#464325",
-          "#66633E",
-          "#87855E",
-          "#A9A785",
-          "#CDCBAD",
-          "#F1F0D7"
-        ]
-      },
-      "green-tint": {
-        "role": "tertiary",
-        "displayName": "Green Tint (running)",
-        "canonical": "#3FD98A",
-        "oklch": "oklch(78.7% 0.170 156.0)",
-        "tonalRamp": [
-          "#001400",
-          "#003307",
-          "#00551E",
-          "#007A37",
-          "#009D57",
-          "#4DBE80",
-          "#86E0A9",
-          "#BAFFD4"
-        ]
-      },
-      "pink": {
-        "role": "tertiary",
-        "displayName": "Fluorescent Pink (failed)",
-        "canonical": "#FF48B0",
-        "oklch": "oklch(69.3% 0.236 350.2)",
-        "tonalRamp": [
-          "#2B0012",
-          "#55002F",
-          "#82004F",
-          "#B20072",
-          "#DB3094",
-          "#F969B5",
-          "#FF9AD8",
-          "#FFC9FB"
-        ]
-      },
-      "pink-deep": {
-        "role": "tertiary",
-        "displayName": "Deep Pink",
-        "canonical": "#C2186B",
-        "oklch": "oklch(53.6% 0.206 358.9)",
-        "tonalRamp": [
-          "#29000A",
-          "#530024",
-          "#7F0040",
-          "#AE0F5F",
-          "#D74180",
-          "#F572A3",
-          "#FFA0C7",
-          "#FFCEED"
-        ]
-      },
-      "error-container": {
-        "role": "tertiary",
-        "displayName": "Failed Container",
-        "canonical": "#55123F",
-        "oklch": "oklch(31.5% 0.110 344.1)",
-        "tonalRamp": [
-          "#1B0011",
-          "#3D132E",
-          "#622C4D",
-          "#89476F",
-          "#AE6891",
-          "#CE8EB3",
-          "#EEB6D5",
-          "#FFDFF9"
-        ]
-      },
-      "on-error-container": {
-        "role": "tertiary",
-        "displayName": "Failed Container Text",
-        "canonical": "#FFD6EA",
-        "oklch": "oklch(91.6% 0.052 347.2)",
-        "tonalRamp": [
-          "#14060D",
-          "#321E28",
-          "#533946",
-          "#775666",
-          "#997788",
-          "#BA9BAA",
-          "#DCC0CE",
-          "#FFE7F2"
-        ]
-      },
-      "bone": {
+      "on-akane": {
         "role": "neutral",
-        "displayName": "Cool Bone",
-        "canonical": "#E9ECF2",
-        "oklch": "oklch(94.3% 0.009 264.5)",
+        "displayName": "On Akane (white)",
+        "canonical": "#FFFFFF",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "wakatake": {
+        "role": "tertiary",
+        "displayName": "若竹 Wakatake",
+        "canonical": "#68BE8D",
+        "oklch": "oklch(73.4% 0.111 157.2)",
+        "tonalRamp": [
+          "#001103",
+          "#002F16",
+          "#064F2F",
+          "#1F7249",
+          "#469569",
+          "#76B690",
+          "#A3D8B7",
+          "#D2FAE0"
+        ]
+      },
+      "yamabuki": {
+        "role": "tertiary",
+        "displayName": "山吹 Yamabuki",
+        "canonical": "#F8B500",
+        "oklch": "oklch(81.4% 0.168 81.7)",
+        "tonalRamp": [
+          "#1B0400",
+          "#3E1B00",
+          "#643600",
+          "#8C5300",
+          "#B07500",
+          "#CE9C32",
+          "#ECC275",
+          "#FFEAAF"
+        ]
+      },
+      "tsutsuji": {
+        "role": "tertiary",
+        "displayName": "躑躅 Tsutsuji",
+        "canonical": "#E95295",
+        "oklch": "oklch(66.0% 0.195 356.5)",
+        "tonalRamp": [
+          "#25000C",
+          "#4D0026",
+          "#7A0344",
+          "#A91E64",
+          "#D14885",
+          "#EE78A7",
+          "#FFA6CB",
+          "#FFD4F0"
+        ]
+      },
+      "shironeri": {
+        "role": "neutral",
+        "displayName": "白練 Shironeri",
+        "canonical": "#EEF0F5",
+        "oklch": "oklch(95.5% 0.007 268.5)",
         "tonalRamp": [
           "#0A0B0D",
-          "#242528",
-          "#404246",
-          "#5F6166",
-          "#808287",
-          "#A3A5AA",
-          "#C7C9CD",
-          "#EDEEF2"
+          "#242527",
+          "#414245",
+          "#606165",
+          "#818286",
+          "#A3A5A9",
+          "#C8C9CC",
+          "#EDEEF1"
         ]
       },
-      "bone-muted": {
+      "ginnezumi": {
         "role": "neutral",
-        "displayName": "Bone Muted",
-        "canonical": "#B4BCD3",
-        "oklch": "oklch(79.6% 0.034 270.4)",
+        "displayName": "銀鼠 Ginnezumi",
+        "canonical": "#A9B0C4",
+        "oklch": "oklch(75.8% 0.030 270.3)",
         "tonalRamp": [
-          "#080B13",
-          "#212531",
-          "#3C4151",
-          "#5A6174",
-          "#7B8296",
-          "#9EA5B7",
-          "#C3C9D9",
-          "#E9EEFC"
-        ]
-      },
-      "bone-on-field": {
-        "role": "neutral",
-        "displayName": "Bone on Field",
-        "canonical": "#C3CDEB",
-        "oklch": "oklch(85.0% 0.043 270.9)",
-        "tonalRamp": [
-          "#070A15",
-          "#202434",
-          "#3B4155",
-          "#586079",
-          "#79829B",
-          "#9DA4BC",
-          "#C2C9DD",
-          "#E8EEFF"
+          "#090B11",
+          "#21252E",
+          "#3D424F",
+          "#5B6171",
+          "#7C8293",
+          "#9FA5B4",
+          "#C4C9D6",
+          "#EBEEF9"
         ]
       },
       "ink-text": {
         "role": "neutral",
         "displayName": "Ink Text",
-        "canonical": "#14193A",
-        "oklch": "oklch(22.9% 0.063 273.8)",
+        "canonical": "#0B0F1E",
+        "oklch": "oklch(17.3% 0.032 271.4)",
         "tonalRamp": [
-          "#07091A",
-          "#1E233A",
-          "#39405E",
-          "#565F83",
-          "#7780A7",
-          "#9AA3C6",
-          "#C0C8E6",
-          "#E7EDFF"
+          "#090B12",
+          "#21252F",
+          "#3D4150",
+          "#5B6173",
+          "#7C8295",
+          "#9FA5B5",
+          "#C4C9D7",
+          "#EAEEF9"
         ]
       },
-      "stock-light": {
+      "dawn": {
         "role": "neutral",
-        "displayName": "Light Stock",
-        "canonical": "#EFF1F5",
-        "oklch": "oklch(95.8% 0.006 264.5)",
+        "displayName": "Dawn Paper (light scheme)",
+        "canonical": "#F2F3F7",
+        "oklch": "oklch(96.5% 0.005 275.0)",
         "tonalRamp": [
-          "#0A0B0D",
+          "#0B0B0C",
           "#242527",
-          "#414245",
+          "#414244",
           "#606164",
-          "#818286",
-          "#A3A5A8",
-          "#C8C9CC",
-          "#EDEEF1"
+          "#818285",
+          "#A4A5A8",
+          "#C8C9CB",
+          "#EEEEF0"
         ]
       },
-      "federal-line-deep": {
-        "role": "secondary",
-        "displayName": "Federal Line Deep",
-        "canonical": "#3F5AA8",
-        "oklch": "oklch(48.7% 0.129 267.2)",
+      "akane-deep": {
+        "role": "primary",
+        "displayName": "Akane Deep (light scheme)",
+        "canonical": "#B7282E",
+        "oklch": "oklch(51.2% 0.179 24.4)",
         "tonalRamp": [
-          "#020629",
-          "#12204F",
-          "#293D79",
-          "#425CA5",
-          "#627FCB",
-          "#88A3E7",
-          "#AFC8FF",
-          "#D9EEFF"
+          "#260000",
+          "#4F0004",
+          "#7C1118",
+          "#AB2A2E",
+          "#D3514E",
+          "#F07F79",
+          "#FFACA4",
+          "#FFD8D2"
         ]
       },
-      "federal-field-light": {
-        "role": "secondary",
-        "displayName": "Light Federal Field",
-        "canonical": "#2A4A94",
-        "oklch": "oklch(42.7% 0.128 264.1)",
+      "tsutsuji-deep": {
+        "role": "tertiary",
+        "displayName": "Tsutsuji Deep (light scheme)",
+        "canonical": "#B4206A",
+        "oklch": "oklch(51.5% 0.190 356.5)",
         "tonalRamp": [
-          "#010729",
-          "#0E214F",
-          "#253F79",
-          "#3E5EA5",
-          "#5D80CA",
-          "#84A4E7",
-          "#ACC9FF",
-          "#D6EFFF"
+          "#24000C",
+          "#4D0026",
+          "#790844",
+          "#A82263",
+          "#CF4A85",
+          "#EC7AA7",
+          "#FFA7CB",
+          "#FFD5F0"
         ]
       }
     },
     "typographyMeta": {
       "display-large": {
         "displayName": "Display Large",
-        "purpose": "The onboarding welcome wordmark (Archivo Expanded ExtraBold)."
+        "purpose": "The wordmark at its largest (onboarding)."
       },
       "display-small": {
         "displayName": "Display Small",
-        "purpose": "AkaWordmark default size (drawer header)."
-      },
-      "headline-large": {
-        "displayName": "Headline Large",
-        "purpose": "Rare page heads."
+        "purpose": "The onboarding wordmark (AkaWordmark default)."
       },
       "headline-medium": {
         "displayName": "Headline Medium",
-        "purpose": "Printed-sheet heads and empty-state heads (\"Ubuntu 26.04\", \"Ubuntu terminal\")."
+        "purpose": "Card heads and the drawer wordmark."
       },
       "headline-small": {
         "displayName": "Headline Small",
-        "purpose": "Top bar and step heads."
+        "purpose": "Page heads."
       },
       "title-large": {
         "displayName": "Title Large",
-        "purpose": "Dialog titles (Archivo SemiExpanded)."
+        "purpose": "Top bars and dialog titles."
       },
       "title-medium": {
         "displayName": "Title Medium",
-        "purpose": "Sub-heads; single-glyph key caps take it in the mono face."
+        "purpose": "Sub-heads; with the mono face, single-glyph key caps."
       },
       "title-small": {
         "displayName": "Title Small",
-        "purpose": "Every row title."
+        "purpose": "Every row title and the selected session."
       },
       "body-large": {
         "displayName": "Body Large",
-        "purpose": "Lead explanations."
+        "purpose": "Long explanations."
       },
       "body-medium": {
         "displayName": "Body Medium",
-        "purpose": "Explanations and dialog text."
+        "purpose": "Dialog bodies, unselected sessions."
       },
       "body-small": {
         "displayName": "Body Small",
-        "purpose": "Row supporting text; the most used role."
+        "purpose": "Row supporting text (most used)."
       },
       "label-large": {
         "displayName": "Label Large",
-        "purpose": "Buttons and section labels, sentence case."
+        "purpose": "Buttons, section labels, drawer actions."
       },
       "label-medium": {
         "displayName": "Label Medium",
-        "purpose": "Word key caps (ESC, CTRL) and chips."
+        "purpose": "Word key caps."
       },
       "label-small": {
         "displayName": "Label Small",
-        "purpose": "Compact key caps and fine print."
+        "purpose": "Key caps in narrow cells (zero tracking), small chips."
       },
       "code": {
         "displayName": "Code",
-        "purpose": "Commands, paths, versions (JetBrains Mono, CodeStyle)."
+        "purpose": "Commands, paths, versions (CodeStyle)."
       }
     },
-    "units": "Android density-independent units: px in tokens means dp for size and sp for type.",
-    "shadows": [],
-    "plates": [
+    "shadows": [
       {
-        "name": "plate-offset",
-        "value": "2px",
-        "purpose": "How far the second plate rests out of register on primary and selected elements (AkaMotion.PlateOffset). Plate A top-start, plate B bottom-end; 0 while pressed."
+        "name": "none",
+        "value": "none",
+        "purpose": "No drop shadows; surfaceTint equals the ground. Depth is the indigo dye ladder plus a 1dp edge."
       },
       {
-        "name": "primary-plates",
-        "value": "fill {colors.red}, plate A {colors.red}, plate B {colors.federal}",
-        "purpose": "PlatedButton, New session (dark scheme)."
+        "name": "edge",
+        "value": "1px solid (hanada #2E4377 rest, ai #4A66AA control/selected)",
+        "purpose": "The one container edge weight."
       },
       {
-        "name": "selection-plates",
-        "value": "fill {colors.overprint}, plate A {colors.red}, plate B {colors.federal}",
-        "purpose": "Active session, latched modifiers, chosen options (dark scheme)."
+        "name": "horizon-line",
+        "value": "2px linear-gradient(to right, akane 0 alpha, #D2383F, #EE6A2E, #D2383F, akane 0 alpha) along the bottom edge",
+        "purpose": "The signature: under the one current thing only."
       },
       {
-        "name": "wordmark-underplate",
-        "value": "1.5px down-end, {colors.federal}",
-        "purpose": "AkaWordmark resting misregistration."
-      },
-      {
-        "name": "grain",
-        "value": "128px tiled speckle, seed 0x414B41, alpha 0.07 dark / 0.06 light",
-        "purpose": "Large printed fields only, under the content."
-      },
-      {
-        "name": "hairline",
-        "value": "1px",
-        "purpose": "The one border weight (Federal Line on stock, translucent Federal Tint #A9BCF2 at 25% on the field)."
+        "name": "horizon-glow",
+        "value": "14px linear-gradient(to top, akane 22% alpha, shu 10% alpha, transparent), scaled by risen",
+        "purpose": "Sunset light fading up from the horizon line."
       }
     ],
     "motion": [
       {
         "name": "quick",
         "value": "120ms",
-        "purpose": "Small state flips."
+        "purpose": "Tile, button and key fills."
       },
       {
         "name": "standard",
-        "value": "220ms cubic-bezier(0.2, 0, 0, 1)",
-        "purpose": "Routine state changes: switch track colour, sheet content size."
+        "value": "220ms",
+        "purpose": "Switch track colour, content size changes."
       },
       {
         "name": "emphasized",
@@ -614,147 +470,171 @@
         "purpose": "Larger transitions."
       },
       {
-        "name": "print",
-        "value": "640ms",
-        "purpose": "Budget for the wordmark's first two-pass print."
+        "name": "rise",
+        "value": "720ms",
+        "purpose": "The wordmark's horizon on first launch."
       },
       {
-        "name": "decelerate",
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "Default easing (AkaMotion.Standard)."
+      },
+      {
+        "name": "ease-decelerate",
         "value": "cubic-bezier(0.05, 0.7, 0.1, 1)",
-        "purpose": "Entrances."
+        "purpose": "The wordmark's rise."
       },
       {
-        "name": "register",
-        "value": "spring(dampingRatio 0.42, stiffness 650)",
-        "purpose": "Plates settling into register: one visible overshoot, about 300ms. The signature motion."
+        "name": "spring-rise",
+        "value": "spring(dampingRatio 1.0, stiffness 180)",
+        "purpose": "The horizon rising under a selection, session or ready card; no overshoot, about 400ms."
       },
       {
-        "name": "settle",
+        "name": "spring-settle",
         "value": "spring(dampingRatio 1.0, stiffness 520)",
-        "purpose": "The same settle without overshoot: switch thumb, large moves."
+        "purpose": "Switch thumbs and sheets."
       },
       {
         "name": "working-spin",
         "value": "1400ms linear per turn",
-        "purpose": "The working StatusMark's dashed ring."
+        "purpose": "The working mark; still under reduced motion."
       },
       {
         "name": "reduced-motion",
         "value": "ANIMATOR_DURATION_SCALE == 0",
-        "purpose": "Plates and wordmark cut straight to register, switches snap, the working mark stops turning."
+        "purpose": "Horizon shown risen, switches snap, the working mark stops."
       }
     ],
-    "breakpoints": []
+    "breakpoints": [
+      {
+        "name": "compact-key-cell",
+        "value": "44dp",
+        "purpose": "Below this cell width word keys step down to label-small."
+      },
+      {
+        "name": "full-key-row",
+        "value": "56dp",
+        "purpose": "Minimum cell for all columns to fit; else 7 keys fill the width and the rest scroll."
+      }
+    ]
   },
   "components": [
     {
-      "name": "Plated Button",
+      "name": "Primary Button",
       "kind": "button",
-      "refersTo": "plated-button-primary",
-      "description": "The primary action of a region: a red plate whose Federal second plate rests 2px out of register and settles on press.",
-      "html": "<button class=\"ds-plated\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 5v14l11-7z\" fill=\"currentColor\"/></svg>Set up Ubuntu</button>",
-      "css": ".ds-plated { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; min-width: 64px; padding: 12px 24px; background: #F15060; color: #14193A; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; border: none; border-radius: 4px; box-shadow: -2px -2px 0 0 #F15060, 2px 2px 0 0 #3255A4; transition: box-shadow 300ms cubic-bezier(0.34, 1.56, 0.64, 1); cursor: pointer; } .ds-plated:hover { box-shadow: -1px -1px 0 0 #F15060, 1px 1px 0 0 #3255A4; } .ds-plated:active { box-shadow: 0 0 0 0 #F15060, 0 0 0 0 #3255A4; } .ds-plated:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 4px; } .ds-plated:disabled { background: #1B2A5C; color: rgba(195,205,235,0.6); box-shadow: none; }"
+      "refersTo": "button-primary",
+      "description": "AkaButton PRIMARY: the one akane action of a region; kokiake while pressed.",
+      "html": "<button class=\"ds-btn-primary\">Set up Ubuntu</button>",
+      "css": ".ds-btn-primary { font-family: Archivo, sans-serif; background: #D2383F; color: #FFFFFF; font-size: 14px; font-weight: 600; letter-spacing: 0.1px; line-height: 20px; min-height: 48px; min-width: 64px; padding: 12px 24px; border: 1px solid transparent; border-radius: 10px; transition: background 120ms cubic-bezier(0.2,0,0,1); } .ds-btn-primary:hover { background: #B83139; } .ds-btn-primary:active { background: #9E2A33; } .ds-btn-primary:focus-visible { outline: 2px solid #A3B8EC; outline-offset: 2px; }"
     },
     {
-      "name": "Text Button",
+      "name": "Secondary Button",
       "kind": "button",
-      "refersTo": "button-text",
-      "description": "Secondary action: red label on the stock, no fill.",
-      "html": "<button class=\"ds-btn-text\">Settings</button>",
-      "css": ".ds-btn-text { min-height: 48px; padding: 10px 12px; background: transparent; color: #F15060; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; border: none; border-radius: 4px; cursor: pointer; } .ds-btn-text:hover { background: rgba(241,80,96,0.08); } .ds-btn-text:active { background: rgba(241,80,96,0.14); } .ds-btn-text:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 2px; }"
+      "refersTo": "button-secondary",
+      "description": "AkaButton SECONDARY: a kon container with the ai control line, so it never reads as text.",
+      "html": "<button class=\"ds-btn-secondary\">View logs</button>",
+      "css": ".ds-btn-secondary { font-family: Archivo, sans-serif; background: #131B36; color: #EEF0F5; font-size: 14px; font-weight: 600; letter-spacing: 0.1px; min-height: 48px; min-width: 64px; padding: 12px 24px; border: 1px solid #4A66AA; border-radius: 10px; transition: background 120ms cubic-bezier(0.2,0,0,1); } .ds-btn-secondary:hover, .ds-btn-secondary:active { background: #1B2852; } .ds-btn-secondary:focus-visible { outline: 2px solid #A3B8EC; outline-offset: 2px; } .ds-btn-secondary:disabled { border-color: #2E4377; color: rgba(169,176,196,0.6); }"
     },
     {
       "name": "Destructive Button",
       "kind": "button",
       "refersTo": "button-danger",
-      "description": "Explicit destructive action in Settings: Fluorescent Pink fill, Ink Text.",
+      "description": "Explicit destructive actions in Settings: tsutsuji fill, Ink Text.",
       "html": "<button class=\"ds-btn-danger\">Remove Ubuntu</button>",
-      "css": ".ds-btn-danger { min-height: 48px; padding: 10px 24px; background: #FF48B0; color: #14193A; font: 600 14px/20px Archivo, sans-serif; border: none; border-radius: 4px; cursor: pointer; } .ds-btn-danger:hover { filter: brightness(1.05); } .ds-btn-danger:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 2px; }"
-    },
-    {
-      "name": "Session Row (selection plate)",
-      "kind": "nav",
-      "refersTo": "selection-plate",
-      "description": "Drawer session rows on the Federal field; the active one is the overprint with red and Federal fringes.",
-      "html": "<div class=\"ds-drawer\"><button class=\"ds-session ds-session-on\"><span class=\"ds-dot\"></span>Session 1</button><button class=\"ds-session\"><span class=\"ds-ring\"></span>Session 2</button></div>",
-      "css": ".ds-drawer { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px; background: #1B2A5C; width: 300px; } .ds-session { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 4px 0 16px; background: transparent; color: #C3CDEB; font: 600 14px/20px Archivo, sans-serif; border: none; border-radius: 4px; text-align: left; cursor: pointer; } .ds-session:hover { background: #243670; } .ds-session:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 2px; } .ds-session-on { background: #4A2150; color: #E9ECF2; box-shadow: -2px -2px 0 0 #F15060, 2px 2px 0 0 #3255A4; transition: box-shadow 300ms cubic-bezier(0.34, 1.56, 0.64, 1); } .ds-session-on:hover { background: #4A2150; } .ds-session-on:active { box-shadow: 0 0 0 0 #F15060, 0 0 0 0 #3255A4; } .ds-dot { width: 10px; height: 10px; border-radius: 50%; background: #3FD98A; } .ds-ring { width: 6px; height: 6px; border-radius: 50%; border: 2px solid #C3CDEB; }"
-    },
-    {
-      "name": "Extra Keys",
-      "kind": "custom",
-      "refersTo": "key-cap",
-      "description": "Key caps on the Federal field: flat at rest, one tint up when pressed, latched modifiers as the selection plate.",
-      "html": "<div class=\"ds-keys\"><button class=\"ds-key\">ESC</button><button class=\"ds-key ds-key-latched\">CTRL</button><button class=\"ds-key\">ALT</button><button class=\"ds-key ds-key-glyph\">↑</button><button class=\"ds-key\">TAB</button></div>",
-      "css": ".ds-keys { display: flex; gap: 4px; padding: 4px; background: #1B2A5C; } .ds-key { min-width: 48px; height: 48px; background: transparent; color: #E9ECF2; font: 600 12px/16px Archivo, sans-serif; letter-spacing: 0.3px; border: none; border-radius: 2px; cursor: pointer; } .ds-key:active { background: #243670; } .ds-key:focus-visible { outline: 2px solid #A9BCF2; outline-offset: 1px; } .ds-key-glyph { font: 600 16px/22px 'JetBrains Mono', monospace; } .ds-key-latched { background: #4A2150; box-shadow: -2px -2px 0 0 #F15060, 2px 2px 0 0 #3255A4; } .ds-key-latched:active { box-shadow: none; }"
+      "css": ".ds-btn-danger { font-family: Archivo, sans-serif; background: #E95295; color: #0B0F1E; font-size: 14px; font-weight: 600; min-height: 48px; padding: 10px 24px; border: none; border-radius: 10px; } .ds-btn-danger:hover { filter: brightness(0.92); } .ds-btn-danger:focus-visible { outline: 2px solid #A3B8EC; outline-offset: 2px; }"
     },
     {
       "name": "Settings Row",
-      "kind": "card",
+      "kind": "custom",
       "refersTo": "list-row",
-      "description": "Full-width row on the stock under a section label; the whole row is the target.",
-      "html": "<div class=\"ds-list\"><div class=\"ds-section\">Recovery</div><button class=\"ds-row\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 6h12v12H6z\" fill=\"currentColor\"/></svg><span class=\"ds-row-text\"><span class=\"ds-row-title\">Stop everything</span><span class=\"ds-row-sub\">Close terminals and stop the desktop</span></span><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z\" fill=\"currentColor\"/></svg></button></div>",
-      "css": ".ds-list { background: #000000; width: 360px; } .ds-section { padding: 24px 16px 8px; color: #A9BCF2; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; } .ds-row { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 12px 16px; background: transparent; color: #B4BCD3; border: none; text-align: left; cursor: pointer; } .ds-row:hover { background: #0F1012; } .ds-row:focus-visible { outline: 2px solid #A9BCF2; outline-offset: -2px; } .ds-row-text { display: flex; flex-direction: column; flex: 1; } .ds-row-title { color: #E9ECF2; font: 600 14px/20px Archivo, sans-serif; letter-spacing: 0.1px; } .ds-row-sub { color: #B4BCD3; font: 400 12px/17px Archivo, sans-serif; letter-spacing: 0.2px; }"
+      "description": "AkaRow: a full-width row in its own kon tile, 56 minimum, the whole row the target.",
+      "html": "<div class=\"ds-section\">Advanced</div><button class=\"ds-row\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"#A9B0C4\"><path d=\"M20 4H4v16h16V4zm-2 14H6V8h12v10zM7.5 15.5 10 13l-2.5-2.5L8.5 9.5 12 13l-3.5 3.5z\"/></svg><span class=\"ds-row-text\"><span class=\"ds-row-title\">Terminal</span><span class=\"ds-row-sub\">Font zoom, extra keys, and guest shell</span></span><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#EEF0F5\"><path d=\"M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z\"/></svg></button>",
+      "css": ".ds-section { font-family: Archivo, sans-serif; color: #A3B8EC; font-size: 14px; font-weight: 600; padding: 24px 16px 8px 20px; } .ds-row { font-family: Archivo, sans-serif; display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 12px 16px; margin: 3px 0; background: #131B36; border: 1px solid #2E4377; border-radius: 12px; color: #EEF0F5; text-align: left; transition: background 120ms cubic-bezier(0.2,0,0,1); } .ds-row:active { background: #1B2852; } .ds-row:focus-visible { outline: 2px solid #A3B8EC; outline-offset: 2px; } .ds-row-text { display: flex; flex-direction: column; flex: 1; } .ds-row-title { font-size: 14px; font-weight: 600; line-height: 20px; } .ds-row-sub { font-size: 12px; line-height: 17px; color: #A9B0C4; }"
     },
     {
-      "name": "Printed Field",
+      "name": "Segmented Selection",
+      "kind": "chip",
+      "refersTo": "selection",
+      "description": "akaSelection: the selected sibling is konjō with the ai edge and its horizon risen.",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-seg-item ds-on\">PRoot</button><button class=\"ds-seg-item\">Chroot (root)</button></div>",
+      "css": ".ds-seg { display: flex; gap: 4px; padding: 4px; background: #131B36; border-radius: 10px; } .ds-seg-item { font-family: Archivo, sans-serif; flex: 1; min-height: 48px; position: relative; overflow: hidden; background: #131B36; color: #EEF0F5; font-size: 14px; font-weight: 600; border: 1px solid #2E4377; border-radius: 10px; } .ds-seg-item:focus-visible { outline: 2px solid #A3B8EC; } .ds-seg-item.ds-on { background: #1B2852; border-color: #4A66AA; } .ds-seg-item.ds-on::before { content: ''; position: absolute; left: 0; right: 0; bottom: 2px; height: 14px; background: linear-gradient(to bottom, transparent, rgba(238,106,46,0.10), rgba(210,56,63,0.22)); } .ds-seg-item.ds-on::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(to right, rgba(210,56,63,0), #D2383F, #EE6A2E, #D2383F, rgba(210,56,63,0)); }"
+    },
+    {
+      "name": "Ubuntu Card",
       "kind": "card",
-      "refersTo": "printed-field",
-      "description": "The Ubuntu status sheet and onboarding plates: Federal field with grain, a state mark in words, one plated primary.",
-      "html": "<section class=\"ds-field\"><h2 class=\"ds-field-head\">Ubuntu 26.04</h2><p class=\"ds-field-state\"><span class=\"ds-field-ring\"></span>Not installed</p><p class=\"ds-field-body\">Ubuntu isn't set up on this device yet.</p></section>",
-      "css": ".ds-field { width: 340px; padding: 16px; background: #1B2A5C; color: #E9ECF2; border-radius: 10px; } .ds-field-head { margin: 0 0 8px; font: 800 23px/29px 'Archivo Expanded', Archivo, sans-serif; letter-spacing: -0.3px; } .ds-field-state { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font: 600 14px/20px Archivo, sans-serif; } .ds-field-ring { width: 6px; height: 6px; border-radius: 50%; border: 2px solid #C3CDEB; } .ds-field-body { margin: 0; color: #C3CDEB; font: 400 14px/20px Archivo, sans-serif; letter-spacing: 0.15px; }"
+      "refersTo": "card",
+      "description": "A large kon tile with the state mark plus words and one akane primary; its horizon rises once Ubuntu is ready.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-head\">Ubuntu 26.04</div><div class=\"ds-card-state\"><span class=\"ds-mark-run\"></span>Running</div><button class=\"ds-card-btn\">Open terminal</button></div>",
+      "css": ".ds-card { font-family: Archivo, sans-serif; position: relative; overflow: hidden; background: #131B36; border: 1px solid #2E4377; border-radius: 16px; padding: 16px; color: #EEF0F5; } .ds-card::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(to right, rgba(210,56,63,0), #D2383F, #EE6A2E, #D2383F, rgba(210,56,63,0)); } .ds-card-head { font-family: 'Archivo SemiExpanded', Archivo, sans-serif; font-size: 23px; font-weight: 600; line-height: 29px; letter-spacing: -0.3px; } .ds-card-state { display: flex; align-items: center; gap: 8px; margin: 4px 0 16px; font-size: 12px; color: #A9B0C4; } .ds-mark-run { width: 10px; height: 10px; border-radius: 50%; background: #68BE8D; } .ds-card-btn { font-family: Archivo, sans-serif; background: #D2383F; color: #FFF; font-size: 14px; font-weight: 600; min-height: 48px; padding: 12px 24px; border: none; border-radius: 10px; } .ds-card-btn:active { background: #9E2A33; } .ds-card-btn:focus-visible { outline: 2px solid #A3B8EC; outline-offset: 2px; }"
     },
     {
       "name": "Switch",
       "kind": "input",
       "refersTo": "switch-on",
-      "description": "FluxSwitch: squared track and thumb, red when on, Federal hairline when off.",
-      "html": "<label class=\"ds-switch\"><input type=\"checkbox\" checked><span class=\"ds-track\"><span class=\"ds-thumb\"></span></span></label>",
-      "css": ".ds-switch { display: inline-flex; padding: 8px; cursor: pointer; } .ds-switch input { position: absolute; opacity: 0; } .ds-track { position: relative; width: 52px; height: 32px; box-sizing: border-box; background: #24262B; border: 1px solid #5D78C4; border-radius: 4px; transition: background 220ms cubic-bezier(0.2, 0, 0, 1), border-color 220ms; } .ds-thumb { position: absolute; top: 7px; left: 8px; width: 16px; height: 16px; background: #5D78C4; border-radius: 2px; transition: all 260ms cubic-bezier(0.2, 0, 0, 1); } .ds-switch input:checked + .ds-track { background: #F15060; border-color: #F15060; } .ds-switch input:checked + .ds-track .ds-thumb { top: 4px; left: 24px; width: 22px; height: 22px; background: #14193A; } .ds-switch input:focus-visible + .ds-track { outline: 2px solid #A9BCF2; outline-offset: 2px; }"
+      "description": "FluxSwitch: soft square track and thumb; on is akane with a white 22 thumb, off is kon with an ai edge and 16 ai thumb.",
+      "html": "<label class=\"ds-switch\"><input type=\"checkbox\" checked><span class=\"ds-track\"><span class=\"ds-thumb\"></span></span></label> <label class=\"ds-switch\"><input type=\"checkbox\"><span class=\"ds-track\"><span class=\"ds-thumb\"></span></span></label>",
+      "css": ".ds-switch { display: inline-flex; padding: 8px; cursor: pointer; } .ds-switch input { position: absolute; opacity: 0; } .ds-track { position: relative; width: 52px; height: 32px; box-sizing: border-box; background: #131B36; border: 1px solid #4A66AA; border-radius: 10px; transition: background 220ms cubic-bezier(0.2,0,0,1); } .ds-thumb { position: absolute; top: 50%; left: 8px; width: 16px; height: 16px; transform: translateY(-50%); background: #4A66AA; border-radius: 6px; transition: all 200ms cubic-bezier(0.05,0.7,0.1,1); } .ds-switch input:checked + .ds-track { background: #D2383F; border-color: #D2383F; } .ds-switch input:checked + .ds-track .ds-thumb { left: 25px; width: 22px; height: 22px; background: #FFFFFF; } .ds-switch input:focus-visible + .ds-track { outline: 2px solid #A3B8EC; outline-offset: 2px; }"
+    },
+    {
+      "name": "Extra Keys",
+      "kind": "custom",
+      "refersTo": "key-cap",
+      "description": "Key caps on the pure-black bar: kon tiles with hanada edges, konjō while pressed, latched modifiers akane.",
+      "html": "<div class=\"ds-keys\"><button class=\"ds-key\">ESC</button><button class=\"ds-key ds-glyph\">/</button><button class=\"ds-key ds-latched\">CTRL</button><button class=\"ds-key\">ALT</button><button class=\"ds-key ds-glyph\">↑</button><button class=\"ds-key\">HOME</button></div>",
+      "css": ".ds-keys { display: flex; gap: 3px; padding: 3px; background: #000000; } .ds-key { font-family: 'JetBrains Mono', monospace; flex: 1; height: 44px; min-width: 40px; /* Termux density: the one exception to the 48 target */ background: #131B36; color: #EEF0F5; border: 1px solid #2E4377; border-radius: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0; transition: background 120ms cubic-bezier(0.2,0,0,1); } .ds-key:active { background: #1B2852; border-color: #4A66AA; } .ds-key:focus-visible { outline: 2px solid #A3B8EC; } .ds-glyph { font-family: 'JetBrains Mono', monospace; font-size: 16px; } .ds-latched { background: #D2383F; color: #FFFFFF; border-color: transparent; } .ds-latched:active { background: #9E2A33; }"
     },
     {
       "name": "Status Marks",
-      "kind": "chip",
-      "refersTo": "list-row",
-      "description": "State told by form first: filled disc running, ring idle, dashed ring working, half disc held, struck ring failed.",
-      "html": "<div class=\"ds-marks\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Running\"><circle cx=\"5\" cy=\"5\" r=\"5\" fill=\"#3FD98A\"/></svg><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Idle\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#B4BCD3\" stroke-width=\"2\"/></svg><svg class=\"ds-working\" width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Working\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#A9BCF2\" stroke-width=\"2\" stroke-dasharray=\"3.6 2.4\"/></svg><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Held\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#FFE800\" stroke-width=\"2\"/><path d=\"M5 0a5 5 0 0 0 0 10z\" fill=\"#FFE800\"/></svg><svg width=\"20\" height=\"20\" viewBox=\"0 0 10 10\" aria-label=\"Failed\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"none\" stroke=\"#FF48B0\" stroke-width=\"2\"/><path d=\"M2 8 8 2\" stroke=\"#FF48B0\" stroke-width=\"2\"/></svg></div>",
-      "css": ".ds-marks { display: flex; gap: 16px; padding: 16px; background: #000000; } .ds-working { animation: ds-spin 1400ms linear infinite; } @keyframes ds-spin { to { transform: rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .ds-working { animation: none; } }"
+      "kind": "custom",
+      "refersTo": null,
+      "description": "StatusMark: state by form first, colour second.",
+      "html": "<div class=\"ds-marks\"><span class=\"ds-m ds-run\"></span>Running <span class=\"ds-m ds-idle\"></span>Idle <span class=\"ds-m ds-work\"></span>Working <span class=\"ds-m ds-held\"></span>Held <span class=\"ds-m ds-fail\"></span>Failed</div>",
+      "css": ".ds-marks { font-family: Archivo, sans-serif; display: flex; align-items: center; gap: 8px; color: #EEF0F5; font-size: 12px; } .ds-m { position: relative; display: inline-block; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; } .ds-run { background: #68BE8D; } .ds-idle { border: 2px solid #A9B0C4; } .ds-work { border: 2px dashed #A3B8EC; animation: ds-spin 1.4s linear infinite; } .ds-held { border: 2px solid #F8B500; background: linear-gradient(to right, #F8B500 50%, transparent 50%); } .ds-fail { border: 2px solid #E95295; } .ds-fail::after { content: ''; position: absolute; left: 50%; top: -1px; width: 2px; height: 10px; background: #E95295; transform: rotate(45deg); } @keyframes ds-spin { to { transform: rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .ds-work { animation: none; } }"
+    },
+    {
+      "name": "Wordmark",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "AkaWordmark: Aka in akane, Terminal in shironeri, over the horizon.",
+      "html": "<div class=\"ds-wordmark\"><span class=\"ds-aka\">Aka</span>Terminal</div>",
+      "css": ".ds-wordmark { position: relative; display: inline-block; padding-bottom: 8px; font-family: 'Archivo SemiExpanded', Archivo, sans-serif; font-weight: 600; font-size: 30px; line-height: 36px; letter-spacing: -0.5px; color: #EEF0F5; } .ds-aka { color: #D2383F; } .ds-wordmark::before { content: ''; position: absolute; left: 0; right: 0; bottom: 2px; height: 14px; background: linear-gradient(to bottom, transparent, rgba(238,106,46,0.10), rgba(210,56,63,0.22)); } .ds-wordmark::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(to right, rgba(210,56,63,0), #D2383F, #EE6A2E, #D2383F, rgba(210,56,63,0)); animation: ds-rise 720ms cubic-bezier(0.05,0.7,0.1,1); } @keyframes ds-rise { from { transform: scaleX(0); } } @media (prefers-reduced-motion: reduce) { .ds-wordmark::after { animation: none; } }"
     }
   ],
   "narrative": {
-    "northStar": "The Two-Ink Zine",
-    "overview": "AkaTerminal is printed, not rendered. Every colour on screen is a risograph spot ink or the stock it is printed on: a black stock (black paper, the user's choice), a Federal Blue field for the shell, Bright Red (aka) for the one primary action, and the plum overprint where red lands on blue to mark what is selected. Hierarchy comes from tone and ink, not from light and shadow. The terminal sits full bleed on the stock, so the terminal and the chrome read as one sheet.\n\nThe density is that of a tool used one-handed at night for long sessions. Rows are full width on the stock and grouped by small labels, not boxed in cards. Large printed fields (the drawer header, the Ubuntu status sheet, onboarding plates) carry a faint fixed-seed grain; nothing else does. The one signature motion is misregistration that registers: primary and selected elements rest with their second plate 2dp out of register, and a press settles the plates together with one damped overshoot. Reduced motion cuts instantly.\n\nThe system is Material 3 underneath (drawer, dialogs, radio buttons, progress, snackbars, system Back) restyled with the inks, a cut-paper shape scale and one type family. It ships dark only; the light scheme (cool white stock, deepened inks) is kept in the tokens so a later switch stays cheap. Dynamic (wallpaper) colour is off: the inks are fixed.",
+    "northStar": "Akane at Dusk",
+    "overview": "AkaTerminal is the last light of the day over indigo night. 茜 akane, the madder red in the name, is the one accent and the horizon; the terminal is the night sky; the chrome around it steps up through the traditional indigo dyes. Every colour is a named Japanese traditional colour (`Iro`), and the app is black: the terminal and the extra-keys bar sit on pure black, every other screen on 墨 sumi, a black with an indigo cast.\n\nThe density is a tool used one-handed at night for long sessions. Nothing reads as loose text on the ground: every row, key, session, switch and secondary action sits in its own container (a tile in 紺 kon, edged in 縹 hanada or 藍 ai), and the one akane fill per region is the next step. The signature is the horizon: a 2dp line along the bottom of the one current thing, akane at its ends and 朱 shu at its brightest point, with sunset light fading up from it. It grows out from the centre and lifts with no overshoot. Reduced motion shows it risen.\n\nMaterial 3 is underneath (drawer, dialogs, radio buttons, progress, snackbars, system Back) restyled with the dyes, a soft corner scale and one type family. The app forces the dark (night) scheme; the light (dawn) scheme, cool paper with akane deepened, is kept in `Theme.kt` so a later switch stays cheap. Dynamic (wallpaper) colour is off.",
     "keyCharacteristics": [
-      "Spot inks on dark stock; no greys, no gradients, no glass.",
-      "One primary ink (Red) and one selection ink (overprint plum), both printed as misregistered plates.",
-      "State told by mark form first, hue second.",
-      "One family, Archivo, ranked by width and weight; JetBrains Mono only for code, paths and key caps.",
-      "Cut-paper corners (2 to 14px), one hairline weight, no shadows.",
+      "Traditional colours only: sumi ground, indigo dyes for surfaces, akane the one accent, three state colours that travel with a mark.",
+      "Every control in a container; one akane primary per region.",
+      "The horizon under the one current thing, and nowhere else.",
+      "One family, Archivo: semi-expanded SemiBold for display and titles, normal width for reading; JetBrains Mono for code and keys.",
+      "Soft corners (6 to 24), one 1dp edge weight, no shadows.",
       "Sharp Material icons."
     ],
     "rules": [
       {
-        "name": "The Spot Ink Rule",
-        "body": "Every colour is one of the inks or the stock. New colours enter `Riso` and the schemes, never as a raw value in a screen. Screens read `MaterialTheme.colorScheme` or `AkaTheme.inks`.",
+        "name": "The Named Dye Rule",
+        "body": "Every colour is an `Iro` traditional colour or a scheme role built from one. New colours enter `Iro` and both schemes, never as a raw value in a screen. Screens read `MaterialTheme.colorScheme` or `AkaTheme.inks`.",
         "section": "colors"
       },
       {
-        "name": "The One Red Rule",
-        "body": "Red is the action ink. One plated primary per screen region; secondary actions are outlined or text buttons.",
+        "name": "The One Akane Rule",
+        "body": "Akane is the action ink: one primary fill per screen region (and the latched keys, the on switch). Everything else is a kon container.",
         "section": "colors"
       },
       {
         "name": "The Form-First Rule",
-        "body": "A state ink (green, yellow, pink) never appears without its mark form or its words. Hue is the second signal.",
+        "body": "Wakatake, yamabuki and tsutsuji never appear without their mark form or their words. Hue is the second signal.",
         "section": "colors"
       },
       {
         "name": "The Night Rule",
-        "body": "The chrome never outshines the terminal text: fields stay dark blue, grain stays at 0.07 alpha or less, and no ink is used as a large bright fill except the one red primary.",
+        "body": "The chrome never outshines the terminal text: surfaces stay in the indigo dyes, shu stays inside the horizon, and the only large bright fill is the one akane primary.",
         "section": "colors"
       },
       {
         "name": "The One Family Rule",
-        "body": "Archivo by width and weight, JetBrains Mono for code. No third face.",
+        "body": "Archivo by width and weight, JetBrains Mono for code and keys. No third face.",
         "section": "typography"
       },
       {
@@ -763,37 +643,33 @@
         "section": "typography"
       },
       {
-        "name": "The Printed Depth Rule",
-        "body": "Lift a surface by changing its ink or tint step, never with a shadow or a glow.",
+        "name": "The Dye Ladder Rule",
+        "body": "Lift a surface by stepping it one dye up the indigo ladder and giving it an edge, never with a shadow or tonal tint.",
         "section": "elevation"
       },
       {
-        "name": "The Two-Plate Rule",
-        "body": "Misregistration belongs to primary and selected elements only: plate A peeks top-start and plate B bottom-end, both 2px, and they register (offset 0) on press with the `register` spring. It is never a decorative offset shadow on cards, rows or text.",
-        "section": "elevation"
-      },
-      {
-        "name": "The Grain Rule",
-        "body": "Grain (fixed seed, 0.07 alpha dark, 0.06 light) prints only on large fields, under the content, never behind small body text.",
+        "name": "The One Horizon Rule",
+        "body": "The horizon marks the one current thing in its context: the wordmark, the current session, the selected option or segment, the Ubuntu card once ready, the welcome terminal window. Never on idle siblings or as decoration.",
         "section": "elevation"
       }
     ],
     "dos": [
-      "Do take every colour from `MaterialTheme.colorScheme` or `AkaTheme.inks`; new inks go into `Riso` first.",
-      "Do print the main action of a region as one PlatedButton and keep the rest outlined or text.",
-      "Do pair every state ink with a StatusMark form or plain words.",
-      "Do group settings and actions as full-width AkaRows under SectionLabels on the stock.",
-      "Do use the shape scale (2, 4, 6, 10, 14) and `FluxSpacing`, never raw dp for padding.",
-      "Do honour reduced motion: plates and wordmark cut to register, switches snap.",
+      "Do take every colour from `MaterialTheme.colorScheme` or `AkaTheme.inks`; new colours go into `Iro` and both schemes first.",
+      "Do put every control in a container: AkaRow, akaTile, AkaButton SECONDARY, never bare text.",
+      "Do give each region one akane AkaButton PRIMARY and make the rest SECONDARY.",
+      "Do mark the one current choice with akaSelection, so its horizon rises.",
+      "Do pair every state colour with a StatusMark form or plain words.",
+      "Do use the shape scale (6, 10, 12, 16, 24) and `FluxSpacing`, never raw dp for padding.",
+      "Do honour reduced motion: the horizon shows risen, switches snap.",
       "Do set code, paths and commands in JetBrains Mono (`CodeStyle`)."
     ],
     "donts": [
-      "Don't use drop shadows, glows, gradients, glass or tonal elevation tints.",
-      "Don't put the misregistered offset on anything that is not a primary or selected element.",
-      "Don't set Federal (#3255A4) as text on stock; use Federal Tint.",
-      "Don't use white text on Red, Yellow or Pink fills; use Ink Text.",
+      "Don't use drop shadows, glows outside the horizon, glass or tonal elevation tints.",
+      "Don't draw the horizon on more than the one current thing, or use shu anywhere but the horizon and the icon's sun.",
+      "Don't set ai (#4A66AA) or hanada as text; use shiro-ai.",
+      "Don't put dark text on akane; it takes white. Yamabuki and tsutsuji take Ink Text.",
       "Don't add uppercase tracked kickers or eyebrows above headings.",
-      "Don't print grain behind small body text or across the terminal.",
+      "Don't tint the terminal or the extra-keys bar; both stay pure black.",
       "Don't use Rounded or Outlined icon sets, emoji or text glyphs as icons outside key caps.",
       "Don't turn on dynamic (wallpaper) colour."
     ]

@@ -6,7 +6,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.border
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -51,11 +53,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -102,20 +102,21 @@ import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeSwitch
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.components.aka.AkaWordmark
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
-import com.ivarna.fluxlinux.ui.components.aka.PlateKind
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButtonKind
+import com.ivarna.fluxlinux.ui.theme.TerminalBackground
+import com.ivarna.fluxlinux.ui.theme.horizon
 import com.ivarna.fluxlinux.ui.components.aka.StatusMark
 import com.ivarna.fluxlinux.ui.components.aka.markColor
-import com.ivarna.fluxlinux.ui.components.aka.plateInks
-import com.ivarna.fluxlinux.ui.components.aka.plateOffset
+import com.ivarna.fluxlinux.ui.components.aka.selectionInks
+import com.ivarna.fluxlinux.ui.components.aka.akaSelection
+import com.ivarna.fluxlinux.ui.components.aka.akaTile
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
 import com.ivarna.fluxlinux.ui.theme.AkaTheme
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.DesktopThemeSwatchDark
 import com.ivarna.fluxlinux.ui.theme.DesktopThemeSwatchLight
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
-import com.ivarna.fluxlinux.ui.theme.misregistered
-import com.ivarna.fluxlinux.ui.theme.risoGrain
 import kotlin.concurrent.thread
 
 private enum class OnboardStep { Welcome, Consent, HostSetup, Options, Storage, Running, Done }
@@ -367,7 +368,7 @@ internal fun WelcomePage(onNext: () -> Unit) {
 
         Spacer(Modifier.height(FluxSpacing.lg))
 
-        PlatedButton(
+        AkaButton(
             text = stringResource(R.string.onboarding_get_started),
             onClick = onNext,
             modifier = Modifier.fillMaxWidth()
@@ -377,7 +378,7 @@ internal fun WelcomePage(onNext: () -> Unit) {
 
 /**
  * The wordmark at display scale, shrunk only as far as needed to fit the width (narrow phones,
- * large font scales), so it never wraps or clips. A little room is kept for the under plate.
+ * large font scales), so it never wraps or clips. A little room is kept for the horizon's glow.
  */
 @Composable
 private fun FittedWordmark(animate: Boolean, modifier: Modifier = Modifier) {
@@ -387,7 +388,7 @@ private fun FittedWordmark(animate: Boolean, modifier: Modifier = Modifier) {
         val maxPx = constraints.maxWidth
         val style = remember(maxPx, base, measurer) {
             val width = measurer.measure("AkaTerminal", base, maxLines = 1, softWrap = false).size.width
-            // 0.94: room for the under plate's rest offset and the ExtraBold overhang.
+            // 0.94: a little room at the end so the last letter never clips.
             val fit = maxPx * 0.94f
             if (width <= 0 || width <= fit) {
                 base
@@ -400,7 +401,7 @@ private fun FittedWordmark(animate: Boolean, modifier: Modifier = Modifier) {
     }
 }
 
-/** A plausible terminal excerpt, printed on the Federal shell field: the product, shown. */
+/** A plausible terminal excerpt in a terminal window: the product, shown. */
 private sealed interface ExcerptLine {
     data class Command(val text: String) : ExcerptLine
     data class Output(val text: String) : ExcerptLine
@@ -421,8 +422,8 @@ private val WelcomeExcerpt = listOf(
 @Composable
 private fun WelcomeTerminalPlate() {
     val inks = AkaTheme.inks
-    val promptStyle = SpanStyle(color = inks.onShellFieldMuted)
-    PrintedPlate(
+    val promptStyle = SpanStyle(color = inks.onChromeMuted)
+    TerminalWindow(
         // An illustration: TalkBack skips it, the feature rows below say the same in words.
         modifier = Modifier.clearAndSetSemantics {}
     ) {
@@ -434,16 +435,16 @@ private fun WelcomeTerminalPlate() {
                 }
                 is ExcerptLine.Output -> buildAnnotatedString { append(line.text) }
             }
-            Text(text = text, style = CodeStyle, color = inks.onShellField, maxLines = 1, softWrap = false)
+            Text(text = text, style = CodeStyle, color = inks.onChrome, maxLines = 1, softWrap = false)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = EXCERPT_PROMPT, style = CodeStyle, color = inks.onShellFieldMuted, maxLines = 1, softWrap = false)
+            Text(text = EXCERPT_PROMPT, style = CodeStyle, color = inks.onChromeMuted, maxLines = 1, softWrap = false)
             ExcerptCursor()
         }
     }
 }
 
-/** The waiting block cursor, in the red plate's ink (it reads on both shell fields). */
+/** The waiting block cursor, in akane. */
 @Composable
 private fun ExcerptCursor() {
     Box(
@@ -492,7 +493,7 @@ private fun ConsentPage(onBack: () -> Unit, onNext: () -> Unit) {
         onBack = onBack,
         actions = {
             StepActionsRow(onBack) {
-                PlatedButton(
+                AkaButton(
                     text = stringResource(R.string.onboarding_continue),
                     enabled = downloadConsent,
                     onClick = onNext,
@@ -626,7 +627,7 @@ private fun HostSetupPage(onBack: () -> Unit, onNext: () -> Unit) {
         onBack = onBack,
         actions = {
             StepActionsRow(onBack) {
-                PlatedButton(
+                AkaButton(
                     text = stringResource(if (bootstrapDone) R.string.onboarding_continue else R.string.aka_onb_host_initialize),
                     enabled = !initializing,
                     onClick = {
@@ -754,7 +755,7 @@ internal fun OptionsPage(
         onBack = onBack,
         actions = {
             StepActionsRow(onBack) {
-                PlatedButton(
+                AkaButton(
                     text = stringResource(R.string.onboarding_install),
                     enabled = downloadConsent,
                     icon = Icons.Sharp.Download,
@@ -861,10 +862,10 @@ private fun DesktopOptionRow(checked: Boolean, onCheckedChange: (Boolean) -> Uni
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .akaTile(MaterialTheme.shapes.medium)
             .heightIn(min = FluxSpacing.touch)
-            .clip(MaterialTheme.shapes.small)
             .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
-            .padding(vertical = FluxSpacing.sm),
+            .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(FluxSpacing.xxs)) {
@@ -921,7 +922,7 @@ internal fun RuntimeChoiceSection(
     }
 }
 
-/** One runtime: the selected one is printed as the plum overprint, the other rests on the stock. */
+/** One runtime, in its tile: the selected one konjō with its horizon risen. */
 @Composable
 private fun RuntimeOption(
     icon: ImageVector,
@@ -930,7 +931,7 @@ private fun RuntimeOption(
     selected: Boolean,
     onSelect: () -> Unit,
 ) {
-    SelectionPlate(selected = selected, onSelect = onSelect, modifier = Modifier.fillMaxWidth()) { muted ->
+    OptionTile(selected = selected, onSelect = onSelect, modifier = Modifier.fillMaxWidth()) { muted ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = icon,
@@ -944,7 +945,7 @@ private fun RuntimeOption(
                 Text(text = desc, style = MaterialTheme.typography.bodySmall, color = muted)
             }
             Spacer(Modifier.width(FluxSpacing.sm))
-            PlateRadio(selected = selected)
+            OptionRadio(selected = selected)
         }
     }
 }
@@ -958,7 +959,7 @@ private fun ThemeOption(
     onSelect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    SelectionPlate(selected = selected, onSelect = onSelect, modifier = modifier) { muted ->
+    OptionTile(selected = selected, onSelect = onSelect, modifier = modifier) { muted ->
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -973,7 +974,7 @@ private fun ThemeOption(
                         .background(if (isDark) DesktopThemeSwatchDark else DesktopThemeSwatchLight)
                         .border(FluxSpacing.xxs / 2, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
                 )
-                PlateRadio(selected = selected)
+                OptionRadio(selected = selected)
             }
             Spacer(Modifier.height(FluxSpacing.sm))
             Text(text = title, style = MaterialTheme.typography.titleSmall)
@@ -1019,7 +1020,7 @@ internal fun DonePage(
                 verticalArrangement = Arrangement.Center
             ) {
                 // The shell field with a prompt waiting: what "ready" looks like.
-                PrintedPlate {
+                TerminalWindow {
                     Image(
                         painter = painterResource(id = R.drawable.distro_ubuntu),
                         contentDescription = stringResource(R.string.onboarding_done_icon_desc),
@@ -1033,7 +1034,7 @@ internal fun DonePage(
                         Text(
                             text = EXCERPT_PROMPT,
                             style = CodeStyle,
-                            color = inks.onShellField,
+                            color = inks.onChrome,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -1077,7 +1078,7 @@ internal fun DonePage(
         Spacer(Modifier.height(FluxSpacing.lg))
 
         // Primary action: the terminal, the app's home.
-        PlatedButton(
+        AkaButton(
             text = stringResource(R.string.onboarding_done_open_terminal),
             icon = Icons.Sharp.Terminal,
             onClick = onTerminal,
@@ -1086,20 +1087,13 @@ internal fun DonePage(
 
         if (onDesktop != null) {
             Spacer(Modifier.height(FluxSpacing.md))
-            OutlinedButton(
+            AkaButton(
+                text = stringResource(R.string.onboarding_done_start_desktop),
+                icon = Icons.Sharp.DesktopWindows,
                 onClick = onDesktop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = FluxSpacing.touch),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Icon(Icons.Sharp.DesktopWindows, contentDescription = null, modifier = Modifier.size(FluxSpacing.lg + FluxSpacing.xxs))
-                Spacer(Modifier.width(FluxSpacing.sm))
-                Text(
-                    stringResource(R.string.onboarding_done_start_desktop),
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
+                kind = AkaButtonKind.SECONDARY,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -1256,7 +1250,7 @@ internal fun StorageAccessContent(
     }
 }
 
-/** Granted: Continue. Not yet: Grant access as the plate, Skip for now as a text button. */
+/** Granted: Continue. Not yet: Grant access as the primary, Skip for now as a secondary button. */
 @Composable
 private fun StorageActions(granted: Boolean, onGrant: () -> Unit, onContinue: () -> Unit) {
     Column(
@@ -1264,26 +1258,24 @@ private fun StorageActions(granted: Boolean, onGrant: () -> Unit, onContinue: ()
         verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
     ) {
         if (granted) {
-            PlatedButton(
+            AkaButton(
                 text = stringResource(R.string.onboarding_continue),
                 onClick = onContinue,
                 modifier = Modifier.fillMaxWidth()
             )
         } else {
-            PlatedButton(
+            AkaButton(
                 text = stringResource(R.string.onboarding_storage_grant),
                 icon = Icons.Sharp.LockOpen,
                 onClick = onGrant,
                 modifier = Modifier.fillMaxWidth()
             )
-            TextButton(
+            AkaButton(
+                text = stringResource(R.string.onboarding_storage_skip),
                 onClick = onContinue,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = FluxSpacing.touch)
-            ) {
-                Text(stringResource(R.string.onboarding_storage_skip), style = MaterialTheme.typography.labelLarge)
-            }
+                kind = AkaButtonKind.SECONDARY,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -1306,7 +1298,7 @@ private fun StorageLinkRow(path: String, description: String) {
 
 /**
  * A numbered setup step: header, scrolling body, bottom-anchored [actions] (Back as a text
- * button, the step's one primary action as a printed plate; see [StepActionsRow]).
+ * button, the step's one primary action as an akane button; see [StepActionsRow]).
  */
 @Composable
 private fun StepPage(
@@ -1337,7 +1329,7 @@ private fun StepPage(
     }
 }
 
-/** Back as a text button at the start, the step's primary plate filling the rest. */
+/** Back as a secondary button at the start, the step's primary button filling the rest. */
 @Composable
 private fun StepActionsRow(onBack: () -> Unit, primary: @Composable RowScope.() -> Unit) {
     Row(
@@ -1345,9 +1337,12 @@ private fun StepActionsRow(onBack: () -> Unit, primary: @Composable RowScope.() 
         horizontalArrangement = Arrangement.spacedBy(FluxSpacing.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextButton(onClick = onBack, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
-            Text(stringResource(R.string.aka_onb_back), style = MaterialTheme.typography.labelLarge)
-        }
+        AkaButton(
+            text = stringResource(R.string.aka_onb_back),
+            onClick = onBack,
+            kind = AkaButtonKind.SECONDARY,
+            contentPadding = PaddingValues(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+        )
         primary()
     }
 }
@@ -1384,7 +1379,7 @@ private fun StepHeader(
 
         Spacer(Modifier.height(FluxSpacing.xs))
 
-        // The step track: one printed segment per step, the words above say the same.
+        // The step track: one segment per step, the words above say the same.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1440,30 +1435,32 @@ private fun BulletLine(text: String) {
     }
 }
 
-/** A large printed field: Federal shell ink, riso grain, cut-paper corners. */
+/** A terminal window: the terminal's own black in a kachi frame, with the horizon under it. */
 @Composable
-private fun PrintedPlate(
+private fun TerminalWindow(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val inks = AkaTheme.inks
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
-            .background(AkaTheme.inks.shellField)
-            .risoGrain(AkaTheme.inks.grainAlpha)
+            .background(TerminalBackground)
+            .border(1.dp, inks.tileEdge, MaterialTheme.shapes.large)
+            .horizon(inks.horizon, inks.horizonGlow, inset = FluxSpacing.lg)
             .padding(FluxSpacing.lg),
         content = content
     )
 }
 
 /**
- * A selectable option. Selected: the plum overprint with its red and Federal plates resting
- * out of register, settling into register while pressed. Unselected: a row on the stock.
+ * A selectable option, always in its tile. Selected: konjō with the ai edge and its horizon
+ * risen; unselected: kon with the hanada edge.
  * [content] gets the matching muted ink for supporting text.
  */
 @Composable
-private fun SelectionPlate(
+private fun OptionTile(
     selected: Boolean,
     onSelect: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1472,18 +1469,13 @@ private fun SelectionPlate(
     val shape = MaterialTheme.shapes.medium
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val ink = plateInks(PlateKind.SELECTION)
-    val offset = plateOffset(registered = pressed)
+    val ink = selectionInks()
     val colors = MaterialTheme.colorScheme
     val contentColor = if (selected) ink.onFill else colors.onSurface
     val muted = if (selected) ink.onFill.copy(alpha = 0.82f) else colors.onSurfaceVariant
     Box(
         modifier = modifier
-            .then(
-                if (selected) Modifier.misregistered(shape, ink.fill, ink.plateA, ink.plateB) { offset }
-                else Modifier
-            )
-            .clip(shape)
+            .akaSelection(selected, pressed, shape)
             .selectable(
                 selected = selected,
                 interactionSource = interaction,
@@ -1498,9 +1490,9 @@ private fun SelectionPlate(
     }
 }
 
-/** The radio inside a [SelectionPlate]: decorative (the plate carries the semantics). */
+/** The radio inside a [OptionTile]: decorative (the tile carries the semantics). */
 @Composable
-private fun PlateRadio(selected: Boolean) {
+private fun OptionRadio(selected: Boolean) {
     RadioButton(
         selected = selected,
         onClick = null,
@@ -1522,8 +1514,7 @@ private fun FluxConsentCheckboxCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(colors.surfaceContainerLow)
+            .akaTile(MaterialTheme.shapes.medium, selected = consented)
             .toggleable(value = consented, role = Role.Checkbox, onValueChange = onConsentChange)
             .padding(start = FluxSpacing.xs, top = FluxSpacing.xs, end = FluxSpacing.lg, bottom = FluxSpacing.md),
         verticalAlignment = Alignment.Top

@@ -6,6 +6,8 @@ import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -100,6 +102,8 @@ import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeCard
 import com.ivarna.fluxlinux.ui.components.UbuntuRuntimeUi
 import com.ivarna.fluxlinux.ui.components.aka.AkaRow
+import com.ivarna.fluxlinux.ui.components.aka.LocalInTile
+import com.ivarna.fluxlinux.ui.components.aka.akaTile
 import com.ivarna.fluxlinux.ui.components.aka.AkaWordmark
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
 import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
@@ -118,7 +122,7 @@ private const val AUTHOR_URL = "https://github.com/akane599"
 private const val UPSTREAM_URL = "https://github.com/abhay-byte/fluxlinux"
 
 /**
- * Settings hub: full-width rows on the stock, grouped by section labels; each row opens a
+ * Settings hub: rows in their own tiles, grouped by section labels; each row opens a
  * detail page. About sits at the end: the mark, the wordmark, links and credits.
  */
 @OptIn(ExperimentalPermissionsApi::class)
@@ -444,11 +448,11 @@ private fun openUrl(context: Context, url: String) {
 
 // ─── Settings family building blocks ──────────────────────────────────────────
 // Shared by the Settings detail pages in this package (Terminal, X11, Audio, storage,
-// distro, legacy Termux, troubleshooting). Rows on the stock, grouped by SectionLabel;
+// distro, legacy Termux, troubleshooting). Rows in tiles, grouped by SectionLabel;
 // tonal blocks only for real groups (a readout, a log).
 
 /**
- * A Settings page: Material top app bar with back on the stock (a printed tint once the
+ * A Settings page: Material top app bar with back on the ground (a kachi tint once the
  * content scrolls under it) and, when [scroll] is true, a scrolling column for [content].
  * With [scroll] false the column fills the page and the caller scrolls (e.g. a LazyColumn).
  */
@@ -649,8 +653,8 @@ internal fun SettingsPageAttention(
 }
 
 /**
- * A tonal block for a real group (a readout with its own controls, a log). Content gets
- * the block's inner padding; rows inside should not add their own background.
+ * A tile for a real group (a readout with its own controls, a log). Content gets the block's
+ * inner padding; rows inside lie flat ([LocalInTile]).
  */
 @Composable
 internal fun SettingsPageBlock(
@@ -662,10 +666,11 @@ internal fun SettingsPageBlock(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)
-            .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.medium)
+            .akaTile(MaterialTheme.shapes.large)
             .padding(contentPadding),
-        content = content,
-    )
+    ) {
+        CompositionLocalProvider(LocalInTile provides true) { content() }
+    }
 }
 
 /** A state told by mark form and ink, then words: replaces the old all-caps badges. */
@@ -740,7 +745,7 @@ internal fun SettingsPageFigure(
     }
 }
 
-/** A secondary action: outlined, cut-paper corners, 48dp tall. */
+/** A secondary action: a kon container with the ai line (error ink when [danger]), 48dp tall. */
 @Composable
 internal fun SettingsPageSecondaryButton(
     text: String,
@@ -751,11 +756,20 @@ internal fun SettingsPageSecondaryButton(
     danger: Boolean = false,
 ) {
     val ink = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    val inks = AkaTheme.inks
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
         shape = MaterialTheme.shapes.small,
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = ink),
+        colors = ButtonDefaults.outlinedButtonColors(containerColor = inks.tile, contentColor = ink),
+        border = BorderStroke(
+            1.dp,
+            when {
+                !enabled -> inks.tileEdge
+                danger -> MaterialTheme.colorScheme.error
+                else -> inks.controlLine
+            },
+        ),
         modifier = modifier.heightIn(min = FluxSpacing.touch),
     ) {
         if (icon != null) {

@@ -2,73 +2,74 @@ package com.ivarna.fluxlinux.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ─── Riso inks ────────────────────────────────────────────────────────────────
-// AkaTerminal is printed, not rendered: a two-ink risograph sheet. Every colour is a spot
-// ink or the stock it is printed on. Red (aka) carries primary actions, Federal Blue is the
-// shell field (extra keys, drawer), their overprint marks selection, Yellow means "held /
-// look at this", Green means running, Fluorescent Pink means failed (always with a mark).
+// ─── Akane-iro · twilight ─────────────────────────────────────────────────────
+// AkaTerminal at dusk: 茜 akane (madder red, the "aka" in the name) is the last light on the
+// horizon over 藍 ai (indigo) night. Every colour carries its traditional Japanese name. The
+// ground is sumi black with an indigo cast; surfaces step up through the indigo dyes; akane is
+// the one accent, for primary actions and the horizon line; state inks (green, yellow, pink)
+// always come with a mark form.
 
-/** The spot inks, as printed on dark stock. Light-stock variants live in [LightInks]. */
-object Riso {
-    /**
-     * Dark stock: black paper (the user's choice on the phone: the blue-black stock read as
-     * blue/green). The inks print on it unchanged; surfaces step up in neutral greys.
-     */
-    val Stock = Color(0xFF000000)
-    /** Under the stock: the same black (kept as a name for wells and scrims). */
-    val StockDeep = Color(0xFF000000)
-    /** Light stock (light scheme ground). Cool white, never cream. */
-    val StockLight = Color(0xFFEFF1F5)
+/** The traditional colours, as dyed for the dark (night) scheme. Light (dawn) values live in [LightInks]. */
+object Iro {
+    /** 墨 sumi: the ground. Black with an indigo cast; the terminal itself is pure black. */
+    val Sumi = Color(0xFF05060B)
+    /** 褐色 kachi-iro: the darkest indigo, the chrome under the terminal (keys bar, drawer). */
+    val Kachi = Color(0xFF0B0F1E)
+    /** One dye up from kachi: grouped blocks, scrolled bars. */
+    val Kachi2 = Color(0xFF0F1528)
+    /** 紺 kon: a resting container (rows, key caps, secondary buttons). */
+    val Kon = Color(0xFF131B36)
+    /** 紺青 konjō: pressed and selected containers. */
+    val Konjo = Color(0xFF1B2852)
+    /** 縹 hanada: the quiet edge of a container (rows, cards). */
+    val Hanada = Color(0xFF2E4377)
+    /** 藍 ai: the control line (switch tracks, key caps, outlined buttons; ≥ 3:1 on sumi). */
+    val Ai = Color(0xFF4A66AA)
+    /** 白藍 shiro-ai: indigo that reads as text (labels, links, progress). */
+    val ShiroAi = Color(0xFFA3B8EC)
 
-    /** Federal Blue ink. */
-    val Federal = Color(0xFF3255A4)
-    /** Federal Blue laid down as a solid field on dark stock: the shell. */
-    val FederalField = Color(0xFF1B2A5C)
-    /** One printed tint up from the field: pressed keys, hovered rows. */
-    val FederalFieldHigh = Color(0xFF243670)
-    /** Federal ink tint that reads as text on dark stock. */
-    val FederalTint = Color(0xFFA9BCF2)
-    /** The one hairline: outlines, unchecked controls (≥ 3:1 on dark stock). */
-    val FederalLine = Color(0xFF5D78C4)
-    /** The hairline on light stock. */
-    val FederalLineDeep = Color(0xFF3F5AA8)
+    /** 茜 akane: the accent. Primary fills with white text (≥ 4.5:1), the horizon line. */
+    val Akane = Color(0xFFD2383F)
+    /** 深緋 kokiake: akane pressed. */
+    val Kokiake = Color(0xFF9E2A33)
+    /** 朱 shu: the bright middle of the horizon. */
+    val Shu = Color(0xFFEE6A2E)
+    /** 茜 on dawn paper: deepened for text and fills on the light scheme. */
+    val AkaneDeep = Color(0xFFB7282E)
+    /** Akane's dark well (primary containers). */
+    val AkaneWell = Color(0xFF3A1218)
 
-    /** Bright Red: aka, the brand ink. */
-    val Red = Color(0xFFF15060)
-    /** Red ink deepened for text and fills on light stock. */
-    val RedDeep = Color(0xFFC62E3F)
+    /** 若竹 wakatake: running / live. */
+    val Wakatake = Color(0xFF68BE8D)
+    /** 山吹 yamabuki: held / look at this. */
+    val Yamabuki = Color(0xFFF8B500)
+    /** 躑躅 tsutsuji: failed (always with a struck mark). */
+    val Tsutsuji = Color(0xFFE95295)
+    val TsutsujiDeep = Color(0xFFB4206A)
 
-    /** Red over Federal Blue: the overprint that marks selection. */
-    val Overprint = Color(0xFF4A2150)
+    /** 白練 shironeri: text on the night. */
+    val Shironeri = Color(0xFFEEF0F5)
+    /** 銀鼠 ginnezumi: secondary text (≥ 7:1 on sumi and on kon). */
+    val Ginnezumi = Color(0xFFA9B0C4)
+    /** Dark text on light fills (yamabuki, dawn paper). */
+    val InkText = Color(0xFF0B0F1E)
 
-    val Yellow = Color(0xFFFFE800)
-    val GreenTint = Color(0xFF3FD98A)
-    val Pink = Color(0xFFFF48B0)
-    val PinkDeep = Color(0xFFC2186B)
-
-    /** Cool bone: text on dark stock and on the shell field. */
-    val Bone = Color(0xFFE9ECF2)
-    /** Secondary text on dark stock (≥ 7:1 on [Stock]). */
-    val BoneMuted = Color(0xFFB4BCD3)
-    /** Secondary text on the Federal field (≥ 4.5:1 on [FederalField]). */
-    val BoneOnField = Color(0xFFC3CDEB)
-    /** Ink-black text on light stock and on Red / Yellow. */
-    val InkText = Color(0xFF14193A)
+    /** 白 dawn paper: the light scheme ground (cool, never cream). */
+    val Dawn = Color(0xFFF2F3F7)
 }
 
 /**
  * The terminal's own background: pure black (the user's choice), so the shell reads as a
- * screen on OLED rather than as tinted stock. The chrome around it keeps the stock.
+ * screen on OLED; the chrome around it is sumi and kachi.
  */
-val TerminalBackground = Riso.Stock
+val TerminalBackground = Color(0xFF000000)
 
 // ─── Legacy names ─────────────────────────────────────────────────────────────
-// Older screens still import these; they now resolve to the riso inks so nothing drifts
-// back to the old cream/neon look. New code reads MaterialTheme.colorScheme / AkaTheme.inks.
+// Older code still imports these; they resolve to the traditional colours so nothing drifts
+// back to an older look. New code reads MaterialTheme.colorScheme / AkaTheme.inks.
 
-val FluxAccentCyan = Riso.FederalTint
-val FluxAccentMagenta = Riso.Pink
-val FluxSwitchUncheckedTrack = Color(0xFF24262B)
+val FluxAccentCyan = Iro.ShiroAi
+val FluxAccentMagenta = Iro.Tsutsuji
 
 /** Swatches previewing the XFCE desktop themes in setup: content, not app chrome. */
 val DesktopThemeSwatchDark = Color(0xFF1E1E24)

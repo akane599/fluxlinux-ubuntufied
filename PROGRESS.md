@@ -2,24 +2,21 @@
 
 _State of ongoing work (Current effort), baselines, the append-only decision log, audit status and known issues._
 
-## Current effort: AkaTerminal rename + risograph redesign (on top of terminal-first)
+## Current effort: Akane-iro twilight redesign (on top of terminal-first)
 _Updated: 2026-11-05 · rewrite this section, don't append_
-- **Goal (user request):** an Exit action next to Hold wakelock; rename the app to AkaTerminal (package and launcher icon unchanged), remove the original author's name and images, akane599 as author, one small upstream credit; a complete redesign that satisfies /impeccable. Continues on `feat/terminal-first` (PR #2), no new branch.
-- **Done (local commits, not pushed):**
-  - `01ed6ae`: notification Exit (closes terminals, the desktop, the wakelock and the UI; `AppExit`).
-  - `c55b3d2`: rename to AkaTerminal; the upstream author's contact lines removed from scripts, store metadata and privacy policy. Download URLs (rootfs, assets) still point at upstream, by the user's choice.
-  - `1069821`: risograph redesign (direction in `.impeccable/surfaces/…ui.md`, PRODUCT.md); 961 unit tests, lint, assemble and screenshot validation pass.
-  - `404efab`: the finish review's 8 fixes (verdict ship); DESIGN.md + `.impeccable/design.json` written from the shipped code.
-  - Emulator captures for the finish review are in `.impeccable/review/` (akane-linux, pixel-api35 over Tailscale SSH; host binaries can't run there, so live-shell states come from previews).
+- **Goal (user request):** after the all-black riso build ("buttons look like text on a flat background"), redo the app from scratch in impeccable's other proposal, Akane-iro · twilight; everything black; every button distinguishable; a new launcher icon to match; Exit before Hold wakelock in the notification. Continues on `feat/terminal-first` (PR #2), no new branch.
+- **Done (pushed earlier):** notification Exit (`01ed6ae`), rename to AkaTerminal (`c55b3d2`), the riso build (`1069821`, `404efab`), black terminal and black stock (`1249a77`, `18fca12`).
+- **Done (this round, local):** `Iro` traditional-colour tokens, `AkaInks` (chrome, tile, tileEdge, controlLine, primary, horizon), soft shapes, Archivo semi-expanded display (expanded ExtraBold font removed), `Horizon.kt` (`AkaMotion.rise`, `Modifier.horizon`), `AkaButton`/`akaTile`/`akaSelection`, tiled `AkaRow`, kon key caps on a black bar, a kachi drawer whose current session's horizon rises as it opens, the new launcher icon (vectors + `scripts/render_launcher_icon.py` for the PNGs), notification Exit first. Direction contract rewritten; emulator captures in `.impeccable/review/akane/`.
 - **Next:**
-  - [ ] Check on the phone (signed release): the welcome wordmark print, plate registration on press, the notification Exit, the drawer with live sessions.
-  - [ ] Still unverified on the device from the terminal-first work: links open in the browser (also in Claude Code and Codex), the Paste key and More… menu, Hold wakelock (`dumpsys power | grep AkaTerminal`), an existing XFCE install's Start/Open/Stop and the add-on Installing row, a PRoot flux → akane migration from v2.1.8.
-  - [ ] Merge PR #1, then PR #2; release v2.2.0 (`.claude/rules/release.md`); its notes tell v2.1.x users to uninstall once (signing key changed).
-  - [ ] Store screenshots (`fastlane/…/phoneScreenshots`, featureGraphic) still show FluxLinux; replace them from real captures.
-  - [ ] Push and PR updates only with the user's approval.
-- **Open questions:** should the debug build also be signed with the user's key? The phone now has a release install, so a debug APK (needed for `run-as` diagnosis) can't be installed without wiping app data. Not asked yet.
+  - [x] Finish review (verdict: fix first; 7 of 8 fixes applied, the Sharp-icon arrows skipped because key caps are typographic by contract) and DESIGN.md rewrite; committed locally.
+  - [ ] Install a signed release on the phone when the user asks; check the drawer horizon, key caps and the icon on the real device.
+  - [ ] Secondary screens still use Material `OutlinedButton`/`TextButton` (stadium shape) in dialogs and some settings pages; move them to `AkaButton` if the user wants full consistency.
+  - [ ] Still unverified on the device from the terminal-first work: links open in the browser, the Paste key and More… menu, Hold wakelock, an existing XFCE install's Start/Open/Stop, a PRoot flux → akane migration from v2.1.8.
+  - [ ] Merge PR #1, then PR #2; release v2.2.0 (`.claude/rules/release.md`); store screenshots and featureGraphic still show the old look.
+- **Open questions:** should the debug build also be signed with the user's key (so `run-as` diagnosis works on the phone without wiping data)? Not asked yet.
 
 ## Baseline
+- 2026-11-05 (feat/terminal-first, Akane-iro): 961 unit tests, 0 failing; lint, assemble, screenshots valid; shell tests pass.
 - 2026-11-05 @ 1069821 (feat/terminal-first): 961 unit tests, 0 failing; lint, assemble, screenshots valid; shell tests pass.
 - 2026-11-05 @ 815e552 (feat/terminal-first): 954 unit tests, 0 failing; lint 0 errors; screenshots valid; shell tests pass (scripts unchanged since add617e).
 - 2026-10-19 @ 7f6e61d: `:app:assembleIvarnaDebug` ok, 402 unit tests (`:app:testIvarnaDebugUnitTest`), 2 failing (pre-existing, not ours):
@@ -73,13 +70,14 @@ _Updated: 2026-11-05 · rewrite this section, don't append_
 - 2026-11-05: screenshot previews load the fonts from `src/main/res/font` on disk in inspection mode (`usePreviewFontFiles`), because layoutlib in screenshot plugin alpha10 throws `Resources$NotFoundException` for font resources and renders blank text.
 - 2026-11-05: the terminal's own background is pure black #000000 (user's request after the first phone build: the blue-black stock read as blue/green behind the shell). Only the terminal and the status bar above a live session change; the chrome, drawer and extra-keys field keep the riso inks, and the red tones stay.
 - 2026-11-05: the whole app's dark stock is now black #000000 (user's request, right after the black terminal), and surfaces step up in neutral greys (#0F1012 → #2D2F35) instead of blue-black tints. The inks don't change: Red plates, the Federal shell field (extra keys, drawer, Ubuntu card), plum selection. With the stock equal to the terminal's black, the terminal-only status-bar swap was dropped.
+- 2026-11-05: the riso build is replaced by Akane-iro · twilight (user's choice after the all-black riso build made buttons read as text on a flat ground): traditional-colour tokens (`Iro`), sumi ground and a pure-black terminal and key bar, every control in a kon tile with a hanada/ai edge, akane as the one accent, and the horizon line (rises under the wordmark, the current session as the drawer opens, the selected option) as the signature. The launcher icon is redrawn for it (prompt › + akane sun on the horizon); notification actions are Exit, then Hold wakelock. A zero-width gradient in the horizon's first frame crashed the swiftshader emulator, so `horizon` draws nothing under 1px.
 
 ## Audit status
 | Area | Last run | Result | How |
 |---|---|---|---|
 | Repository audit | 2026-10-20 | 4 high, 23 medium, 33 low (AUDIT_REPORT.md) | `/full-repo-audit` |
 | Audit fixes | 2026-10-20 | 57 fixed, M14/L8 partial, L29 blocked; device-unverified | `/audit-remediate` |
-| UI / design | 2026-11-05 | risograph redesign; impeccable finish review: ship (8 fixes resolved); live-shell, drawer-with-sessions and light scheme only checked in previews | `/impeccable` + screenshot and emulator review |
+| UI / design | 2026-11-05 | Akane-iro twilight redesign (replaces riso); impeccable finish review: fix first, 7 of 8 fixes applied (typographic key glyphs kept by contract); welcome, onboarding, terminal empty state, Settings and the Ubuntu page checked on the emulator; live shell and drawer with sessions only in previews | `/impeccable` + screenshot and emulator review |
 | Lint | 2026-10-20 | 0 errors | `./gradlew :app:lintIvarnaDebug -q` |
 | Device QA | 2026-10-20 | SM-S938B (Android 17): v2.1.4 fresh install OK, customization in about 2.5 min, bundled Papirus-Dark passes the icon check; desktop start not checked | adb + debug run-as |
 

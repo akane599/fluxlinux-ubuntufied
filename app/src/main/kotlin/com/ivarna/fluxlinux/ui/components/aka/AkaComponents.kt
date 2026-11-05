@@ -1,9 +1,13 @@
 package com.ivarna.fluxlinux.ui.components.aka
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -24,12 +28,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,8 +46,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -56,71 +60,117 @@ import androidx.compose.ui.unit.dp
 import com.ivarna.fluxlinux.ui.theme.AkaMotion
 import com.ivarna.fluxlinux.ui.theme.AkaTheme
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
-import com.ivarna.fluxlinux.ui.theme.misregistered
+import com.ivarna.fluxlinux.ui.theme.horizon
 import com.ivarna.fluxlinux.ui.theme.rememberReducedMotion
 
-/** Which plates an element is printed with. */
-enum class PlateKind {
-    /** Primary action: Bright Red fill over a Federal second plate (the wordmark's pair). */
+/** What a button is for: the one main action of a region, or everything else. */
+enum class AkaButtonKind {
+    /** Akane fill, white text: one per screen region. */
     PRIMARY,
 
-    /** Selected / current item: plum overprint, red and Federal fringes. */
-    SELECTION,
+    /** A container in the night's dye with the ai control line: always reads as a button. */
+    SECONDARY,
 }
 
 /**
- * The signature move as a reusable state: the plates rest [AkaMotion.PlateOffset] out of
- * register and settle into register (one damped overshoot) while [registered] is true,
- * e.g. while the element is pressed.
+ * Every control sits in a container: [com.ivarna.fluxlinux.ui.theme.AkaInks.tile] at rest,
+ * `tilePressed` while [pressed] or [selected], edged by `tileEdge` (or the brighter
+ * `controlLine` when [selected] or a [control]). So a row, a key or a secondary button never
+ * reads as bare text on the ground.
  */
 @Composable
-fun plateOffset(registered: Boolean, rest: Dp = AkaMotion.PlateOffset): Dp {
-    val target = if (registered) 0.dp else rest
-    val offset by animateDpAsState(target, AkaMotion.register(), label = "plateOffset")
-    return offset
-}
-
-/** Fill, on-fill and the two fringe inks for [kind] in the current scheme. */
-@Composable
-fun plateInks(kind: PlateKind): PlateInks {
+fun Modifier.akaTile(
+    shape: Shape = MaterialTheme.shapes.medium,
+    pressed: Boolean = false,
+    selected: Boolean = false,
+    control: Boolean = false,
+): Modifier {
     val inks = AkaTheme.inks
-    return when (kind) {
-        PlateKind.PRIMARY -> PlateInks(inks.primaryFill, inks.onPrimaryFill, inks.primaryPlateA, inks.primaryPlateB)
-        PlateKind.SELECTION -> PlateInks(inks.selectionFill, inks.onSelectionFill, inks.selectionPlateA, inks.selectionPlateB)
-    }
+    val fill by animateColorAsState(
+        if (pressed || selected) inks.tilePressed else inks.tile,
+        AkaMotion.standard(AkaMotion.QUICK),
+        label = "tileFill",
+    )
+    val edge = if (selected || control) inks.controlLine else inks.tileEdge
+    return this
+        .clip(shape)
+        .background(fill)
+        .border(1.dp, edge, shape)
 }
 
-data class PlateInks(val fill: Color, val onFill: Color, val plateA: Color, val plateB: Color)
+/** Content on a selected container: the night's text, the container itself says "selected". */
+data class SelectionInks(val fill: Color, val onFill: Color)
+
+@Composable
+fun selectionInks(): SelectionInks = SelectionInks(AkaTheme.inks.tilePressed, MaterialTheme.colorScheme.onSurface)
 
 /**
- * The primary button: a printed plate that registers when pressed. Use one per screen
- * region for the main action; secondary actions stay Material OutlinedButton / TextButton.
+ * A choice among siblings (a segment, an option, the current session): a tile, and when
+ * [selected] the konjō container with the ai edge and the horizon rising along its bottom.
  */
 @Composable
-fun PlatedButton(
+fun Modifier.akaSelection(
+    selected: Boolean,
+    pressed: Boolean = false,
+    shape: Shape = MaterialTheme.shapes.medium,
+): Modifier {
+    val inks = AkaTheme.inks
+    val risen by animateFloatAsState(if (selected) 1f else 0f, AkaMotion.rise(), label = "selectionHorizon")
+    return this
+        .akaTile(shape, pressed = pressed, selected = selected)
+        .horizon(inks.horizon, inks.horizonGlow, risen = { risen })
+}
+
+/**
+ * A button. [AkaButtonKind.PRIMARY] is the akane fill that deepens to kokiake while pressed;
+ * [AkaButtonKind.SECONDARY] is a container with the ai control line. Disabled buttons keep
+ * a container in the darker kachi with the quiet hanada edge and dimmed content, so the
+ * shape of the action stays visible without reading as available.
+ */
+@Composable
+fun AkaButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     enabled: Boolean = true,
-    kind: PlateKind = PlateKind.PRIMARY,
+    kind: AkaButtonKind = AkaButtonKind.PRIMARY,
     contentPadding: PaddingValues = PaddingValues(horizontal = FluxSpacing.xl, vertical = FluxSpacing.md),
 ) {
     val shape = MaterialTheme.shapes.small
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val ink = plateInks(kind)
-    val offset = plateOffset(registered = pressed || !enabled)
-    // Disabled: an unprinted plate on the shell field (no fringes), not Material's grey.
     val inks = AkaTheme.inks
-    val fill = if (enabled) ink.fill else inks.shellField
-    val content = if (enabled) ink.onFill else inks.onShellFieldMuted.copy(alpha = 0.6f)
+    val primary = kind == AkaButtonKind.PRIMARY && enabled
+    val fill by animateColorAsState(
+        when {
+            primary && pressed -> inks.primaryPressed
+            primary -> inks.primaryFill
+            // Disabled sinks below a resting button: the chrome's darker dye, never a lighter one.
+            !enabled -> inks.chrome
+            pressed -> inks.tilePressed
+            else -> inks.tile
+        },
+        AkaMotion.standard(AkaMotion.QUICK),
+        label = "buttonFill",
+    )
+    val edge = when {
+        primary -> Color.Transparent
+        enabled -> inks.controlLine
+        else -> inks.tileEdge
+    }
+    val content = when {
+        primary -> inks.onPrimaryFill
+        enabled -> MaterialTheme.colorScheme.onSurface
+        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    }
 
     Box(
         modifier = modifier
             .defaultMinSize(minWidth = 64.dp, minHeight = FluxSpacing.touch)
-            .misregistered(shape, fill, ink.plateA, ink.plateB) { if (enabled) offset else 0.dp }
             .clip(shape)
+            .background(fill)
+            .border(1.dp, edge, shape)
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
@@ -239,57 +289,36 @@ fun markColor(state: MarkState): Color {
 }
 
 /**
- * The AkaTerminal wordmark, printed in two passes: a Federal plate under, the inks over
- * ("Aka" in red, "Terminal" in [restColor]). On first composition with [animate] the plates
- * slide in from opposite sides and register with one overshoot; they rest slightly out of
- * register, which is the mark.
+ * The AkaTerminal wordmark: "Aka" in akane, "Terminal" in [restColor], over a horizon line.
+ * With [animate] the horizon rises on first composition (the line grows out from the centre
+ * and its light lifts); reduced motion shows it risen.
  */
 @Composable
 fun AkaWordmark(
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.displaySmall,
     restColor: Color = MaterialTheme.colorScheme.onBackground,
-    underPlate: Color = AkaTheme.inks.selectionPlateB,
     animate: Boolean = false,
 ) {
     val reduced = rememberReducedMotion()
-    val start = if (animate && !reduced) 1f else 0f
-    val progress = remember { Animatable(start) }
-    if (start > 0f) {
-        LaunchedEffect(Unit) { progress.animateTo(0f, AkaMotion.register()) }
+    val start = if (animate && !reduced) 0f else 1f
+    val risen = remember { Animatable(start) }
+    if (start < 1f) {
+        LaunchedEffect(Unit) { risen.animateTo(1f, tween(AkaMotion.RISE, easing = AkaMotion.Decelerate)) }
     }
-    val red = MaterialTheme.colorScheme.primary
+    val inks = AkaTheme.inks
     val word = buildAnnotatedString {
-        withStyle(SpanStyle(color = red)) { append("Aka") }
+        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Aka") }
         withStyle(SpanStyle(color = restColor)) { append("Terminal") }
     }
-    // One node for accessibility: the two printed passes are one word.
-    Box(modifier = modifier.clearAndSetSemantics { contentDescription = "AkaTerminal" }) {
-        // Under plate: offset down-end, and further out while printing.
-        Text(
-            text = "AkaTerminal",
-            style = style,
-            color = underPlate,
-            maxLines = 1,
-            modifier = Modifier.graphicsLayer {
-                val rest = 1.5.dp.toPx()
-                val p = progress.value
-                translationX = rest + p * 14.dp.toPx()
-                translationY = rest + p * 6.dp.toPx()
-                alpha = 1f - p * 0.6f
-            },
-        )
-        Text(
-            text = word,
-            style = style,
-            maxLines = 1,
-            modifier = Modifier.graphicsLayer {
-                val p = progress.value
-                translationX = -p * 14.dp.toPx()
-                translationY = -p * 6.dp.toPx()
-                alpha = 1f - p
-            },
-        )
+    // One node for accessibility: the word and its horizon are one mark.
+    Box(
+        modifier = modifier
+            .clearAndSetSemantics { contentDescription = "AkaTerminal" }
+            .horizon(inks.horizon, inks.horizonGlow, risen = { risen.value })
+            .padding(bottom = FluxSpacing.sm),
+    ) {
+        Text(text = word, style = style, maxLines = 1)
     }
 }
 
@@ -305,7 +334,7 @@ fun SectionLabel(
         style = MaterialTheme.typography.labelLarge,
         color = color,
         modifier = modifier.padding(
-            start = FluxSpacing.lg,
+            start = FluxSpacing.lg + FluxSpacing.xs,
             end = FluxSpacing.lg,
             top = FluxSpacing.xl,
             bottom = FluxSpacing.sm,
@@ -314,9 +343,15 @@ fun SectionLabel(
 }
 
 /**
+ * True inside a container that already draws the tile (a settings block): rows in it lie
+ * flat instead of drawing a tile of their own.
+ */
+val LocalInTile = staticCompositionLocalOf { false }
+
+/**
  * A full-width list row: optional leading icon, title, supporting text and trailing slot.
- * The whole row is the touch target (≥ 56dp). Rows sit on the stock, grouped by
- * [SectionLabel]s, not inside cards.
+ * The whole row is the touch target (≥ 56dp) and sits in its own tile, inset from the screen
+ * edge, so every row reads as something to press. Inside a block ([LocalInTile]) it lies flat.
  */
 @Composable
 fun AkaRow(
@@ -331,11 +366,30 @@ fun AkaRow(
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val alpha = if (enabled) 1f else 0.38f
+    val inTile = LocalInTile.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (inTile) Modifier
+                else Modifier
+                    .padding(horizontal = FluxSpacing.lg, vertical = TileGap)
+                    .akaTile(MaterialTheme.shapes.medium, pressed = pressed)
+            )
+            .then(modifier)
             .heightIn(min = 56.dp)
-            .then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = LocalIndication.current,
+                        enabled = enabled,
+                        onClick = onClick,
+                    )
+                } else Modifier
+            )
             .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md)
             .graphicsLayer { this.alpha = alpha },
         verticalAlignment = Alignment.CenterVertically,
@@ -361,6 +415,5 @@ fun AkaRow(
     }
 }
 
-/** Shape helper for callers that print their own plates. */
-@Composable
-fun plateShape(): Shape = MaterialTheme.shapes.small
+/** Half the gap between two stacked tiles. */
+val TileGap: Dp = 3.dp

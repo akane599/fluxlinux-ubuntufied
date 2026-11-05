@@ -39,12 +39,10 @@ import androidx.compose.ui.unit.dp
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
-import com.ivarna.fluxlinux.ui.components.aka.PlateKind
 import com.ivarna.fluxlinux.ui.components.aka.StatusMark
-import com.ivarna.fluxlinux.ui.components.aka.plateInks
-import com.ivarna.fluxlinux.ui.components.aka.plateOffset
+import com.ivarna.fluxlinux.ui.components.aka.selectionInks
+import com.ivarna.fluxlinux.ui.components.aka.akaSelection
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
-import com.ivarna.fluxlinux.ui.theme.misregistered
 
 // Local sizes; spacing comes from FluxSpacing, radii from MaterialTheme.shapes.
 private val IconSize = 22.dp
@@ -65,7 +63,7 @@ data class UbuntuRuntimeUi(
 /**
  * Settings row choosing which Ubuntu install the app drives: PRoot (any phone) or chroot
  * (root). Stateless: the screen probes root and applies the switch. The chosen runtime is
- * printed as the selection overprint, its plates resting out of register until touched.
+ * the konjō tile with its horizon risen.
  */
 @Composable
 fun UbuntuRuntimeCard(
@@ -103,13 +101,11 @@ fun UbuntuRuntimeCard(
 
             Spacer(Modifier.height(FluxSpacing.md))
             Row(
+                // The segments sit straight on the card: each is its own tile, no track around them.
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.small)
-                    .background(colors.surfaceContainerHighest)
-                    .padding(FluxSpacing.xs)
                     .selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
+                horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
             ) {
                 RuntimeSegment(
                     label = stringResource(R.string.settings_runtime_proot),
@@ -170,19 +166,11 @@ private fun RuntimeSegment(
     val shape = MaterialTheme.shapes.extraSmall
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val ink = plateInks(PlateKind.SELECTION)
-    val offset = plateOffset(registered = pressed)
+    val ink = selectionInks()
     Row(
         modifier = modifier
             .heightIn(min = FluxSpacing.touch)
-            .then(
-                if (selected) {
-                    Modifier.misregistered(shape, ink.fill, ink.plateA, ink.plateB) { offset }
-                } else {
-                    Modifier
-                }
-            )
-            .clip(shape)
+            .akaSelection(selected, pressed, shape)
             .selectable(
                 selected = selected,
                 enabled = enabled,

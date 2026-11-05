@@ -10,8 +10,8 @@ any non-resource file inside `res/`, so they can't sit next to the image.
 | Rasters | Origin |
 |---|---|
 | `drawable/distro_*.webp` | Inherited from upstream FluxLinux (GPLv3). Each is the logo of a Linux distribution and a trademark of that project, used only to identify the distribution. |
-| `drawable/ic_logo.webp`, `drawable/ic_launcher_monochrome.png`, `mipmap-*/ic_launcher.png` | Inherited from upstream FluxLinux (GPLv3). This is the launcher art, kept unchanged at the user's request. |
+| `mipmap-*/ic_launcher.png`, `fastlane/…/images/icon.png` | Not generated: rasterised by `scripts/render_launcher_icon.py` from the AkaTerminal launcher geometry drawn for this app (the vector drawables `ic_launcher_background.xml` / `ic_launcher_foreground.xml` are the source). |
 | `termux-x11/src/main/res/mipmap-*/*.png` | From the termux-x11 project (GPLv3), vendored with the display module. |
 
-None of these rasters were generated. The app's own mark (`drawable/ic_aka_mark.xml`) is a
-vector drawn for AkaTerminal.
+None of these rasters were generated. The app's own marks (`drawable/ic_launcher_*.xml`,
+`drawable/ic_aka_mark.xml`, `drawable/ic_stat_flux.xml`) are vectors drawn for AkaTerminal.

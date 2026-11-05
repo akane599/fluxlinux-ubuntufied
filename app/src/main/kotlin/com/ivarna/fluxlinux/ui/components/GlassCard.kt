@@ -39,9 +39,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ivarna.fluxlinux.R
 import com.ivarna.fluxlinux.core.data.Distro
-import com.ivarna.fluxlinux.ui.components.aka.PlateKind
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
-import com.ivarna.fluxlinux.ui.components.aka.plateInks
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
+import com.ivarna.fluxlinux.ui.components.aka.selectionInks
+import com.ivarna.fluxlinux.ui.components.aka.akaSelection
+import com.ivarna.fluxlinux.ui.components.aka.akaTile
 import com.ivarna.fluxlinux.ui.theme.AkaTheme
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
 
@@ -56,7 +57,7 @@ fun Distro.isChrootCard(): Boolean =
 /**
  * A legacy distro entry (other distros are not in the main UI any more): logo, name with its
  * method / state chips, and its actions, as rows on the stock. Start and Install are the
- * printed primary plate; the rest are tonal.
+ * akane primary; the rest are secondary containers.
  */
 @Composable
 fun DistroCard(
@@ -184,7 +185,7 @@ fun DistroCard(
         Spacer(modifier = Modifier.height(FluxSpacing.sm))
 
         if (!isInstalled) {
-            PlatedButton(
+            AkaButton(
                 text = stringResource(
                     when {
                         isCurrentlyInstalling -> R.string.ubuntu_aka_card_progress
@@ -239,7 +240,7 @@ fun DistroCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
             ) {
-                PlatedButton(
+                AkaButton(
                     text = stringResource(
                         if (!startEnabled && isChroot) R.string.ubuntu_aka_card_need_root else R.string.ubuntu_aka_card_start
                     ),
@@ -266,7 +267,7 @@ fun DistroCard(
 
 enum class MethodTab { PROOT, CHROOT }
 
-/** PRoot / Chroot selector; the selected side is printed as the selection overprint. */
+/** PRoot / Chroot selector; the selected side is the konjō tile with its horizon. */
 @Composable
 fun MethodTabs(
     selected: MethodTab,
@@ -314,7 +315,7 @@ private fun MethodTabSegment(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val ink = plateInks(PlateKind.SELECTION)
+    val ink = selectionInks()
     val labelColor = when {
         selected -> ink.onFill
         !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
@@ -323,8 +324,7 @@ private fun MethodTabSegment(
     Box(
         modifier = modifier
             .heightIn(min = FluxSpacing.touch)
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(if (selected) ink.fill else Color.Transparent)
+            .akaSelection(selected, shape = MaterialTheme.shapes.extraSmall)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -401,8 +401,8 @@ internal fun CompactAction(
 }
 
 /**
- * A settings group: a flat tonal block on the stock (no border, no shadow). Kept under its
- * old name for the screens that still use it; new rows use `aka.AkaRow` under a `SectionLabel`.
+ * A settings group: a card in the tile dyes (kon fill, hanada edge). Kept under its old name
+ * for the screens that still use it; new rows use `aka.AkaRow` under a `SectionLabel`.
  */
 @Composable
 fun GlassSettingCard(
@@ -414,8 +414,7 @@ fun GlassSettingCard(
     val shape = MaterialTheme.shapes.large
     Box(
         modifier = modifier
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .akaTile(shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
     ) {
         content()

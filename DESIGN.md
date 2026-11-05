@@ -1,67 +1,53 @@
 ---
 name: AkaTerminal
-description: Ubuntu on Android, terminal first, printed as a two-ink risograph sheet.
+description: Ubuntu on Android, terminal first, at dusk: akane light on the horizon over indigo night.
 colors:
-  stock: "#000000"
-  stock-deep: "#000000"
-  surface-container-low: "#0F1012"
-  surface-container: "#151619"
-  surface-container-high: "#1C1D21"
-  surface-container-highest: "#24262B"
-  surface-bright: "#2D2F35"
-  outline-variant: "#2A2C33"
-  federal: "#3255A4"
-  federal-field: "#1B2A5C"
-  federal-field-high: "#243670"
-  federal-tint: "#A9BCF2"
-  federal-line: "#5D78C4"
-  red: "#F15060"
-  red-deep: "#C62E3F"
-  overprint: "#4A2150"
-  on-overprint-container: "#FFD9DD"
-  yellow: "#FFE800"
-  tertiary-container: "#3D3A12"
-  green-tint: "#3FD98A"
-  pink: "#FF48B0"
-  pink-deep: "#C2186B"
-  error-container: "#55123F"
-  on-error-container: "#FFD6EA"
-  bone: "#E9ECF2"
-  bone-muted: "#B4BCD3"
-  bone-on-field: "#C3CDEB"
-  ink-text: "#14193A"
-  stock-light: "#EFF1F5"
-  federal-line-deep: "#3F5AA8"
-  federal-field-light: "#2A4A94"
+  sumi: "#05060B"
+  terminal-black: "#000000"
+  kachi: "#0B0F1E"
+  kachi-2: "#0F1528"
+  kon: "#131B36"
+  konjo: "#1B2852"
+  hanada: "#2E4377"
+  ai: "#4A66AA"
+  shiro-ai: "#A3B8EC"
+  akane: "#D2383F"
+  kokiake: "#9E2A33"
+  shu: "#EE6A2E"
+  akane-well: "#3A1218"
+  on-akane: "#FFFFFF"
+  wakatake: "#68BE8D"
+  yamabuki: "#F8B500"
+  tsutsuji: "#E95295"
+  shironeri: "#EEF0F5"
+  ginnezumi: "#A9B0C4"
+  ink-text: "#0B0F1E"
+  dawn: "#F2F3F7"
+  akane-deep: "#B7282E"
+  tsutsuji-deep: "#B4206A"
 typography:
   display-large:
-    fontFamily: "Archivo Expanded, Archivo, sans-serif"
+    fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "44px"
-    fontWeight: 800
+    fontWeight: 600
     lineHeight: "48px"
     letterSpacing: "-1px"
   display-small:
-    fontFamily: "Archivo Expanded, Archivo, sans-serif"
+    fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "30px"
-    fontWeight: 800
+    fontWeight: 600
     lineHeight: "36px"
     letterSpacing: "-0.5px"
-  headline-large:
-    fontFamily: "Archivo Expanded, Archivo, sans-serif"
-    fontSize: "27px"
-    fontWeight: 800
-    lineHeight: "33px"
-    letterSpacing: "-0.4px"
   headline-medium:
-    fontFamily: "Archivo Expanded, Archivo, sans-serif"
+    fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "23px"
-    fontWeight: 800
+    fontWeight: 600
     lineHeight: "29px"
     letterSpacing: "-0.3px"
   headline-small:
-    fontFamily: "Archivo Expanded, Archivo, sans-serif"
+    fontFamily: "Archivo SemiExpanded, Archivo, sans-serif"
     fontSize: "20px"
-    fontWeight: 800
+    fontWeight: 600
     lineHeight: "26px"
     letterSpacing: "-0.2px"
   title-large:
@@ -124,14 +110,15 @@ typography:
     fontWeight: 400
     lineHeight: "19px"
 rounded:
-  extra-small: "2px"
-  small: "4px"
-  medium: "6px"
-  large: "10px"
-  extra-large: "14px"
+  extra-small: "6px"
+  small: "10px"
+  medium: "12px"
+  large: "16px"
+  extra-large: "24px"
 spacing:
   xxs: "2px"
   xs: "4px"
+  tile-gap: "3px"
   sm: "8px"
   md: "12px"
   lg: "16px"
@@ -139,233 +126,248 @@ spacing:
   xxl: "32px"
   touch: "48px"
 components:
-  plated-button-primary:
-    backgroundColor: "{colors.red}"
-    textColor: "{colors.ink-text}"
+  button-primary:
+    backgroundColor: "{colors.akane}"
+    textColor: "{colors.on-akane}"
     typography: "{typography.label-large}"
     rounded: "{rounded.small}"
     padding: "12px 24px"
     height: "48px"
-  plated-button-disabled:
-    backgroundColor: "{colors.federal-field}"
-    textColor: "{colors.bone-on-field}"
+  button-primary-pressed:
+    backgroundColor: "{colors.kokiake}"
+    textColor: "{colors.on-akane}"
+  button-secondary:
+    backgroundColor: "{colors.kon}"
+    textColor: "{colors.shironeri}"
+    typography: "{typography.label-large}"
     rounded: "{rounded.small}"
     padding: "12px 24px"
     height: "48px"
-  selection-plate:
-    backgroundColor: "{colors.overprint}"
-    textColor: "{colors.bone}"
-    typography: "{typography.title-small}"
+  button-secondary-pressed:
+    backgroundColor: "{colors.konjo}"
+    textColor: "{colors.shironeri}"
+  button-danger:
+    backgroundColor: "{colors.tsutsuji}"
+    textColor: "{colors.ink-text}"
+    typography: "{typography.label-large}"
     rounded: "{rounded.small}"
-    height: "56px"
-  key-cap:
-    backgroundColor: "{colors.federal-field}"
-    textColor: "{colors.bone}"
-    typography: "{typography.label-medium}"
-    rounded: "{rounded.extra-small}"
     height: "48px"
-  key-cap-pressed:
-    backgroundColor: "{colors.federal-field-high}"
-    textColor: "{colors.bone}"
-  key-cap-latched:
-    backgroundColor: "{colors.overprint}"
-    textColor: "{colors.bone}"
-    rounded: "{rounded.extra-small}"
   list-row:
-    backgroundColor: "{colors.stock}"
-    textColor: "{colors.bone}"
+    backgroundColor: "{colors.kon}"
+    textColor: "{colors.shironeri}"
     typography: "{typography.title-small}"
+    rounded: "{rounded.medium}"
     padding: "12px 16px"
     height: "56px"
-  section-label:
-    textColor: "{colors.federal-tint}"
-    typography: "{typography.label-large}"
-    padding: "24px 16px 8px 16px"
-  printed-field:
-    backgroundColor: "{colors.federal-field}"
-    textColor: "{colors.bone}"
+  list-row-pressed:
+    backgroundColor: "{colors.konjo}"
+  selection:
+    backgroundColor: "{colors.konjo}"
+    textColor: "{colors.shironeri}"
+    rounded: "{rounded.medium}"
+  card:
+    backgroundColor: "{colors.kon}"
+    textColor: "{colors.shironeri}"
     rounded: "{rounded.large}"
     padding: "16px"
+  section-label:
+    textColor: "{colors.shiro-ai}"
+    typography: "{typography.label-large}"
+    padding: "24px 16px 8px 20px"
+  key-cap:
+    backgroundColor: "{colors.kon}"
+    textColor: "{colors.shironeri}"
+    typography: "{typography.label-medium}"
+    rounded: "{rounded.extra-small}"
+  key-cap-pressed:
+    backgroundColor: "{colors.konjo}"
+  key-cap-latched:
+    backgroundColor: "{colors.akane}"
+    textColor: "{colors.on-akane}"
+    rounded: "{rounded.extra-small}"
   switch-on:
-    backgroundColor: "{colors.red}"
-    textColor: "{colors.ink-text}"
+    backgroundColor: "{colors.akane}"
+    textColor: "{colors.on-akane}"
     rounded: "{rounded.small}"
     width: "52px"
     height: "32px"
   switch-off:
-    backgroundColor: "{colors.surface-container-highest}"
-    textColor: "{colors.federal-line}"
+    backgroundColor: "{colors.kon}"
+    textColor: "{colors.ai}"
     rounded: "{rounded.small}"
     width: "52px"
     height: "32px"
-  button-danger:
-    backgroundColor: "{colors.pink}"
-    textColor: "{colors.ink-text}"
-    typography: "{typography.label-large}"
-    rounded: "{rounded.small}"
-    height: "48px"
-  button-text:
-    textColor: "{colors.red}"
-    typography: "{typography.label-large}"
-    height: "48px"
+  drawer-sheet:
+    backgroundColor: "{colors.kachi}"
+    textColor: "{colors.shironeri}"
+    rounded: "{rounded.extra-large}"
+    width: "300px"
 ---
 
 # Design System: AkaTerminal
 
 ## Overview
 
-**Creative North Star: "The Two-Ink Zine"**
+**Creative North Star: "Akane at Dusk"**
 
-AkaTerminal is printed, not rendered. Every colour on screen is a risograph spot ink or the stock it is printed on: a black stock (black paper, the user's choice), a Federal Blue field for the shell, Bright Red (aka) for the one primary action, and the plum overprint where red lands on blue to mark what is selected. Hierarchy comes from tone and ink, not from light and shadow. The terminal sits full bleed on pure black (the user's choice: on OLED the shell should read as a screen, not tinted paper); the chrome around it stays on the stock.
+AkaTerminal is the last light of the day over indigo night. 茜 akane, the madder red in the name, is the one accent and the horizon; the terminal is the night sky; the chrome around it steps up through the traditional indigo dyes. Every colour is a named Japanese traditional colour (`Iro`), and the app is black: the terminal and the extra-keys bar sit on pure black, every other screen on 墨 sumi, a black with an indigo cast.
 
-The density is that of a tool used one-handed at night for long sessions. Rows are full width on the stock and grouped by small labels, not boxed in cards. Large printed fields (the drawer header, the Ubuntu status sheet, onboarding plates) carry a faint fixed-seed grain; nothing else does. The one signature motion is misregistration that registers: primary and selected elements rest with their second plate 2dp out of register, and a press settles the plates together with one damped overshoot. Reduced motion cuts instantly.
+The density is a tool used one-handed at night for long sessions. Nothing reads as loose text on the ground: every row, key, session, switch and secondary action sits in its own container (a tile in 紺 kon, edged in 縹 hanada or 藍 ai), and the one akane fill per region is the next step. The signature is the horizon: a 2dp line along the bottom of the one current thing, akane at its ends and 朱 shu at its brightest point, with sunset light fading up from it. It grows out from the centre and lifts with no overshoot. Reduced motion shows it risen.
 
-The system is Material 3 underneath (drawer, dialogs, radio buttons, progress, snackbars, system Back) restyled with the inks, a cut-paper shape scale and one type family. It ships dark only; the light scheme (cool white stock, deepened inks) is kept in the tokens so a later switch stays cheap. Dynamic (wallpaper) colour is off: the inks are fixed.
+Material 3 is underneath (drawer, dialogs, radio buttons, progress, snackbars, system Back) restyled with the dyes, a soft corner scale and one type family. The app forces the dark (night) scheme; the light (dawn) scheme, cool paper with akane deepened, is kept in `Theme.kt` so a later switch stays cheap. Dynamic (wallpaper) colour is off.
 
 **Key Characteristics:**
-- Spot inks on dark stock; no greys, no gradients, no glass.
-- One primary ink (Red) and one selection ink (overprint plum), both printed as misregistered plates.
-- State told by mark form first, hue second.
-- One family, Archivo, ranked by width and weight; JetBrains Mono only for code, paths and key caps.
-- Cut-paper corners (2 to 14px), one hairline weight, no shadows.
+- Traditional colours only: sumi ground, indigo dyes for surfaces, akane the one accent, three state colours that travel with a mark.
+- Every control in a container; one akane primary per region.
+- The horizon under the one current thing, and nowhere else.
+- One family, Archivo: semi-expanded SemiBold for display and titles, normal width for reading; JetBrains Mono for code and keys.
+- Soft corners (6 to 24), one 1dp edge weight, no shadows.
 - Sharp Material icons.
 
 ## Colors
 
-A two-ink riso sheet: black stock, Federal Blue fields, Bright Red for action, and three state inks that always travel with a drawn mark.
+Night indigo stepped by dye, one madder accent, and state colours that never appear without a mark form.
 
 ### Primary
-- **Bright Red, aka** (`red`): the brand ink. Primary action fills (PlatedButton, New session, switch-on track), the "Aka" half of the wordmark, text buttons and links. Text on it is Ink Text, never white.
-- **Deep Red** (`red-deep`): Red deepened for text and fills on light stock; inverse primary on dark.
-- **Overprint Plum** (`overprint`): Red over Federal Blue. The selection fill: the active session row, latched modifier keys, the selected option in onboarding and install, and the body of the app mark. Also the dark primary container.
+- **茜 Akane** (`akane`): primary fills (AkaButton PRIMARY, New session, latched modifier keys, switch-on track), "Aka" in the wordmark, and the horizon line. Text on it is white (`on-akane`, 4.5:1 or better).
+- **深緋 Kokiake** (`kokiake`): akane while pressed; inverse primary.
+- **朱 Shu** (`shu`): only the brightest point of the horizon and its glow, and the sun in the launcher icon. Never a fill or text.
+- **Akane Well** (`akane-well`): the dark primary container.
 
 ### Secondary
-- **Federal Blue** (`federal`): the ink itself. Used as the second plate (bottom-end fringe) of every plated element, the wordmark's under-plate, and the mark's blue plate. Never as text on stock: it reads under 4.5:1.
-- **Federal Field** (`federal-field`): Federal laid down as a solid field. The extra-keys bar, the session drawer, printed sheets, the disabled (unprinted) plate. Also the secondary container.
-- **Federal Field High** (`federal-field-high`): one printed tint up from the field. Pressed key caps, the off switch track on the field.
-- **Federal Tint** (`federal-tint`): Federal as text on dark stock. Section labels, secondary accent text, the working mark.
-- **Federal Line** (`federal-line`): the one hairline. Outlines, unchecked controls, the off switch (3:1 or better on stock).
+- **紺 Kon** (`kon`): the resting container. Rows, cards, key caps, secondary buttons, the off switch track (`AkaInks.tile`).
+- **紺青 Konjō** (`konjo`): pressed and selected containers (`tilePressed`); the secondary container.
+- **縹 Hanada** (`hanada`): a container's quiet edge (`tileEdge`), and outline-variant dividers.
+- **藍 Ai** (`ai`): the control line (`controlLine`, 3:1 or better on sumi): selected tiles, secondary buttons, the off switch's edge and thumb, pressed keys.
+- **白藍 Shiro-ai** (`shiro-ai`): indigo that reads as text. Section labels, links, progress, the working mark (Material `secondary`).
 
 ### Tertiary
-- **Riso Yellow** (`yellow`): held / look at this. The wakelock's held mark and attention states. Not a fill for buttons.
-- **Green Tint** (`green-tint`): running. Live sessions and a running Ubuntu or desktop, always as a filled-disc mark.
-- **Fluorescent Pink** (`pink`): failed. Error text, the struck-ring mark and the destructive button fill. Never alone: a mark or words always carry the meaning too.
+- **若竹 Wakatake** (`wakatake`): running. Live sessions, a running Ubuntu or desktop; always a filled disc.
+- **山吹 Yamabuki** (`yamabuki`): held / look at this. The wakelock's half disc, attention icons (Material `tertiary`).
+- **躑躅 Tsutsuji** (`tsutsuji`): failed. The struck ring, error text, the destructive button fill (Material `error`).
 
 ### Neutral
-- **Dark Stock** (`stock`): the ground of every screen except the terminal itself, which is pure black (`TerminalBackground`).
-- **Deep Stock** (`stock-deep`): one step under the stock: the terminal well, scrims, lowest container.
-- **Neutral grey tints** (`surface-container-low` through `surface-bright`): surfaces stepping up in tone for dialogs, menus and sheets.
-- **Outline Variant** (`outline-variant`): quiet dividers on stock.
-- **Cool Bone** (`bone`): body and title text on stock and on the Federal field.
-- **Bone Muted** (`bone-muted`): supporting text on stock (7:1 or better).
-- **Bone on Field** (`bone-on-field`): supporting text on the Federal field, idle marks there (4.5:1 or better).
-- **Ink Text** (`ink-text`): text on Red, Yellow and Pink fills, and body text on light stock.
-- **Light Stock** (`stock-light`), **Federal Line Deep** (`federal-line-deep`), **Light Federal Field** (`federal-field-light`): the light scheme's ground, hairline and shell field.
+- **墨 Sumi** (`sumi`): the ground of every screen except the terminal.
+- **Terminal Black** (`terminal-black`): the terminal and the extra-keys bar (`TerminalBackground`), and the lowest container.
+- **褐色 Kachi** (`kachi`): the chrome: the drawer sheet (`AkaInks.chrome`), surface-container-low. **Kachi 2** (`kachi-2`) is one dye up: surface-container.
+- **白練 Shironeri** (`shironeri`): text on the night.
+- **銀鼠 Ginnezumi** (`ginnezumi`): secondary text and idle marks (7:1 or better on sumi and kon).
+- **Ink Text** (`ink-text`): dark text on light fills (yamabuki, tsutsuji, dawn paper).
+- **Dawn** (`dawn`), **Akane Deep** (`akane-deep`), **Tsutsuji Deep** (`tsutsuji-deep`): the light scheme's ground, primary and error.
 
 ### Named Rules
-**The Spot Ink Rule.** Every colour is one of the inks or the stock. New colours enter `Riso` and the schemes, never as a raw value in a screen. Screens read `MaterialTheme.colorScheme` or `AkaTheme.inks`.
+**The Named Dye Rule.** Every colour is an `Iro` traditional colour or a scheme role built from one. New colours enter `Iro` and both schemes, never as a raw value in a screen. Screens read `MaterialTheme.colorScheme` or `AkaTheme.inks`.
 
-**The One Red Rule.** Red is the action ink. One plated primary per screen region; secondary actions are outlined or text buttons.
+**The One Akane Rule.** Akane is the action ink: one primary fill per screen region (and the latched keys, the on switch). Everything else is a kon container.
 
-**The Form-First Rule.** A state ink (green, yellow, pink) never appears without its mark form or its words. Hue is the second signal.
+**The Form-First Rule.** Wakatake, yamabuki and tsutsuji never appear without their mark form or their words. Hue is the second signal.
 
-**The Night Rule.** The chrome never outshines the terminal text: fields stay dark blue, grain stays at 0.07 alpha or less, and no ink is used as a large bright fill except the one red primary.
+**The Night Rule.** The chrome never outshines the terminal text: surfaces stay in the indigo dyes, shu stays inside the horizon, and the only large bright fill is the one akane primary.
 
 ## Typography
 
-**Display Font:** Archivo Expanded ExtraBold (with Archivo, sans-serif)
-**Title Font:** Archivo SemiExpanded SemiBold
+**Display Font:** Archivo SemiExpanded SemiBold (with Archivo, sans-serif)
 **Body Font:** Archivo Regular, Medium, SemiBold (normal width)
 **Label/Mono Font:** JetBrains Mono Regular and SemiBold
 
-**Character:** one grotesque ranked like a zine's type case: the expanded heavy cut shouts the wordmark and page heads, the semi-expanded cut sets titles, the normal width does the reading. The mono face is reserved for what the shell owns.
+**Character:** one grotesque, calm rather than shouted at night: the semi-expanded SemiBold cut carries the wordmark, heads and titles; the normal width does the reading and the labels. The mono face is reserved for what the shell owns.
 
-Sizes are in sp (the frontmatter writes them as px, 1px = 1sp). The ramp steps at about 1.2, and display tracking tightens as size grows.
+Sizes are sp (written as px, 1px = 1sp). The ramp steps at about 1.2; display tracking tightens as size grows. Display medium (36/42, -0.7) and headline large (27/33, -0.4) exist in `Type.kt` between the steps listed.
 
 ### Hierarchy
-- **Display** (800, 30 to 44, line 36 to 48, tracking -0.5 to -1): the AkaTerminal wordmark and the onboarding welcome only.
-- **Headline** (800, 20 to 27, line 26 to 33): page heads and printed-sheet heads ("Ubuntu 26.04", "Ubuntu terminal").
-- **Title** (SemiExpanded 600 at 16 to 20; normal-width 600 at 14): dialog titles and top bars; title-small is every row title.
-- **Body** (400, 12 to 16, line 17 to 24): explanations and row supporting text (body-small is the most used role).
-- **Label** (600 at 12 to 14, 500 at 11; sentence case): buttons, section labels, chips and key caps.
-- **Code** (JetBrains Mono 400, 13, line 19): commands, paths, version strings; single-glyph key caps use the mono face at title-medium.
+- **Display** (SemiExpanded 600, 30 to 44, line 36 to 48): the wordmark on onboarding.
+- **Headline** (SemiExpanded 600, 20 to 27): page heads and card heads ("Ubuntu 26.04"); headline-medium is the drawer wordmark.
+- **Title** (SemiExpanded 600 at 16 to 20; normal width 600 at 14): top bars and dialog titles; title-small is every row title and the selected session.
+- **Body** (400, 12 to 16): explanations and supporting text (body-small is the most used role).
+- **Label** (600 at 12 to 14, 500 at 11; sentence case): buttons, section labels, drawer actions.
+- **Code** (JetBrains Mono 400, 13, line 19): commands, paths, versions. Key caps use the mono face too (title-medium for single glyphs, label sizes for words).
 
 ### Named Rules
-**The One Family Rule.** Archivo by width and weight, JetBrains Mono for code. No third face.
+**The One Family Rule.** Archivo by width and weight, JetBrains Mono for code and keys. No third face.
 
 **The Sentence Case Rule.** Labels and section heads are sentence case at their role's tracking. No uppercase tracked labels above headings.
 
 ## Layout
 
-Single column, full width, phone first. Screens pad from the edge at 16 (`lg`), with 24 (`xl`) on drawer and sheet headers. Content is grouped by section labels (24 above, 8 below) and full-width rows of 56 minimum height, not by cards. The spacing scale is `FluxSpacing` (2, 4, 8, 12, 16, 24, 32); 8, 16 and 12 carry most of the rhythm. Every touch target is 48 or more (`touch`), including key caps at phone width.
+Single column, full width, phone first. Screens pad 16 (`lg`) from the edge; tiles stack with 3 (`tile-gap`) above and below each, so 6 between neighbours. Groups sit under section labels (24 above, 8 below, 20 start). Rows are 56 minimum, drawer rows 52, and every touch target is 48 or more. The spacing scale is `FluxSpacing` (2, 4, 8, 12, 16, 24, 32); 8, 12 and 16 carry most of the rhythm. Layouts hold at font scale 1.3; the drawer wordmark caps its own scale at 1.15.
 
-The terminal is full bleed on black; the extra-keys field sits under it at the bottom, two scrolling rows with fixed utility columns (drawer at the left, Paste at the right). The drawer is a left Federal sheet. Layouts must hold at font scale 1.3 without clipping.
+The terminal is full bleed on black. The extra-keys bar sits under it on the same black: two rows of key caps with 3 gaps, plus a third F-key row when Fn is on, scrolling together between two fixed utility columns (drawer at the left, Paste at the right, each one key wide and the full bar tall). The drawer is a left kachi sheet up to 300 wide, 12 side padding. Key caps are 44 tall (Termux density, so the terminal keeps its height); the 3 gaps and the full-height utility columns keep neighbours apart. This is the one deliberate exception to the 48 target.
 
 ## Elevation & Depth
 
-Flat. There are no drop shadows and Material's tonal elevation tint is disabled (`surfaceTint` equals the ground). Depth comes from printing: the stock, a neutral grey tint step for dialogs and menus, and the solid Federal field for the shell. The only offset form is the misregistered second plate, which is ink, not light.
+Flat. No drop shadows, and Material's tonal elevation tint is off (`surfaceTint` equals the ground). Depth is the dye ladder: terminal black, sumi, kachi, kachi 2, kon, konjō, each container closed by a 1dp edge. The only light in the system is the horizon's glow, which belongs to the current thing.
+
+### Shadow Vocabulary
+None. The horizon (see Components) is the one gradient and is not a shadow.
 
 ### Named Rules
-**The Printed Depth Rule.** Lift a surface by changing its ink or tint step, never with a shadow or a glow.
+**The Dye Ladder Rule.** Lift a surface by stepping it one dye up the indigo ladder and giving it an edge, never with a shadow or tonal tint.
 
-**The Two-Plate Rule.** Misregistration belongs to primary and selected elements only: plate A peeks top-start and plate B bottom-end, both 2px, and they register (offset 0) on press with the `register` spring. It is never a decorative offset shadow on cards, rows or text.
-
-**The Grain Rule.** Grain (fixed seed, 0.07 alpha dark, 0.06 light) prints only on large fields, under the content, never behind small body text.
+**The One Horizon Rule.** The horizon marks the one current thing in its context: the wordmark, the current session, the selected option or segment, the Ubuntu card once ready, the welcome terminal window. Never on idle siblings or as decoration.
 
 ## Shapes
 
-Cut paper: corners are trimmed, not pillowed, and radius encodes hierarchy. Key caps, chips and the switch thumb take 2 (`extra-small`); buttons, rows, plates and the switch track 4 (`small`); small containers 6 (`medium`); printed sheets and onboarding plates 10 (`large`); the drawer sheet and large dialogs 14 (`extra-large`). Material's stadium shapes are replaced, including the switch. One hairline weight (1).
+Soft, not pillowed: folded washi rather than cut card. Radius encodes hierarchy: key caps, chips and the switch thumb 6 (`extra-small`); buttons, segments and the switch track 10 (`small`); rows and tiles 12 (`medium`); cards and settings blocks 16 (`large`); sheets and large dialogs 24 (`extra-large`). The drawer is square where it meets the screen edge and 24 at its free edge. No stadium shapes, including the switch. One edge weight (1); the horizon is 2.
 
 ## Components
 
-### Buttons
-- **Primary (PlatedButton):** a printed plate that registers when pressed. Red fill, Ink Text label (label-large), 4 corners, 12 by 24 padding, 48 minimum height, optional 18 leading Sharp icon. The Federal plate rests 2 out of register bottom-end; press settles it with one overshoot.
-- **Disabled:** an unprinted plate: the Federal field with no fringes and Bone on Field text at 60%, not Material grey.
-- **Secondary:** Material OutlinedButton (Federal Line hairline) and TextButton (Red label).
-- **Destructive:** a filled button in Fluorescent Pink with Ink Text, 4 corners, 48 minimum height, used for explicit destructive actions in Settings.
+### Buttons (AkaButton)
+- **Shape:** soft corners (10, `small`), 48 minimum height, 64 minimum width, 12 by 24 padding, optional 18 leading Sharp icon with an 8 gap, label-large.
+- **Primary:** akane fill, white label, no edge; kokiake while pressed (120ms, standard easing). One per region.
+- **Secondary:** kon fill with the 1 ai edge and shironeri label; konjō while pressed. Always reads as a button, never as text.
+- **Disabled:** keeps its container (kon, hanada edge) and dims the label to ginnezumi at 60%, so the action's shape stays visible.
+- **Destructive:** a Material Button in tsutsuji with Ink Text, 10 corners, 48 minimum, for explicit destructive actions in Settings.
 
-### Selection plate
-The selected or current item (active session row, latched modifier, chosen setup option): overprint plum fill, Bone text, red fringe top-start and Federal fringe bottom-end, registering on press. Unselected siblings sit flat on their ground.
+### Tiles and selection (akaTile, akaSelection)
+- **Tile:** kon fill, 1 hanada edge (ai when it is a `control` or selected), konjō while pressed or selected, fill animating over 120ms.
+- **Selection:** a choice among siblings (segment, setup option, current session): the selected one is konjō with the ai edge and its horizon rising (`rise` spring); unselected siblings are resting tiles. The segmented PRoot/Chroot selector adds a check icon to the selected side.
 
 ### Lists (AkaRow, SectionLabel)
-- **Row:** full width on the stock, 56 minimum, 12 by 16 padding, optional 22 Sharp icon in Bone Muted, title-small title, body-small supporting text, trailing slot (chevron, switch, mark). The whole row is the target. Disabled at 38% alpha.
-- **Section label:** label-large in Federal Tint, sentence case, 24 above and 8 below.
+- **Row:** its own tile inset 16 from the edge, 56 minimum, 12 by 16 padding, optional 22 Sharp icon in ginnezumi, title-small title, body-small supporting text, trailing slot (chevron, switch, mark). The whole row is the target. Disabled at 38% alpha. Inside a block (`LocalInTile`) rows lie flat.
+- **Section label:** label-large in shiro-ai, sentence case.
 
-### Printed field (sheets)
-The Ubuntu status sheet and onboarding plates: Federal field, 10 corners, 16 padding, grain under the content, headline-medium head, state mark plus words, one plated primary inside.
+### Cards / Containers
+- **Corner Style:** 16 (`large`).
+- **Background:** kon tile with the hanada edge; settings blocks pad 16 and hold flat rows.
+- **Shadow Strategy:** none (see Elevation & Depth).
+- **Signature card:** the Ubuntu card: a large tile with a headline-medium head, state mark plus words, one akane primary inside, and its horizon rising once Ubuntu is ready.
 
 ### Switch (FluxSwitch)
-Squared track 52 by 32 at 4 corners with a 1 hairline; squared thumb at 2 corners. On: Red track, Ink Text thumb 22 at the end. Off: surface-container-highest track, Federal Line border and a 16 thumb; on the Federal field the off track takes Federal Field High. Thumb slides with the `settle` spring; reduced motion snaps.
+Track 52 by 32 at 10 corners with a 1 edge; square-ish thumb at 6 corners, inset 5. On: akane track and edge, 22 white thumb at the end. Off: kon track, ai edge, 16 ai thumb. Track colour over 220ms; thumb size and position on the `settle` spring; reduced motion snaps. Disabled at 38% alpha. With no `onCheckedChange` the row owns the toggle and its semantics.
 
 ### Status mark (StatusMark)
-A drawn 10 mark: filled disc (running, Green Tint), open ring (idle), dashed turning ring (working, Federal Tint, 1.4s per turn, still under reduced motion), half disc (held, Yellow), struck ring (failed, Pink). On the Federal field marks take the full-strength spot inks.
+A drawn 10 mark: filled disc (running, wakatake), open ring (idle, ginnezumi), dashed turning ring (working, shiro-ai, 1.4s per turn, still under reduced motion), half disc (held, yamabuki), struck ring (failed, tsutsuji). Stroke is a fifth of the size, 1.5 minimum.
 
 ### Extra keys
-Key caps on the Federal field: flat at rest (no fill), one tint up while pressed, 2 corners. Word keys in label-medium; single glyph keys (arrows, symbols) in the mono face at title-medium, as on a physical keyboard. Latched modifiers are the selection plate.
+Key caps on the black bar: each a kon tile at 6 corners with the hanada edge and a shironeri label; konjō with the ai edge while pressed. Every label is in the mono face: word keys at label-medium (label-small in narrow cells under 44), both at zero tracking; single glyphs at title-medium. A latched modifier (CTRL, ALT, SHFT, Fn) is the akane fill with white text, kokiake while pressed; a locked one adds a 14 by 2 bar under its label. The utility keys carry Sharp Menu and ContentPaste icons.
 
 ### Navigation
-The session drawer is a left Federal sheet: grain-printed wordmark header closed by a translucent Federal Tint hairline, session rows with marks, New session as a red plate, the Hold wakelock switch, then Ubuntu page, Files and Settings rows. Top bars are flat on stock with a title in headline or title type and Sharp icons.
+The session drawer: a kachi sheet; the header is the headline-medium wordmark over its static horizon, a "Sessions" title-small in ginnezumi below it, closed by a hanada divider. Sessions are 52 tiles with a 10 mark in the 24 icon column; the current one is the selection (title-small, shironeri) whose horizon rises as the drawer opens, the rest body-medium in ginnezumi. Then New session as the sheet's one akane button (with a ▾ shell menu), the Extra keys and Hold wakelock switch tiles (the held wakelock swaps its icon for the half disc), then Ubuntu page, Files and Settings tiles. Top bars are flat on sumi with Sharp icons.
 
 ### Wordmark and mark
-**AkaWordmark** prints in two passes: a Federal under-plate 1.5 down-end, "Aka" in Red and "Terminal" in Bone over it. On first launch the passes slide in from opposite sides and register with the `register` spring (640ms print budget); they rest slightly out of register. The app mark (`ic_aka_mark`) is the same three inks: red and Federal plates under an overprint plate with a bone prompt.
+**AkaWordmark** sets "Aka" in akane and "Terminal" in shironeri over the horizon, 8 below the text. On first launch the horizon rises over 720ms (`RISE`, decelerate easing); elsewhere it is shown risen. The app mark and launcher icon are a shell prompt with the akane sun on the horizon where the cursor would be, over a sumi-to-konjō twilight sky with akane light; the shu-to-akane sun gradient and the horizon line are the only gradients in the icon. Monochrome and status-bar icons are single white shapes. Geometry is shared with `scripts/render_launcher_icon.py`.
+
+### Motion
+Durations: 120 quick, 220 standard, 360 emphasized, 720 rise. Easing: standard `cubic-bezier(0.2, 0, 0, 1)`, decelerate `cubic-bezier(0.05, 0.7, 0.1, 1)`. Springs: `rise` (no bounce, stiffness 180, about 400ms) for the horizon, `settle` (no bounce, stiffness 520) for thumbs and sheets. Nothing overshoots.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** take every colour from `MaterialTheme.colorScheme` or `AkaTheme.inks`; new inks go into `Riso` first.
-- **Do** print the main action of a region as one PlatedButton and keep the rest outlined or text.
-- **Do** pair every state ink with a StatusMark form or plain words.
-- **Do** group settings and actions as full-width AkaRows under SectionLabels on the stock.
-- **Do** use the shape scale (2, 4, 6, 10, 14) and `FluxSpacing`, never raw dp for padding.
-- **Do** honour reduced motion: plates and wordmark cut to register, switches snap.
+- **Do** take every colour from `MaterialTheme.colorScheme` or `AkaTheme.inks`; new colours go into `Iro` and both schemes first.
+- **Do** put every control in a container: AkaRow, akaTile, AkaButton SECONDARY, never bare text.
+- **Do** give each region one akane AkaButton PRIMARY and make the rest SECONDARY.
+- **Do** mark the one current choice with akaSelection, so its horizon rises.
+- **Do** pair every state colour with a StatusMark form or plain words.
+- **Do** use the shape scale (6, 10, 12, 16, 24) and `FluxSpacing`, never raw dp for padding.
+- **Do** honour reduced motion: the horizon shows risen, switches snap.
 - **Do** set code, paths and commands in JetBrains Mono (`CodeStyle`).
 
 ### Don't:
-- **Don't** use drop shadows, glows, gradients, glass or tonal elevation tints.
-- **Don't** put the misregistered offset on anything that is not a primary or selected element.
-- **Don't** set Federal (#3255A4) as text on stock; use Federal Tint.
-- **Don't** use white text on Red, Yellow or Pink fills; use Ink Text.
+- **Don't** use drop shadows, glows outside the horizon, glass or tonal elevation tints.
+- **Don't** draw the horizon on more than the one current thing, or use shu anywhere but the horizon and the icon's sun.
+- **Don't** set ai (#4A66AA) or hanada as text; use shiro-ai.
+- **Don't** put dark text on akane; it takes white. Yamabuki and tsutsuji take Ink Text.
 - **Don't** add uppercase tracked kickers or eyebrows above headings.
-- **Don't** print grain behind small body text or across the terminal.
+- **Don't** tint the terminal or the extra-keys bar; both stay pure black.
 - **Don't** use Rounded or Outlined icon sets, emoji or text glyphs as icons outside key caps.
 - **Don't** turn on dynamic (wallpaper) colour.

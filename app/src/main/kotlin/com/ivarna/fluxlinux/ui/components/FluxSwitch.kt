@@ -34,15 +34,13 @@ private val ThumbInset = 5.dp
 private val Hairline = 1.dp
 
 /**
- * The app's switch, cut from paper rather than Material's stadium: a squared track (the
- * small corner) with a squared thumb. On = red track, ink-black thumb pushed to the end;
- * off = an outlined track in the Federal hairline with a smaller thumb. The thumb slides with
- * the settle spring; reduced motion snaps.
+ * The app's switch: a soft-cornered track (the small corner) with a soft square thumb rather
+ * than Material's stadium. On = akane track, white thumb pushed to the end; off = a kon track
+ * edged with the ai control line and a smaller ai thumb. The thumb slides with the settle
+ * spring; reduced motion snaps.
  *
  * With [onCheckedChange] null the switch is only the visual and the row it sits in owns the
- * toggle and its semantics (Settings rows, the drawer). [onShellField] is for switches on the
- * Federal Blue shell, where the off track takes the field's own tint so it doesn't read as a
- * hole.
+ * toggle and its semantics (Settings rows, the drawer).
  */
 @Composable
 fun FluxSwitch(
@@ -50,32 +48,21 @@ fun FluxSwitch(
     onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    onShellField: Boolean = false,
 ) {
-    val scheme = MaterialTheme.colorScheme
     val inks = AkaTheme.inks
     val shapes = MaterialTheme.shapes
     val reduced = rememberReducedMotion()
 
     val trackColor by animateColorAsState(
         targetValue = when {
-            checked -> scheme.primary
-            onShellField -> inks.shellFieldHigh
-            else -> scheme.surfaceContainerHighest
+            checked -> inks.primaryFill
+            else -> inks.tile
         },
         animationSpec = if (reduced) snap() else AkaMotion.standard(),
         label = "switchTrack",
     )
-    val borderColor = when {
-        checked -> scheme.primary
-        onShellField -> inks.onShellFieldMuted
-        else -> scheme.outline
-    }
-    val thumbColor = when {
-        checked -> scheme.onPrimary
-        onShellField -> inks.onShellFieldMuted
-        else -> scheme.outline
-    }
+    val borderColor = if (checked) inks.primaryFill else inks.controlLine
+    val thumbColor = if (checked) inks.onPrimaryFill else inks.controlLine
     val thumbSize by animateDpAsState(
         targetValue = if (checked) ThumbOn else ThumbOff,
         animationSpec = if (reduced) snap() else AkaMotion.settle(),

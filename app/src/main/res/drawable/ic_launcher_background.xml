@@ -1,5 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#1A1C1E" />
-</shape>
+<!-- AkaTerminal launcher background: the twilight sky, sumi at the top deepening to konjō at
+     the horizon, with the akane sun's light around it. Drawn for this app; keep in sync with
+     scripts/render_launcher_icon.py (which rasterises the legacy mipmaps and store icon). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="0"
+                android:endX="0" android:endY="108">
+                <item android:offset="0" android:color="#FF070A16" />
+                <item android:offset="0.62" android:color="#FF1B2852" />
+                <item android:offset="1" android:color="#FF0B0F1E" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="64" android:centerY="68"
+                android:gradientRadius="36">
+                <item android:offset="0" android:color="#73D2383F" />
+                <item android:offset="0.5" android:color="#1CD2383F" />
+                <item android:offset="1" android:color="#00D2383F" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

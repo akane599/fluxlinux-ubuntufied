@@ -28,7 +28,7 @@ import com.ivarna.fluxlinux.core.data.DistroRepository
 import com.ivarna.fluxlinux.core.proot.ProotInfoStore
 import com.ivarna.fluxlinux.core.proot.ProotSettingsModel
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
 import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
@@ -138,7 +138,7 @@ fun ProotStorageDetailScreen(
         SettingsStoragePaths(label = "Container path", paths = listOf(containerPath ?: ""))
 
         if (!isUniversal && !sizeUi.installed && onNavigateToInstall != null) {
-            PlatedButton(
+            AkaButton(
                 text = "Install PRoot distro",
                 onClick = { onNavigateToInstall() },
                 modifier = Modifier

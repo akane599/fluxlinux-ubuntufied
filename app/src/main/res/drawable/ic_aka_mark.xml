@@ -1,14 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- AkaTerminal mark: a prompt printed on two misregistered plates (red top-start,
-     Federal Blue bottom-end, their plum overprint in the middle). Authored for this app. -->
+<!-- AkaTerminal mark (in-app: About, the terminal's empty state): the launcher icon as a
+     rounded tile. Drawn for this app. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="96dp"
     android:height="96dp"
-    android:viewportWidth="96"
-    android:viewportHeight="96">
-    <path android:fillColor="#FF3255A4" android:pathData="M20,18h62a2,2 0 0 1 2,2v62a2,2 0 0 1 -2,2h-62a2,2 0 0 1 -2,-2v-62a2,2 0 0 1 2,-2z" />
-    <path android:fillColor="#FFF15060" android:pathData="M14,12h62a2,2 0 0 1 2,2v62a2,2 0 0 1 -2,2h-62a2,2 0 0 1 -2,-2v-62a2,2 0 0 1 2,-2z" />
-    <path android:fillColor="#FF4A2150" android:pathData="M18,18h60v60h-60z" />
-    <path android:strokeColor="#FFE9ECF2" android:strokeWidth="7" android:strokeLineCap="square" android:strokeLineJoin="miter" android:fillColor="#00000000" android:pathData="M31,36L45,48L31,60" />
-    <path android:strokeColor="#FFE9ECF2" android:strokeWidth="7" android:strokeLineCap="square" android:fillColor="#00000000" android:pathData="M53,60H65" />
+    android:viewportWidth="72"
+    android:viewportHeight="72">
+    <group android:translateX="-18" android:translateY="-18">
+        <path android:pathData="M34,18h40a16,16 0 0 1 16,16v40a16,16 0 0 1 -16,16h-40a16,16 0 0 1 -16,-16v-40a16,16 0 0 1 16,-16z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="0" android:startY="18"
+                    android:endX="0" android:endY="90">
+                    <item android:offset="0" android:color="#FF070A16" />
+                    <item android:offset="0.68" android:color="#FF1B2852" />
+                    <item android:offset="1" android:color="#FF0B0F1E" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:pathData="M51,68A13,13 0 0,1 77,68Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="0" android:startY="55"
+                    android:endX="0" android:endY="68">
+                    <item android:offset="0" android:color="#FFEE6A2E" />
+                    <item android:offset="1" android:color="#FFD2383F" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:pathData="M28,67h56v3h-56z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="28" android:startY="0"
+                    android:endX="84" android:endY="0">
+                    <item android:offset="0" android:color="#00D2383F" />
+                    <item android:offset="0.18" android:color="#FFD2383F" />
+                    <item android:offset="0.64" android:color="#FFEE6A2E" />
+                    <item android:offset="0.82" android:color="#FFD2383F" />
+                    <item android:offset="1" android:color="#00D2383F" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:fillColor="#FFEEF0F5" android:pathData="M30.41,42.22L41.17,52L30.41,61.78L34.78,66.59L50.83,52L34.78,37.41Z" />
+    </group>
 </vector>

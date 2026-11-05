@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 
-/** WCAG contrast of the riso inks where they carry text or state (dark stock is the app's scheme). */
+/** WCAG contrast of the traditional colours where they carry text, state or a control edge (night is the app's scheme). */
 class FluxContrastTokensTest {
 
     private fun channelToLinear(c: Float): Double =
@@ -28,45 +28,52 @@ class FluxContrastTokensTest {
     }
 
     @Test
-    fun textOnDarkStock() {
-        assertContrast("bone on stock", Riso.Bone, Riso.Stock, 7.0)
-        assertContrast("muted on stock", Riso.BoneMuted, Riso.Stock, 7.0)
-        assertContrast("federal tint on stock", Riso.FederalTint, Riso.Stock, 4.5)
-        assertContrast("red on stock", Riso.Red, Riso.Stock, 4.5)
+    fun textOnTheNight() {
+        assertContrast("shironeri on sumi", Iro.Shironeri, Iro.Sumi, 7.0)
+        assertContrast("ginnezumi on sumi", Iro.Ginnezumi, Iro.Sumi, 7.0)
+        assertContrast("shiro-ai on sumi", Iro.ShiroAi, Iro.Sumi, 4.5)
+        assertContrast("akane (wordmark, large) on sumi", Iro.Akane, Iro.Sumi, 3.0)
     }
 
     @Test
-    fun textOnShellField() {
-        assertContrast("bone on field", Riso.Bone, Riso.FederalField, 7.0)
-        assertContrast("muted on field", Riso.BoneOnField, Riso.FederalField, 4.5)
-        assertContrast("bone on pressed field", Riso.Bone, Riso.FederalFieldHigh, 4.5)
-        assertContrast("bone on selection overprint", Riso.Bone, Riso.Overprint, 7.0)
+    fun textInsideContainers() {
+        assertContrast("shironeri on kon", Iro.Shironeri, Iro.Kon, 7.0)
+        assertContrast("ginnezumi on kon", Iro.Ginnezumi, Iro.Kon, 4.5)
+        assertContrast("ginnezumi on konjo", Iro.Ginnezumi, Iro.Konjo, 4.5)
+        assertContrast("shironeri on kachi", Iro.Shironeri, Iro.Kachi, 7.0)
+        assertContrast("shiro-ai on kon", Iro.ShiroAi, Iro.Kon, 4.5)
     }
 
     @Test
-    fun textOnInkFills() {
-        assertContrast("ink on red", Riso.InkText, Riso.Red, 4.5)
-        assertContrast("hairline on dark stock", Riso.FederalLine, Riso.Stock, 3.0)
-        assertContrast("hairline on light stock", Riso.FederalLineDeep, Riso.StockLight, 3.0)
-        assertContrast("ink on yellow", Riso.InkText, Riso.Yellow, 4.5)
+    fun fillsCarryTheirText() {
+        assertContrast("white on akane", Color.White, Iro.Akane, 4.5)
+        assertContrast("white on kokiake", Color.White, Iro.Kokiake, 4.5)
+        assertContrast("ink on yamabuki", Iro.InkText, Iro.Yamabuki, 4.5)
     }
 
     @Test
-    fun stateInksReadOnStock() {
-        assertContrast("running", Riso.GreenTint, Riso.Stock, 4.5)
-        assertContrast("held", Riso.Yellow, Riso.Stock, 4.5)
-        assertContrast("failed", Riso.Pink, Riso.Stock, 4.5)
+    fun controlsReadAgainstTheGround() {
+        // WCAG 1.4.11: a control's boundary needs 3:1 against what it sits on.
+        assertContrast("ai line on sumi", Iro.Ai, Iro.Sumi, 3.0)
+        assertContrast("ai line on kachi", Iro.Ai, Iro.Kachi, 3.0)
+        assertContrast("ai line on kon", Iro.Ai, Iro.Kon, 3.0)
+        assertContrast("akane fill on sumi", Iro.Akane, Iro.Sumi, 3.0)
+        assertContrast("hanada tile edge on sumi", Iro.Hanada, Iro.Sumi, 1.8)
     }
 
     @Test
-    fun lightStockText() {
-        assertContrast("ink on light stock", Riso.InkText, Riso.StockLight, 7.0)
-        assertContrast("deep red on light stock", Riso.RedDeep, Riso.StockLight, 4.5)
-        assertContrast("deep pink on light stock", Riso.PinkDeep, Riso.StockLight, 4.5)
+    fun statesReadOnTheNight() {
+        assertContrast("running", Iro.Wakatake, Iro.Sumi, 4.5)
+        assertContrast("held", Iro.Yamabuki, Iro.Sumi, 4.5)
+        assertContrast("failed", Iro.Tsutsuji, Iro.Sumi, 4.5)
+        assertContrast("failed on kachi", Iro.Tsutsuji, Iro.Kachi, 4.5)
     }
 
     @Test
-    fun switchTrackIsVisibleOnStock() {
-        assertContrast("unchecked track vs stock", FluxSwitchUncheckedTrack, Riso.Stock, 1.3)
+    fun dawnScheme() {
+        assertContrast("ink on dawn", Iro.InkText, Iro.Dawn, 7.0)
+        assertContrast("deep akane on dawn", Iro.AkaneDeep, Iro.Dawn, 4.5)
+        assertContrast("white on deep akane", Color.White, Iro.AkaneDeep, 4.5)
+        assertContrast("deep tsutsuji on dawn", Iro.TsutsujiDeep, Iro.Dawn, 4.5)
     }
 }

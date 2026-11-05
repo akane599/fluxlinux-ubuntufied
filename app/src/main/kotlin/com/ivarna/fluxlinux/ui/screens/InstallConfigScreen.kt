@@ -51,7 +51,7 @@ import com.ivarna.fluxlinux.core.install.InstallController
 import com.ivarna.fluxlinux.core.install.InstallKind
 import com.ivarna.fluxlinux.core.utils.StateManager
 import com.ivarna.fluxlinux.core.utils.UbuntuRuntime
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
 import com.ivarna.fluxlinux.ui.install.InstallProgressPanel
 import com.ivarna.fluxlinux.ui.install.InstallThemePickRow
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
@@ -180,7 +180,7 @@ fun InstallConfigScreen(
                     root -> R.string.install_cfg_cta_terminal_root
                     else -> R.string.install_cfg_cta_terminal
                 }
-                PlatedButton(
+                AkaButton(
                     text = stringResource(cta),
                     onClick = { startInstall() },
                     modifier = Modifier

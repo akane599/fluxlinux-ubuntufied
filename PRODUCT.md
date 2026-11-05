@@ -29,7 +29,7 @@ A single app that is both the terminal and the Ubuntu install: no Termux, no pro
 
 ## Brand Commitments
 - Name: AkaTerminal (renamed from FluxLinux on 2026-11-05). Author shown as akane599.
-- The launcher icon stays as it is.
+- The launcher icon is the twilight mark (a prompt › and the akane sun on the horizon), redrawn on 2026-11-05 at the user's request; `scripts/render_launcher_icon.py` rasterises it.
 - The original project (FluxLinux by abhay-byte) is credited once, in a small place (Settings → About); its owner's name, photo and social links are not shown elsewhere.
 
 ## Evidence on Hand

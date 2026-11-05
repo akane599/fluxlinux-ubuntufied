@@ -61,13 +61,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivarna.fluxlinux.R
-import com.ivarna.fluxlinux.ui.components.aka.PlateKind
-import com.ivarna.fluxlinux.ui.components.aka.plateInks
-import com.ivarna.fluxlinux.ui.components.aka.plateOffset
+import com.ivarna.fluxlinux.ui.components.aka.akaTile
 import com.ivarna.fluxlinux.ui.theme.AkaTheme
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
-import com.ivarna.fluxlinux.ui.theme.misregistered
+import com.ivarna.fluxlinux.ui.theme.TerminalBackground
 import com.termux.view.TerminalView
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -297,8 +295,8 @@ private val LocalCompactLabels = compositionLocalOf { false }
 private val KEY_HEIGHT = 44.dp
 private val KEY_GAP = 3.dp
 private val MIN_FULL_ROW_CELL_WIDTH = 56.dp
-/** Below this cell width "HOME" / "PGUP" at labelMedium touch the key edges. */
-private val COMPACT_LABEL_CELL_WIDTH = 40.dp
+/** Below this cell width "HOME" / "PGUP" at labelMedium touch the key cap's edges. */
+private val COMPACT_LABEL_CELL_WIDTH = 44.dp
 /** The fixed utility columns (☰ at the left, Paste at the right): one key wide, as tall as the rows. */
 private val UTILITY_KEY_WIDTH = KEY_HEIGHT
 private val LOCK_INDICATOR_WIDTH = 14.dp
@@ -316,9 +314,8 @@ private val LOCK_INDICATOR_HEIGHT = 2.dp
  * at the left edge and Paste ([onPaste]; long-press: [onPasteLongPress], the clipboard menu)
  * at the right edge, so Paste is always one tap away whatever the keys are scrolled to.
  *
- * Printed as the Federal Blue shell field under the terminal: keys lie flat on the field with
- * bone labels and take one tint up while pressed; a latched modifier (CTRL, ALT, SHFT, Fn)
- * prints as the selection overprint, its plates out of register until pressed.
+ * The bar is the terminal's black; each key is its own kon cap with a hanada edge and a
+ * shironeri label, konjō while pressed; a latched modifier (CTRL, ALT, SHFT, Fn) fills akane.
  */
 @Composable
 fun TerminalExtraKeys(
@@ -383,7 +380,8 @@ fun TerminalExtraKeys(
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxWidth()
-                .background(AkaTheme.inks.shellField)
+                // The bar is the terminal's own black; the key caps carry the chrome.
+                .background(TerminalBackground)
         ) {
             val gridWidth = maxWidth - (KEY_GAP + UTILITY_KEY_WIDTH) * 2
             fun cellWidthFor(columns: Int): Dp = (gridWidth - KEY_GAP * (columns + 1)) / columns
@@ -401,8 +399,8 @@ fun TerminalExtraKeys(
 
             CompositionLocalProvider(
                 LocalCompactLabels provides compactLabels,
-                // Ripples and icons on the field take its bone ink.
-                LocalContentColor provides AkaTheme.inks.onShellField,
+                // Ripples and icons on the bar take the shironeri ink.
+                LocalContentColor provides AkaTheme.inks.onChrome,
             ) {
                 Row(modifier = Modifier.padding(vertical = KEY_GAP)) {
                     DrawerKey(
@@ -439,41 +437,40 @@ fun TerminalExtraKeys(
 }
 
 /**
- * Single glyphs (arrows, ↹, symbols) read larger, like Termux's keys, and are cut in the mono
- * face of the terminal; word keys (ESC, HOME, CTRL) stay compact in the label roles.
+ * Every cap is cut in the terminal's mono face: single glyphs (arrows, ↹, symbols) read larger,
+ * like Termux's keys; word keys (ESC, HOME, CTRL) stay compact in the label sizes.
  */
 @Composable
-private fun labelStyle(label: String): TextStyle = when {
-    label.length == 1 -> MaterialTheme.typography.titleMedium.copy(fontFamily = CodeStyle.fontFamily)
-    LocalCompactLabels.current -> MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)
-    else -> MaterialTheme.typography.labelMedium
+private fun labelStyle(label: String): TextStyle {
+    val mono = CodeStyle.fontFamily
+    return when {
+        label.length == 1 -> MaterialTheme.typography.titleMedium.copy(fontFamily = mono)
+        LocalCompactLabels.current -> MaterialTheme.typography.labelSmall.copy(fontFamily = mono, letterSpacing = 0.sp)
+        else -> MaterialTheme.typography.labelMedium.copy(fontFamily = mono, letterSpacing = 0.sp)
+    }
 }
 
 /**
- * A key cap on the shell field: flat on the field at rest, one printed tint up while pressed.
- * An [active] key (a latched modifier, Fn) is the selection overprint whose plates rest out of
- * register and settle into register while pressed. Drawn before the clip, so the plates can
- * spill into the [KEY_GAP] around the cap.
+ * A key cap: a kon container edged in hanada on the black bar, so every key reads as a key;
+ * konjō with the ai edge while pressed. An [active] key (a latched modifier, Fn) is the akane
+ * fill with white text, kokiake while pressed.
  */
 @Composable
 private fun keyCapModifier(active: Boolean, pressed: Boolean): Modifier {
     val shape = MaterialTheme.shapes.extraSmall
-    val plates = plateInks(PlateKind.SELECTION)
-    val offset = plateOffset(registered = pressed)
+    val inks = AkaTheme.inks
     return if (active) {
         Modifier
-            .misregistered(shape, plates.fill, plates.plateA, plates.plateB) { offset }
             .clip(shape)
+            .background(if (pressed) inks.primaryPressed else inks.primaryFill)
     } else {
-        Modifier
-            .clip(shape)
-            .background(if (pressed) AkaTheme.inks.shellFieldHigh else Color.Transparent)
+        Modifier.akaTile(shape, pressed = pressed, control = pressed)
     }
 }
 
 @Composable
 private fun keyContent(active: Boolean): Color =
-    if (active) plateInks(PlateKind.SELECTION).onFill else AkaTheme.inks.onShellField
+    if (active) AkaTheme.inks.onPrimaryFill else AkaTheme.inks.onChrome
 
 @Composable
 private fun ModifierKey(
@@ -640,7 +637,7 @@ private fun DrawerKey(onClick: () -> Unit, modifier: Modifier = Modifier) {
         Icon(
             imageVector = Icons.Sharp.Menu,
             contentDescription = stringResource(R.string.terminal_open_drawer),
-            tint = AkaTheme.inks.onShellField,
+            tint = AkaTheme.inks.onChrome,
             modifier = Modifier.size(22.dp)
         )
     }
@@ -668,7 +665,7 @@ private fun PasteKey(onClick: () -> Unit, onLongClick: (() -> Unit)?, modifier: 
         Icon(
             imageVector = Icons.Sharp.ContentPaste,
             contentDescription = stringResource(R.string.terminal_paste),
-            tint = AkaTheme.inks.onShellField,
+            tint = AkaTheme.inks.onChrome,
             modifier = Modifier.size(22.dp)
         )
     }

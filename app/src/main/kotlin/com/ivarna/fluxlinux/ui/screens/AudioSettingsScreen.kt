@@ -36,7 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.ivarna.fluxlinux.core.terminal.PulseHost
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
 import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
@@ -150,7 +150,7 @@ fun AudioSettingsScreen(
                 enabled = !busy,
                 modifier = Modifier.weight(1f)
             )
-            PlatedButton(
+            AkaButton(
                 text = if (running) "Restart" else "Start",
                 onClick = {
                     if (running) {

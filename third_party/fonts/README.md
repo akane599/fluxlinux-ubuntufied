@@ -8,7 +8,6 @@ The app's fonts in `app/src/main/res/font/` are static instances of two variable
 | `archivo_medium.ttf` | same | wght 500, wdth 100 |
 | `archivo_semibold.ttf` | same | wght 600, wdth 100 |
 | `archivo_semiexpanded_semibold.ttf` | same | wght 650, wdth 112 |
-| `archivo_expanded_extrabold.ttf` | same | wght 800, wdth 125 |
 | `jetbrains_mono_regular.ttf` | JetBrainsMono[wght].ttf, google/fonts `ofl/jetbrainsmono` | wght 400 |
 | `jetbrains_mono_semibold.ttf` | same | wght 600 |
 

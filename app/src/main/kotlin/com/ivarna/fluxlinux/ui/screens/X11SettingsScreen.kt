@@ -27,7 +27,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ivarna.fluxlinux.core.utils.TermuxX11Preferences
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
 import com.ivarna.fluxlinux.ui.components.aka.SectionLabel
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
@@ -203,7 +203,7 @@ fun X11SettingsScreen(
                 .padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.xl),
             verticalArrangement = Arrangement.spacedBy(FluxSpacing.md)
         ) {
-            PlatedButton(
+            AkaButton(
                 text = "Re-apply to running display",
                 onClick = {
                     TermuxX11Preferences.applyToTermux(context)

@@ -22,6 +22,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -90,6 +91,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.ScrollState
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -129,12 +135,13 @@ import com.ivarna.fluxlinux.core.utils.UbuntuRuntimeMode
 import com.ivarna.fluxlinux.ui.components.FluxSwitch
 import com.ivarna.fluxlinux.ui.components.aka.AkaWordmark
 import com.ivarna.fluxlinux.ui.components.aka.MarkState
-import com.ivarna.fluxlinux.ui.components.aka.PlateKind
-import com.ivarna.fluxlinux.ui.components.aka.PlatedButton
+import com.ivarna.fluxlinux.ui.components.aka.TileGap
+import com.ivarna.fluxlinux.ui.components.aka.akaTile
+import com.ivarna.fluxlinux.ui.components.aka.markColor
+import com.ivarna.fluxlinux.ui.components.aka.AkaButton
+import com.ivarna.fluxlinux.ui.components.aka.AkaButtonKind
 import com.ivarna.fluxlinux.ui.components.aka.StatusMark
 import com.ivarna.fluxlinux.ui.components.aka.markColor
-import com.ivarna.fluxlinux.ui.components.aka.plateInks
-import com.ivarna.fluxlinux.ui.components.aka.plateOffset
 import com.ivarna.fluxlinux.ui.terminal.TerminalClipboard
 import com.ivarna.fluxlinux.ui.terminal.TerminalExtraKeys
 import com.ivarna.fluxlinux.ui.terminal.TerminalModifierState
@@ -145,10 +152,10 @@ import com.ivarna.fluxlinux.ui.terminal.keepTerminalGestures
 import com.ivarna.fluxlinux.ui.theme.AkaTheme
 import com.ivarna.fluxlinux.ui.theme.CodeStyle
 import com.ivarna.fluxlinux.ui.theme.FluxSpacing
-import com.ivarna.fluxlinux.ui.theme.Riso
 import com.ivarna.fluxlinux.ui.theme.TerminalBackground
-import com.ivarna.fluxlinux.ui.theme.misregistered
-import com.ivarna.fluxlinux.ui.theme.risoGrain
+import com.ivarna.fluxlinux.ui.theme.AkaMotion
+import com.ivarna.fluxlinux.ui.theme.horizon
+import androidx.compose.animation.core.animateFloatAsState
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import kotlin.math.abs
@@ -170,6 +177,7 @@ data class TerminalTabUi(
 private val DRAWER_MAX_WIDTH = 300.dp
 private val DRAWER_ROW_HEIGHT = 52.dp
 private val DRAWER_ICON_SIZE = 24.dp
+private val DRAWER_LIST_FADE = 28.dp
 private val STATUS_MARK_SIZE = 10.dp
 private val EMPTY_MARK_SIZE = 64.dp
 private val EMPTY_STATE_MAX_WIDTH = 480.dp
@@ -448,6 +456,7 @@ fun TerminalScreen(
         drawerState = drawerState,
         drawerContent = {
             TerminalDrawerSheet(
+                open = drawerOpening,
                 sessions = sessions.mapIndexed { i, managed ->
                     // Read when the screen recomposes (the drawer heading open is one), so the
                     // marks are fresh whenever the drawer is shown.
@@ -761,9 +770,9 @@ private fun DrawerEdgeZone(
  * session manager calls) so previews can drive it with fake sessions. [shellMenu] is the
  * "More shells" dropdown, composed only while open. A null destination hides its row.
  *
- * Printed as one Federal Blue sheet with the extra-keys field: a grain-printed header band with
- * the wordmark, session rows marked by process state, the current session as the selection
- * overprint, "New session" as the sheet's one primary plate.
+ * A kachi sheet: the wordmark over its horizon, then every session and action in its own
+ * tile. The current session is the konjō tile whose horizon rises as the drawer [open]s;
+ * "New session" is the sheet's one akane button.
  */
 @Composable
 fun TerminalDrawerSheet(
@@ -779,13 +788,14 @@ fun TerminalDrawerSheet(
     onOpenFiles: (() -> Unit)?,
     onOpenSettings: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    open: Boolean = true,
     wakeLockHeld: Boolean = false,
     onToggleWakeLock: (() -> Unit)? = null,
     newSessionLabel: String = stringResource(R.string.terminal_new_session),
     shellMenu: @Composable (onDismiss: () -> Unit) -> Unit = {},
 ) {
     val inks = AkaTheme.inks
-    // Cut-paper sheet: square where it meets the screen edge, trimmed at the free edge.
+    // Square where it meets the screen edge, soft at the free edge.
     val sheetShape = MaterialTheme.shapes.extraLarge.copy(
         topStart = CornerSize(0),
         bottomStart = CornerSize(0),
@@ -793,24 +803,26 @@ fun TerminalDrawerSheet(
     ModalDrawerSheet(
         modifier = modifier.widthIn(max = DRAWER_MAX_WIDTH),
         drawerShape = sheetShape,
-        drawerContainerColor = inks.shellField,
-        drawerContentColor = inks.onShellField,
+        drawerContainerColor = inks.chrome,
+        drawerContentColor = inks.onChrome,
     ) {
         DrawerHeader()
+        val sessionScroll = rememberScrollState()
         Column(modifier = Modifier.padding(horizontal = FluxSpacing.md, vertical = FluxSpacing.sm)) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    // Room for the selected row's plates, which print outside its bounds.
+                    // A tile cut by the list's edge fades out, so it reads as "more below".
+                    .fadeWhenScrollable(sessionScroll, inks.chrome)
+                    .verticalScroll(sessionScroll)
                     .padding(vertical = FluxSpacing.xxs),
-                verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs)
+                verticalArrangement = Arrangement.spacedBy(FluxSpacing.xs + FluxSpacing.xxs)
             ) {
                 if (sessions.isEmpty()) {
                     Text(
                         text = stringResource(R.string.terminal_drawer_empty),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = inks.onShellFieldMuted,
+                        color = inks.onChromeMuted,
                         modifier = Modifier.padding(horizontal = FluxSpacing.lg, vertical = FluxSpacing.sm)
                     )
                 }
@@ -818,6 +830,7 @@ fun TerminalDrawerSheet(
                     DrawerSessionRow(
                         session = session,
                         selected = i == selectedIndex,
+                        drawerOpen = open,
                         canCloseOthers = sessions.size > 1,
                         onSelect = { onSelect(i) },
                         onClose = { onClose(i) },
@@ -825,10 +838,7 @@ fun TerminalDrawerSheet(
                     )
                 }
             }
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = FluxSpacing.sm),
-                color = inks.shellHairline
-            )
+            Spacer(Modifier.height(FluxSpacing.sm))
             NewSessionRow(label = newSessionLabel, onNewSession = onNewSession, shellMenu = shellMenu)
             DrawerActionRow(
                 icon = Icons.Sharp.Keyboard,
@@ -842,8 +852,7 @@ fun TerminalDrawerSheet(
                 FluxSwitch(
                     checked = extraKeysVisible,
                     onCheckedChange = null,
-                    modifier = Modifier.padding(end = FluxSpacing.md),
-                    onShellField = true
+                    modifier = Modifier.padding(end = FluxSpacing.md)
                 )
             }
             onToggleWakeLock?.let { toggle ->
@@ -862,16 +871,12 @@ fun TerminalDrawerSheet(
                     FluxSwitch(
                         checked = wakeLockHeld,
                         onCheckedChange = null,
-                        modifier = Modifier.padding(end = FluxSpacing.md),
-                        onShellField = true
+                        modifier = Modifier.padding(end = FluxSpacing.md)
                     )
                 }
             }
             if (onOpenDashboard != null || onOpenFiles != null || onOpenSettings != null) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = FluxSpacing.sm),
-                    color = inks.shellHairline
-                )
+                Spacer(Modifier.height(FluxSpacing.md))
             }
             onOpenDashboard?.let {
                 DrawerActionRow(
@@ -899,8 +904,28 @@ fun TerminalDrawerSheet(
 }
 
 /**
- * The sheet's header band: the AkaTerminal wordmark printed with grain (static; its two-pass
- * print belongs to onboarding), then the "Sessions" heading, closed off by a hairline.
+ * Fades the bottom [DRAWER_LIST_FADE] of a scrolling list into the sheet's [ground] while there
+ * is more below (a plain gradient over the content: no offscreen layer or blend mode).
+ */
+private fun Modifier.fadeWhenScrollable(scroll: ScrollState, ground: Color): Modifier = drawWithContent {
+    drawContent()
+    if (scroll.canScrollForward) {
+        val fade = DRAWER_LIST_FADE.toPx()
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color.Transparent, ground),
+                startY = size.height - fade,
+                endY = size.height,
+            ),
+            topLeft = Offset(0f, size.height - fade),
+            size = Size(size.width, fade),
+        )
+    }
+}
+
+/**
+ * The sheet's header: the AkaTerminal wordmark over its horizon (static; its rise belongs to
+ * onboarding), then the "Sessions" heading, closed off by the tile edge.
  */
 @Composable
 private fun DrawerHeader() {
@@ -909,7 +934,6 @@ private fun DrawerHeader() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .risoGrain(inks.grainAlpha)
             .padding(
                 start = FluxSpacing.xl,
                 end = FluxSpacing.lg,
@@ -920,46 +944,30 @@ private fun DrawerHeader() {
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, minOf(density.fontScale, WORDMARK_MAX_FONT_SCALE)),
         ) {
-            // "Aka" prints in the red plate ink, which holds on the blue field in both schemes
-            // (the light scheme's deepened primary sinks into it).
-            MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(primary = inks.selectionPlateA)) {
-                AkaWordmark(
-                    style = MaterialTheme.typography.headlineMedium,
-                    restColor = inks.onShellField,
-                )
-            }
+            AkaWordmark(
+                style = MaterialTheme.typography.headlineMedium,
+                restColor = inks.onChrome,
+            )
         }
         Text(
             text = stringResource(R.string.terminal_drawer_title),
             style = MaterialTheme.typography.titleSmall,
-            color = inks.onShellFieldMuted,
+            color = inks.onChromeMuted,
             modifier = Modifier
                 .padding(top = FluxSpacing.xs)
                 .semantics { heading() }
         )
     }
-    HorizontalDivider(color = inks.shellHairline)
+    HorizontalDivider(color = inks.tileEdge)
 }
 
-/**
- * State inks on the Federal field. The field is the same blue in both schemes, so marks take
- * the full-strength spot inks; the light scheme's deepened state inks would sink into it.
- */
+/** State inks on the sheet: the scheme's own state inks hold on kachi. */
 @Composable
-private fun fieldMarkColor(state: MarkState): Color {
-    val inks = AkaTheme.inks
-    return when (state) {
-        MarkState.RUNNING -> Riso.GreenTint
-        MarkState.HELD -> Riso.Yellow
-        // Fluorescent pink on the dark field; its pale tint on the lighter light-scheme field.
-        MarkState.FAILED -> if (inks.isDark) inks.failed else MaterialTheme.colorScheme.errorContainer
-        MarkState.IDLE, MarkState.WORKING -> inks.onShellFieldMuted
-    }
-}
+private fun fieldMarkColor(state: MarkState): Color = markColor(state)
 
 /**
- * One drawer action on the field: 56dp row with a leading Sharp icon (or [leadingMark] in its
- * place); [modifier] carries the click/toggle.
+ * One drawer action in its own tile: 52dp row with a leading Sharp icon (or [leadingMark] in
+ * its place); [modifier] carries the click/toggle.
  */
 @Composable
 private fun DrawerActionRow(
@@ -974,8 +982,9 @@ private fun DrawerActionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(vertical = TileGap)
+            .akaTile(MaterialTheme.shapes.medium)
             .heightIn(min = DRAWER_ROW_HEIGHT)
-            .clip(MaterialTheme.shapes.small)
             .then(modifier)
             .padding(start = FluxSpacing.lg),
         verticalAlignment = Alignment.CenterVertically
@@ -991,7 +1000,7 @@ private fun DrawerActionRow(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = inks.onShellFieldMuted,
+                    tint = inks.onChromeMuted,
                     modifier = Modifier.size(DRAWER_ICON_SIZE)
                 )
             }
@@ -1005,13 +1014,13 @@ private fun DrawerActionRow(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                color = inks.onShellField
+                color = inks.onChrome
             )
             supporting?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = inks.onShellFieldMuted
+                    color = inks.onChromeMuted
                 )
             }
         }
@@ -1021,8 +1030,7 @@ private fun DrawerActionRow(
 
 /**
  * Tap: new Ubuntu session; long-press or ▾: the shell menu (root, chroot, host). The sheet's
- * primary plate: red ink alone would read under 4.5:1 on the blue field, so it prints as the
- * vermilion overprint, plates out of register until pressed.
+ * one primary button: akane, kokiake while pressed.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1034,17 +1042,16 @@ private fun NewSessionRow(
     var menuOpen by remember { mutableStateOf(false) }
     val moreLabel = stringResource(R.string.terminal_more_shells)
     val shape = MaterialTheme.shapes.small
-    val plates = plateInks(PlateKind.PRIMARY)
+    val inks = AkaTheme.inks
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val offset = plateOffset(registered = pressed)
     Box(modifier = Modifier.padding(vertical = FluxSpacing.xs)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = DRAWER_ROW_HEIGHT)
-                .misregistered(shape, plates.fill, plates.plateA, plates.plateB) { offset }
                 .clip(shape)
+                .background(if (pressed) inks.primaryPressed else inks.primaryFill)
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = LocalIndication.current,
@@ -1054,10 +1061,10 @@ private fun NewSessionRow(
                     onLongClick = { menuOpen = true },
                     onClick = onNewSession
                 )
-                .padding(start = FluxSpacing.lg),
+                .padding(start = FluxSpacing.lg, top = FluxSpacing.xs, bottom = FluxSpacing.xs),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            CompositionLocalProvider(LocalContentColor provides plates.onFill) {
+            CompositionLocalProvider(LocalContentColor provides inks.onPrimaryFill) {
                 Icon(
                     imageVector = Icons.Sharp.Add,
                     contentDescription = null,
@@ -1145,13 +1152,14 @@ private fun ShellMenuItem(label: String, icon: ImageVector, onClick: () -> Unit)
 /**
  * One session in the drawer: tap switches, the own 48dp ✕ target closes, long-press opens
  * "Close" / "Close other tabs". A [StatusMark] tells its process state by form; the selected
- * session prints as the selection overprint, plates out of register until pressed.
+ * session is the konjō tile with its horizon risen.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DrawerSessionRow(
     session: TerminalTabUi,
     selected: Boolean,
+    drawerOpen: Boolean,
     canCloseOthers: Boolean,
     onSelect: () -> Unit,
     onClose: () -> Unit,
@@ -1171,22 +1179,23 @@ private fun DrawerSessionRow(
         }
     )
     val namedState = stringResource(R.string.terminal_aka_session_named, title, markLabel)
-    val shape = MaterialTheme.shapes.small
-    val plates = plateInks(PlateKind.SELECTION)
+    val shape = MaterialTheme.shapes.medium
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val offset = plateOffset(registered = pressed)
-    val content = if (selected) plates.onFill else inks.onShellFieldMuted
+    // The signature: the current session's horizon rises as the drawer opens.
+    val risen by animateFloatAsState(
+        targetValue = if (selected && drawerOpen) 1f else 0f,
+        animationSpec = AkaMotion.rise(),
+        label = "sessionHorizon",
+    )
+    val content = if (selected) inks.onChrome else inks.onChromeMuted
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = DRAWER_ROW_HEIGHT)
-                .then(
-                    if (selected) Modifier.misregistered(shape, plates.fill, plates.plateA, plates.plateB) { offset }
-                    else Modifier
-                )
-                .clip(shape)
+                .akaTile(shape, pressed = pressed, selected = selected)
+                .horizon(inks.horizon, inks.horizonGlow, risen = { risen })
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = LocalIndication.current,
@@ -1257,7 +1266,7 @@ private fun DrawerSessionRow(
 /**
  * Links found in the session's output, newest first: tap opens one in the browser, long-press
  * copies it. Stateless for screenshot previews. Links are set in the terminal's mono face, in
- * the Federal tint (the red primary reads under 4.5:1 on the dialog's container).
+ * the shiro-ai tint.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1328,8 +1337,8 @@ fun TerminalLinksDialog(
  * Compact empty state: no selector, just the Ubuntu shell being opened, or why it failed
  * with a single retry. Stateless for screenshot previews.
  *
- * Set flush left on the stock like a zine page: the mark, the title in the display voice, a
- * status line led by its mark (working, failed or idle by form), then the one primary plate.
+ * Set flush left on the ground: the mark, the title in the display voice, a
+ * status line led by its mark (working, failed or idle by form), then the one primary button.
  */
 @Composable
 fun TerminalEmptyState(
@@ -1339,7 +1348,7 @@ fun TerminalEmptyState(
     modifier: Modifier = Modifier,
     /**
      * [errorMessage] says Ubuntu isn't installed: nothing failed, so the line takes the idle
-     * mark in body ink and the primary plate goes to setup on the Ubuntu page.
+     * mark in body ink and the primary button goes to setup on the Ubuntu page.
      */
     notInstalled: Boolean = false,
     // With no session there is no extra-keys bar (no ☰) and the edge swipe is hidden, so the
@@ -1402,14 +1411,14 @@ fun TerminalEmptyState(
                 )
             }
             if (setUp != null) {
-                PlatedButton(
+                AkaButton(
                     text = stringResource(R.string.home_action_set_up),
                     onClick = setUp,
                     icon = Icons.Sharp.PlayArrow,
                     modifier = Modifier.padding(top = FluxSpacing.xl)
                 )
             } else {
-                PlatedButton(
+                AkaButton(
                     text = stringResource(R.string.terminal_open_ubuntu),
                     onClick = onOpen,
                     icon = Icons.Sharp.Terminal,
@@ -1423,14 +1432,20 @@ fun TerminalEmptyState(
                     horizontalArrangement = Arrangement.spacedBy(FluxSpacing.sm)
                 ) {
                     onOpenDashboard?.takeIf { setUp == null }?.let {
-                        TextButton(onClick = it, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
-                            Text(stringResource(R.string.terminal_drawer_ubuntu))
-                        }
+                        AkaButton(
+                            text = stringResource(R.string.terminal_drawer_ubuntu),
+                            onClick = it,
+                            kind = AkaButtonKind.SECONDARY,
+                            contentPadding = PaddingValues(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+                        )
                     }
                     onOpenSettings?.let {
-                        TextButton(onClick = it, modifier = Modifier.heightIn(min = FluxSpacing.touch)) {
-                            Text(stringResource(R.string.terminal_drawer_settings))
-                        }
+                        AkaButton(
+                            text = stringResource(R.string.terminal_drawer_settings),
+                            onClick = it,
+                            kind = AkaButtonKind.SECONDARY,
+                            contentPadding = PaddingValues(horizontal = FluxSpacing.lg, vertical = FluxSpacing.md),
+                        )
                     }
                 }
             }

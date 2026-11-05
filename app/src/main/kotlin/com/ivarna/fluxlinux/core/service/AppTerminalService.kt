@@ -117,12 +117,13 @@ class AppTerminalService : Service() {
             .setContentText(
                 if (held) getString(R.string.terminal_notification_wakelock_held, sessions) else sessions
             )
+            // Exit first, then the wakelock toggle (the user's order).
+            .addAction(0, getString(R.string.terminal_notification_exit), exit)
             .addAction(
                 0,
                 getString(if (held) R.string.terminal_wakelock_release else R.string.terminal_wakelock_hold),
                 toggleWakeLock
             )
-            .addAction(0, getString(R.string.terminal_notification_exit), exit)
             .setSmallIcon(R.drawable.ic_stat_flux)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

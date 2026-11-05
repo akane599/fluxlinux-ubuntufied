@@ -45,14 +45,15 @@ class AppExitTest {
     }
 
     @Test
-    fun notification_offersExitNextToHoldWakelock() {
+    fun notification_offersExitBeforeHoldWakelock() {
         val cwd = File("").absoluteFile
         val rel = "src/main/kotlin/com/ivarna/fluxlinux/core/service/AppTerminalService.kt"
         val src = listOf(File(cwd, rel), File(cwd, "app/$rel")).first { it.isFile }.readText()
         val wakeAction = src.indexOf("R.string.terminal_wakelock_release else R.string.terminal_wakelock_hold")
         val exitAction = src.indexOf(".addAction(0, getString(R.string.terminal_notification_exit), exit)")
         assertTrue("wakelock action present", wakeAction > 0)
-        assertTrue("exit action follows the wakelock action", exitAction > wakeAction)
+        assertTrue("exit action present", exitAction > 0)
+        assertTrue("exit action comes before the wakelock action", exitAction < wakeAction)
         val handler = src.indexOf("if (intent?.action == ACTION_EXIT)")
         assertTrue("onStartCommand handles ACTION_EXIT", handler > src.indexOf("override fun onStartCommand"))
         assertTrue("exit runs AppExit", src.indexOf("AppExit.exitAll(this)", handler) > handler)
