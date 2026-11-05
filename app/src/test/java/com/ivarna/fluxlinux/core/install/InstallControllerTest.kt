@@ -1,5 +1,6 @@
 package com.ivarna.fluxlinux.core.install
 
+import com.ivarna.fluxlinux.core.install.InstallController.StartResult
 import com.ivarna.fluxlinux.core.install.InstallController.Status
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -79,11 +80,13 @@ class InstallControllerTest {
         c.start("ubuntu", "dark")
         assertEquals(InstallKind.TERMINAL, c.state.value.kind)
 
+        engine.sinks[0](progress(100, finished = true))
         c.start("ubuntu", "dark", InstallKind.DESKTOP_ADD_ON)
         assertEquals(InstallKind.DESKTOP_ADD_ON, c.state.value.kind)
         engine.sinks[1](progress(30))
         assertEquals("progress keeps the kind", InstallKind.DESKTOP_ADD_ON, c.state.value.kind)
 
+        engine.sinks[1](progress(100, finished = true))
         c.start("ubuntu_chroot", "light", InstallKind.TERMINAL_AND_DESKTOP)
         assertEquals(
             listOf(InstallKind.TERMINAL, InstallKind.DESKTOP_ADD_ON, InstallKind.TERMINAL_AND_DESKTOP),
@@ -95,9 +98,75 @@ class InstallControllerTest {
     @Test
     fun refusedStart_recordsTheRequestedKind() {
         val c = InstallController(FakeEngine(), uninstallInProgress = { true })
-        assertFalse(c.start("ubuntu", "dark", InstallKind.DESKTOP_ADD_ON))
+        assertTrue(c.start("ubuntu", "dark", InstallKind.DESKTOP_ADD_ON) is StartResult.UninstallRunning)
         assertEquals(InstallKind.DESKTOP_ADD_ON, c.state.value.kind)
         assertEquals(Status.Failed, c.state.value.status)
+    }
+
+    @Test
+    fun start_storesTheEffectiveKind_terminalOnlyIsUbuntuOnly() {
+        val engine = FakeEngine()
+        val c = InstallController(engine)
+        // Only the Ubuntu family script honours terminal-only: Debian's setup installs XFCE.
+        assertEquals(StartResult.Started, c.start("debian", "dark", InstallKind.TERMINAL))
+        assertEquals(InstallKind.TERMINAL_AND_DESKTOP, c.state.value.kind)
+        assertEquals(listOf(InstallKind.TERMINAL_AND_DESKTOP), engine.kinds)
+
+        engine.sinks[0](progress(100, finished = true))
+        c.start("ubuntu_chroot", "dark", InstallKind.TERMINAL)
+        assertEquals(InstallKind.TERMINAL, c.state.value.kind)
+    }
+
+    @Test
+    fun desktopAddOn_refusedWhileAnotherInstallRuns_withoutTouchingIt() {
+        val engine = FakeEngine()
+        val c = InstallController(engine, installBusyMessage = { "busy install" })
+        c.start("ubuntu", "dark")
+        engine.sinks[0](progress(40, log = "apt"))
+        val running = c.state.value
+
+        val result = c.start("ubuntu", "light", InstallKind.DESKTOP_ADD_ON)
+
+        assertEquals(StartResult.InstallRunning("busy install"), result)
+        assertEquals("busy install", (result as StartResult.Refused).message)
+        assertEquals("no second engine start", 1, engine.starts.size)
+        assertEquals("the running install is not cancelled", 0, engine.cancels)
+        assertEquals(running, c.state.value)
+        // The running install keeps reporting.
+        engine.sinks[0](progress(60))
+        assertEquals(60, c.state.value.percent)
+
+        // Once it finished, the add-on starts.
+        engine.sinks[0](progress(100, finished = true))
+        assertEquals(StartResult.Started, c.start("ubuntu", "light", InstallKind.DESKTOP_ADD_ON))
+        assertEquals(InstallKind.DESKTOP_ADD_ON, c.state.value.kind)
+        assertEquals(2, engine.starts.size)
+    }
+
+    @Test
+    fun otherKinds_stillSupersedeARunningInstall() {
+        // Retry / re-run: a new terminal (+desktop) run replaces the running one, as before.
+        val engine = FakeEngine()
+        val c = InstallController(engine)
+        c.start("ubuntu", "dark")
+        assertEquals(StartResult.Started, c.start("ubuntu", "dark", InstallKind.TERMINAL_AND_DESKTOP))
+        assertEquals(2, engine.starts.size)
+        assertEquals(InstallKind.TERMINAL_AND_DESKTOP, c.state.value.kind)
+    }
+
+    @Test
+    fun homeDesktopAddOn_toastsTheControllersRefusal() {
+        val src = repoFile("src/main/kotlin/com/ivarna/fluxlinux/ui/screens/HomeScreen.kt").readText()
+        val fn = src.substringAfter("fun installDesktop(theme: String)").substringBefore("\n    }\n")
+        assertTrue(fn, fn.contains("installer.start(activeId, theme, InstallKind.DESKTOP_ADD_ON)"))
+        assertTrue(fn, fn.contains("StartResult.Refused"))
+        assertFalse("the busy guard lives in InstallController", fn.contains("isRunning"))
+    }
+
+    @Test
+    fun productionController_wiresTheInstallBusyMessage() {
+        val src = repoFile("src/main/kotlin/com/ivarna/fluxlinux/core/install/InstallController.kt").readText()
+        assertTrue(src.contains("R.string.install_blocked_running"))
     }
 
     @Test
@@ -274,13 +343,13 @@ class InstallControllerTest {
             uninstallBusyMessage = { "busy" },
         )
 
-        assertFalse(c.start("ubuntu", "dark"))
+        assertEquals(StartResult.UninstallRunning("busy"), c.start("ubuntu", "dark"))
         assertTrue(engine.starts.isEmpty())
         assertEquals(Status.Failed, c.state.value.status)
         assertEquals("busy", c.state.value.errorMessage)
 
         uninstalling = false
-        assertTrue(c.start("ubuntu", "dark"))
+        assertEquals(StartResult.Started, c.start("ubuntu", "dark"))
         assertEquals(listOf("ubuntu" to "dark"), engine.starts)
         assertEquals(Status.Running, c.state.value.status)
     }
@@ -293,7 +362,7 @@ class InstallControllerTest {
         c.start("ubuntu", "dark")
         uninstalling = true
 
-        assertFalse(c.start("debian", "light"))
+        assertTrue(c.start("debian", "light") is StartResult.UninstallRunning)
 
         assertEquals(1, engine.starts.size)
         assertEquals(Status.Running, c.state.value.status)

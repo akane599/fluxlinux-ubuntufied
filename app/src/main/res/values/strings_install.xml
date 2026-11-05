@@ -6,6 +6,9 @@
     <string name="install_notif_terminal_desktop">%1$s terminal and desktop</string>
     <string name="install_notif_desktop_addon">%1$s desktop</string>
 
+    <!-- InstallController: a desktop add-on never replaces a running install. -->
+    <string name="install_blocked_running">Another install is running. Try again when it finishes.</string>
+
     <!-- Desktop add-on refused: the rootfs is not installed. %1$s = distro name. -->
     <string name="install_addon_needs_rootfs">Install %1$s first: the desktop is added to an installed system.</string>
 

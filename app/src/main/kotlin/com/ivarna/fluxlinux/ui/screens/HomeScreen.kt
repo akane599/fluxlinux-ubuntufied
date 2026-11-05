@@ -457,14 +457,10 @@ fun HomeScreen(
         }
     }
 
-    /** Starts the desktop add-on on the active install; never supersedes another running install. */
+    /** Starts the desktop add-on on the active install (refused while another install runs). */
     fun installDesktop(theme: String) {
-        val current = installer.state.value
-        if (current.isRunning) {
-            toast(context.getString(R.string.home_desktop_install_busy))
-            return
-        }
-        installer.start(activeId, theme, InstallKind.DESKTOP_ADD_ON)
+        val result = installer.start(activeId, theme, InstallKind.DESKTOP_ADD_ON)
+        if (result is InstallController.StartResult.Refused) toast(result.message)
     }
 
     val status = ubuntuStatus(install, session, activeId)

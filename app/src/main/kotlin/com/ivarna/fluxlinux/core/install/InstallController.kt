@@ -1,6 +1,8 @@
 package com.ivarna.fluxlinux.core.install
 
 import android.content.Context
+import com.ivarna.fluxlinux.R
+import com.ivarna.fluxlinux.core.terminal.UninstallSessionFactory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,7 +27,7 @@ interface InstallEngine {
  * change, split-screen or Back disposed the screen and cancelled a multi-minute
  * install. Screens now only render [state]; leaving composition never cancels.
  * [cancel] is the explicit user action. One install runs at a time across the
- * onboarding flow and the install wizard.
+ * onboarding flow, the install wizard and Home's desktop add-on.
  */
 class InstallController internal constructor(
     private val engine: InstallEngine,
@@ -33,16 +35,37 @@ class InstallController internal constructor(
     private val uninstallInProgress: () -> Boolean = { false },
     /** User-visible reason shown when [start] is refused because of [uninstallInProgress]. */
     private val uninstallBusyMessage: () -> String = { "" },
+    /** User-visible reason when a desktop add-on is refused because another install runs. */
+    private val installBusyMessage: () -> String = { "" },
 ) {
 
     enum class Status { Idle, Running, Succeeded, Failed }
+
+    /** What [start] did. A [Refused] start ran nothing; callers toast its [Refused.message]. */
+    sealed interface StartResult {
+        data object Started : StartResult
+
+        sealed interface Refused : StartResult {
+            /** User-visible reason (a string resource in production). */
+            val message: String
+        }
+
+        /** An uninstall is deleting files the install would use (H2); the state shows it too. */
+        data class UninstallRunning(override val message: String) : Refused
+
+        /** A [InstallKind.DESKTOP_ADD_ON] never supersedes a running install; state is untouched. */
+        data class InstallRunning(override val message: String) : Refused
+    }
 
     data class State(
         /** Increments per [start]; lets screens key one-shot effects to a run. */
         val runId: Int = 0,
         val distroId: String? = null,
         val theme: String = "dark",
-        /** What the run sets up (as requested by [start]). */
+        /**
+         * What the run sets up: the requested kind made effective for [distroId]
+         * ([InstallKind.effective]: TERMINAL runs as TERMINAL_AND_DESKTOP off Ubuntu).
+         */
         val kind: InstallKind = InstallKind.TERMINAL,
         val status: Status = Status.Idle,
         val percent: Int = 0,
@@ -66,34 +89,45 @@ class InstallController internal constructor(
 
     /**
      * Start (or restart) an install of [kind] (terminal only by default; the desktop is
-     * opt-in or a later [InstallKind.DESKTOP_ADD_ON]). A previous run is superseded (the
-     * engine cancels it). Refused (false, state [Status.Failed] with the reason) while an
-     * uninstall is deleting a container or the proot-distro tree the install would run in (H2).
+     * opt-in or a later [InstallKind.DESKTOP_ADD_ON]), stored and run as
+     * [InstallKind.effective] for [distroId]. Main thread.
+     *
+     * - A running install is superseded (the engine cancels it), except by a
+     *   [InstallKind.DESKTOP_ADD_ON]: that is refused ([StartResult.InstallRunning]) and the
+     *   running install and [state] are left alone.
+     * - Refused ([StartResult.UninstallRunning], state [Status.Failed] with the reason unless
+     *   an install is running) while an uninstall is deleting a container or the proot-distro
+     *   tree the install would run in (H2).
      */
-    fun start(distroId: String, theme: String, kind: InstallKind = InstallKind.TERMINAL): Boolean {
+    fun start(distroId: String, theme: String, kind: InstallKind = InstallKind.TERMINAL): StartResult {
+        val runKind = InstallKind.effective(distroId, kind)
         if (uninstallInProgress()) {
+            val message = uninstallBusyMessage()
             if (!_state.value.isRunning) {
                 _state.value = State(
                     runId = acceptedRun.incrementAndGet(),
                     distroId = distroId,
                     theme = theme,
-                    kind = kind,
+                    kind = runKind,
                     status = Status.Failed,
-                    errorMessage = uninstallBusyMessage(),
+                    errorMessage = message,
                 )
             }
-            return false
+            return StartResult.UninstallRunning(message)
+        }
+        if (runKind == InstallKind.DESKTOP_ADD_ON && _state.value.isRunning) {
+            return StartResult.InstallRunning(installBusyMessage())
         }
         val runId = acceptedRun.incrementAndGet()
         _state.value = State(
             runId = runId,
             distroId = distroId,
             theme = theme,
-            kind = kind,
+            kind = runKind,
             status = Status.Running,
         )
-        engine.start(distroId, theme, kind) { p -> onProgress(runId, p) }
-        return true
+        engine.start(distroId, theme, runKind) { p -> onProgress(runId, p) }
+        return StartResult.Started
     }
 
     /** Explicit user cancel: stops the job and returns to idle; late callbacks are dropped. */
@@ -148,12 +182,9 @@ class InstallController internal constructor(
                 instance ?: ctx.applicationContext.let { app ->
                     InstallController(
                         OnboardingInstallRunner(app),
-                        uninstallInProgress = {
-                            com.ivarna.fluxlinux.core.terminal.UninstallSessionFactory.isAnyUninstallRunning()
-                        },
-                        uninstallBusyMessage = {
-                            app.getString(com.ivarna.fluxlinux.R.string.install_blocked_uninstall)
-                        },
+                        uninstallInProgress = { UninstallSessionFactory.isAnyUninstallRunning() },
+                        uninstallBusyMessage = { app.getString(R.string.install_blocked_uninstall) },
+                        installBusyMessage = { app.getString(R.string.install_blocked_running) },
                     )
                 }.also { instance = it }
             }
