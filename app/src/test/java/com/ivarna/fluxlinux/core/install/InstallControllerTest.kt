@@ -40,6 +40,7 @@ class InstallControllerTest {
         failed: Boolean = false,
         finished: Boolean = false,
         error: String? = null,
+        warning: String? = null,
     ) = OnboardingInstallRunner.Progress(
         phaseId = "ROOTFS",
         phaseLabel = "Rootfs",
@@ -51,7 +52,43 @@ class InstallControllerTest {
         failed = failed,
         finished = finished,
         errorMessage = error,
+        warning = warning,
     )
+
+    @Test
+    fun partialCustomization_succeedsWithTheWarning_andANewStartClearsIt() {
+        val engine = FakeEngine()
+        val c = InstallController(engine)
+        c.start("ubuntu", "dark")
+        assertNull(c.state.value.warning)
+        engine.sinks[0](progress(90, log = "Customization partial"))
+        assertNull("no warning while running", c.state.value.warning)
+
+        engine.sinks[0](progress(100, finished = true, warning = "shell setup didn't finish"))
+        assertEquals(Status.Succeeded, c.state.value.status)
+        assertEquals("shell setup didn't finish", c.state.value.warning)
+        assertNull(c.state.value.errorMessage)
+
+        c.start("ubuntu", "dark")
+        assertNull("a new run starts without the old warning", c.state.value.warning)
+        engine.sinks[1](progress(100, finished = true))
+        assertNull("a clean run has no warning", c.state.value.warning)
+
+        engine.sinks[1](progress(100, finished = true, warning = "w"))
+        c.clearFinished()
+        assertNull(c.state.value.warning)
+    }
+
+    @Test
+    fun failedRun_neverCarriesAWarning() {
+        val engine = FakeEngine()
+        val c = InstallController(engine)
+        c.start("ubuntu_chroot", "dark", InstallKind.TERMINAL_AND_DESKTOP)
+        engine.sinks[0](progress(0, failed = true, finished = true, error = "exit 100", warning = "w"))
+        assertEquals(Status.Failed, c.state.value.status)
+        assertNull(c.state.value.warning)
+        assertEquals("exit 100", c.state.value.errorMessage)
+    }
 
     @Test
     fun start_marksRunning_andProgressAccumulates() {

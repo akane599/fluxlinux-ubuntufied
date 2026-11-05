@@ -61,7 +61,12 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         val logLine: String? = null,
         val failed: Boolean = false,
         val finished: Boolean = false,
-        val errorMessage: String? = null
+        val errorMessage: String? = null,
+        /**
+         * Only on the finished, successful update: the install is usable but its customization
+         * failed or was partial ([customizationWarningRes]); null when it all ran.
+         */
+        val warning: String? = null,
     )
 
     private val appCtx = ctx.applicationContext
@@ -308,7 +313,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             false
         }
         if (abortIfCancelled(gen, phases, onProgress)) return
-        val customOk = runProotGuestScript(
+        val customExit = runProotGuestScript(
             phases, customIdx, onProgress, gen,
             prootName = profile.prootName,
             scriptAssetPath = profile.customizationScript,
@@ -321,9 +326,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             ),
         )
         if (abortIfCancelled(gen, phases, onProgress)) return
-        if (!customOk) {
-            log(phases, customIdx, onProgress, "Customization failed or partial — you can retry from Distro Settings")
-        }
+        val customWarning = customizationOutcome(profile, steps, phases, customIdx, onProgress, customExit)
 
         if (abortIfCancelled(gen, phases, onProgress)) return
         val hwOk = steps.runHwAccel && runHwAccelIfPresent(
@@ -338,12 +341,12 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         // The Ubuntu file-manager roots appear once the rootfs exists; make DocumentsUI re-query.
         runCatching { UbuntuFiles.notifyRootsChanged(appCtx) }
         StateManager.setDistroInstalled(appCtx, distroId, true)
-        recordDesktopComponents(appCtx, distroId, steps, customOk = customOk, hwOk = hwOk)
+        recordDesktopComponents(appCtx, distroId, steps, customOk = customExit == 0, hwOk = hwOk)
         // Persist here, not from Done-page buttons: Back, rotation or process death
         // after a successful install must not re-run onboarding (M4).
         StateManager.setOnboardingComplete(appCtx, true)
         StateManager.triggerRefresh()
-        postSuccess(onProgress, phases)
+        postSuccess(onProgress, phases, customWarning)
     }
 
     private fun runChroot(
@@ -444,9 +447,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         )
         val customExit = runChrootGuestBlocking(customPayload, chrootPath, phases, customIdx, onProgress, gen)
         if (abortIfCancelled(gen, phases, onProgress)) return
-        if (customExit != 0) {
-            log(phases, customIdx, onProgress, "Customization failed or partial (exit $customExit)")
-        }
+        val customWarning = customizationOutcome(profile, steps, phases, customIdx, onProgress, customExit)
 
         if (abortIfCancelled(gen, phases, onProgress)) return
         val hwOk = steps.runHwAccel && runHwAccelIfPresent(
@@ -468,7 +469,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         // after a successful install must not re-run onboarding (M4).
         StateManager.setOnboardingComplete(appCtx, true)
         StateManager.triggerRefresh()
-        postSuccess(onProgress, phases)
+        postSuccess(onProgress, phases, customWarning)
     }
 
     /**
@@ -646,7 +647,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                         driverEnv.entries.joinToString("") {
                             " ${it.key}='${it.value.replace("'", "")}'"
                         }
-                )
+                ) == 0
             }
         } catch (e: Exception) {
             log(phases, phaseIndex, onProgress, "Hardware acceleration error: ${e.message}")
@@ -695,6 +696,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
             ),
         )
 
+    /** Runs asset [scriptAssetPath] in the PRoot guest: its exit code, -1 if it never ran or went stale. */
     private fun runProotGuestScript(
         phases: List<BaseDesktopInstallPlan.Phase>,
         phaseIndex: Int,
@@ -703,7 +705,7 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         prootName: String,
         scriptAssetPath: String,
         envPrefix: String
-    ): Boolean {
+    ): Int {
         return try {
             val tmp = File(TermuxHostPaths.TMPDIR)
             if (!tmp.exists()) tmp.mkdirs()
@@ -732,13 +734,13 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                 processHolder = activeProcess,
                 onLine = lineSink(phases, phaseIndex, onProgress, gen),
             )
-            if (isStale(gen)) return false
-            exit == 0
+            if (isStale(gen)) return -1
+            exit
         } catch (e: Exception) {
             if (!isStale(gen)) {
                 log(phases, phaseIndex, onProgress, "Guest script error: ${e.message}")
             }
-            false
+            -1
         }
     }
 
@@ -842,9 +844,28 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
         line: String
     ) = postPhase(phases, index, onProgress, fraction = null, detail = null) { line }
 
+    /**
+     * Logs a failed or partial customization (exit [exit] != 0) and returns the warning the
+     * success result carries; null when it exited 0. The install itself still succeeds.
+     */
+    private fun customizationOutcome(
+        profile: DistroInstallProfile,
+        steps: InstallSteps,
+        phases: List<BaseDesktopInstallPlan.Phase>,
+        customIdx: Int,
+        onProgress: (Progress) -> Unit,
+        exit: Int,
+    ): String? {
+        val res = customizationWarningRes(steps, exit) ?: return null
+        log(phases, customIdx, onProgress, customizationFailureLog(exit))
+        return appCtx.getString(res, profile.displayName)
+    }
+
+    /** [warning]: [customizationOutcome]'s, carried by the finished update ([Progress.warning]). */
     private fun postSuccess(
         onProgress: (Progress) -> Unit,
-        phases: List<BaseDesktopInstallPlan.Phase>
+        phases: List<BaseDesktopInstallPlan.Phase>,
+        warning: String?,
     ) {
         val last = phases.last()
         lastOverallPercent = 100
@@ -857,7 +878,9 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                 phaseCount = phases.size,
                 overallPercent = 100,
                 detail = "Environment ready",
-                finished = true
+                finished = true,
+                warning = warning,
+                logLine = warning?.let { "WARNING: $it" },
             )
         )
     }
@@ -990,6 +1013,28 @@ class OnboardingInstallRunner(private val ctx: Context) : InstallEngine {
                 StateManager.setComponentInstalled(ctx, distroId, "customization", true)
             }
         }
+
+        /** setup_customization_xfce.sh's exit when it finished without Oh My Zsh. */
+        internal const val CUSTOMIZATION_PARTIAL_EXIT = 3
+
+        /**
+         * Warning (one `%1$s` = distro display name) of a successful run whose customization
+         * exited [exit] != 0: the shell setup of a terminal-only run, or the desktop theme and
+         * shell setup of a run that installed the desktop. Null when it exited 0.
+         */
+        internal fun customizationWarningRes(steps: InstallSteps, exit: Int): Int? = when {
+            exit == 0 -> null
+            steps.installDesktop -> R.string.install_warning_desktop_setup
+            else -> R.string.install_warning_shell_setup
+        }
+
+        /** Install-log line for a customization exit != 0 ([CUSTOMIZATION_PARTIAL_EXIT]: no Oh My Zsh). */
+        internal fun customizationFailureLog(exit: Int): String =
+            if (exit == CUSTOMIZATION_PARTIAL_EXIT) {
+                "Customization partial: Oh My Zsh is missing (exit $exit)"
+            } else {
+                "Customization failed (exit $exit)"
+            }
 
         /** CUSTOM phase detail: desktop theming, or the shell setup of a terminal-only run. */
         private fun customizationDetail(steps: InstallSteps): String =

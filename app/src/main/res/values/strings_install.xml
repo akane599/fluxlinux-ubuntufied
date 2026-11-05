@@ -9,6 +9,11 @@
     <!-- InstallController: a desktop add-on never replaces a running install. -->
     <string name="install_blocked_running">Another install is running. Try again when it finishes.</string>
 
+    <!-- Install finished, but customization failed or was partial (InstallController.State.warning).
+         %1$s = distro name. Terminal-only run / run that installed the desktop. -->
+    <string name="install_warning_shell_setup">%1$s is installed, but its shell setup didn\'t finish, so zsh, Oh My Zsh or its plugins may be missing. Re-run setup to try again.</string>
+    <string name="install_warning_desktop_setup">%1$s and its desktop are installed, but the desktop theme or shell setup didn\'t finish, so themes, fonts, Oh My Zsh or plugins may be missing. Re-run setup to try again.</string>
+
     <!-- Desktop add-on refused: the rootfs is not installed. %1$s = distro name. -->
     <string name="install_addon_needs_rootfs">Install %1$s first: the desktop is added to an installed system.</string>
 

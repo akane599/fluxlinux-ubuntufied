@@ -74,6 +74,13 @@ class InstallController internal constructor(
         val detail: String = "",
         val logText: String = "",
         val errorMessage: String? = null,
+        /**
+         * User-visible warning of a [Status.Succeeded] run whose customization failed or was
+         * partial (shell setup on a terminal-only run; desktop theme or shell setup on a run
+         * that installed the desktop): the system is usable, re-running setup retries it.
+         * Null while running, on failure, and after a clean run; a new [start] clears it.
+         */
+        val warning: String? = null,
     ) {
         val isRunning: Boolean get() = status == Status.Running
 
@@ -159,6 +166,7 @@ class InstallController internal constructor(
                     else -> Status.Running
                 },
                 errorMessage = if (p.failed) p.errorMessage ?: p.detail else s.errorMessage,
+                warning = if (p.finished && !p.failed) p.warning else null,
             )
         }
     }
