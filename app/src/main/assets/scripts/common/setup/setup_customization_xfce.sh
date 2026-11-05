@@ -1142,10 +1142,10 @@ ZSHEOF
 if _flux_is_ubuntu; then
     # Verbatim copy of ZshPluginSet.managedBlock() — ZshPluginSetTest enforces it.
     cat >> "$ZSHRC_NEW" << 'ZSHEOF'
-  # flux-zsh-plugins v1: managed by FluxLinux (ZshPluginSet.kt). Edit freely; Flux never rewrites it.
+  # flux-zsh-plugins v1: managed by FluxLinux (ZshPluginSet.kt). Edit freely; Flux only updates an unedited list.
   _flux_zc="${ZSH_CUSTOM:-$ZSH/custom}"
   plugins=()
-  for _flux_p in git extract colored-man-pages copypath copyfile command-not-found fzf zoxide fzf-tab zsh-autosuggestions zsh-syntax-highlighting history-substring-search; do
+  for _flux_p in git sudo extract colored-man-pages copypath copyfile command-not-found fzf zoxide fzf-tab zsh-autosuggestions zsh-syntax-highlighting history-substring-search; do
     [[ -d "$_flux_zc/plugins/$_flux_p" || -d "$ZSH/plugins/$_flux_p" ]] || continue
     case "$_flux_p" in
       fzf|fzf-tab) (( $+commands[fzf] )) || continue ;;

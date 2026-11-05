@@ -41,7 +41,7 @@ class ZshPluginSetTest {
     fun plugins_exactOrder() {
         assertEquals(
             listOf(
-                "git", "extract", "colored-man-pages", "copypath", "copyfile",
+                "git", "sudo", "extract", "colored-man-pages", "copypath", "copyfile",
                 "command-not-found", "fzf", "zoxide", "fzf-tab",
                 "zsh-autosuggestions", "zsh-syntax-highlighting", "history-substring-search",
             ),
@@ -104,6 +104,43 @@ class ZshPluginSetTest {
         assertNull(ZshPluginSet.upgradeManagedZshrc(first))
         assertEquals(ZshPluginSet.UpgradeResult.UNCHANGED, ZshPluginSet.upgradeZshrcFile(zshrc))
         assertEquals(first, zshrc.readText())
+    }
+
+    // A block written before `sudo` joined the set (2026-11-05): the unedited list gains it.
+    private val v1ForLine = "for _flux_p in git extract colored-man-pages copypath copyfile " +
+        "command-not-found fzf zoxide fzf-tab zsh-autosuggestions zsh-syntax-highlighting " +
+        "history-substring-search; do"
+
+    private fun v1Zshrc(): String {
+        val current = ZshPluginSet.upgradeManagedZshrc(legacyZshrc)!!
+        val line = "for _flux_p in ${ZshPluginSet.PLUGINS.joinToString(" ")}; do"
+        assertEquals(1, current.lines().count { it.trim() == line })
+        return current.replace(line, v1ForLine)
+    }
+
+    @Test
+    fun upgrade_unEditedOlderBlockGetsTheCurrentList() {
+        val v1 = v1Zshrc()
+        val out = ZshPluginSet.upgradeManagedZshrc(v1)!!
+        assertEquals(ZshPluginSet.upgradeManagedZshrc(legacyZshrc), out)
+        assertEquals(v1.lines().size, out.lines().size)
+        assertTrue(out.contains("  for _flux_p in git sudo extract "))
+        // Current block: nothing to do.
+        assertNull(ZshPluginSet.upgradeManagedZshrc(out))
+    }
+
+    @Test
+    fun upgrade_editedOlderListUntouched() {
+        val edited = v1Zshrc().replace(v1ForLine, v1ForLine.replace(" extract ", " docker extract "))
+        assertNull(ZshPluginSet.upgradeManagedZshrc(edited))
+        val zshrc = File(tmp, ".zshrc").apply { writeText(edited) }
+        assertEquals(ZshPluginSet.UpgradeResult.UNCHANGED, ZshPluginSet.upgradeZshrcFile(zshrc))
+        assertEquals(edited, zshrc.readText())
+    }
+
+    @Test
+    fun upgradeKey_bumpedSoUpgradedInstallsRunOnceMore() {
+        assertEquals("guest_zsh_plugins_v2_ubuntu", ZshPluginSet.upgradeKey("ubuntu"))
     }
 
     @Test

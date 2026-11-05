@@ -22,6 +22,7 @@ object ZshPluginSet {
     /** Load order matters: fzf-tab before autosuggestions/syntax-highlighting, history-substring-search last. */
     val PLUGINS: List<String> = listOf(
         "git",
+        "sudo",
         "extract",
         "colored-man-pages",
         "copypath",
@@ -92,6 +93,22 @@ object ZshPluginSet {
     /** Present in every block Flux writes; its presence means "already upgraded". */
     const val MARKER = "# flux-zsh-plugins v1"
 
+    /**
+     * Plugin lists earlier blocks shipped, newest first. A block whose list is still one of
+     * these, unedited, gets the current [PLUGINS] list; an edited list is left alone.
+     */
+    private val PREVIOUS_PLUGIN_LISTS: List<List<String>> = listOf(
+        // Before `sudo` (Esc Esc prefixes the last command), 2026-11-05.
+        listOf(
+            "git", "extract", "colored-man-pages", "copypath", "copyfile", "command-not-found",
+            "fzf", "zoxide", "fzf-tab", "zsh-autosuggestions", "zsh-syntax-highlighting",
+            "history-substring-search",
+        ),
+    )
+
+    private fun pluginLoopLine(plugins: List<String>): String =
+        "for _flux_p in ${plugins.joinToString(" ")}; do"
+
     /** The Flux-managed default line every older profile shipped. */
     const val LEGACY_PLUGINS_LINE = "plugins=(git zsh-autosuggestions zsh-syntax-highlighting)"
 
@@ -101,7 +118,7 @@ object ZshPluginSet {
     const val BACKUP_SUFFIX = ".flux-bak"
 
     /** One-shot SharedPreferences flag (in [GuestRepairCache.PREFS]) per distro card. */
-    fun upgradeKey(id: String): String = "guest_zsh_plugins_v1_$id"
+    fun upgradeKey(id: String): String = "guest_zsh_plugins_v2_$id"
 
     /** Ubuntu proot (`ubuntu`) and chroot (`ubuntu_chroot`). */
     fun appliesTo(distroId: String?): Boolean =
@@ -149,10 +166,10 @@ object ZshPluginSet {
     }
 
     private val BLOCK_TEMPLATE = """
-$MARKER: managed by FluxLinux (ZshPluginSet.kt). Edit freely; Flux never rewrites it.
+$MARKER: managed by FluxLinux (ZshPluginSet.kt). Edit freely; Flux only updates an unedited list.
 _flux_zc="${'$'}{ZSH_CUSTOM:-${'$'}ZSH/custom}"
 plugins=()
-for _flux_p in ${PLUGINS.joinToString(" ")}; do
+${pluginLoopLine(PLUGINS)}
   [[ -d "${'$'}_flux_zc/plugins/${'$'}_flux_p" || -d "${'$'}ZSH/plugins/${'$'}_flux_p" ]] || continue
   case "${'$'}_flux_p" in
     fzf|fzf-tab) (( ${'$'}+commands[fzf] )) || continue ;;
@@ -187,12 +204,14 @@ fi
 
     /**
      * Upgrade a profile that still carries the Flux default plugin line,
-     * immediately followed by the oh-my-zsh source line. Returns null (leave
-     * the file alone) when already upgraded, when the user changed the plugin
-     * line, or when the line is not the single managed occurrence.
+     * immediately followed by the oh-my-zsh source line. A profile that already has the
+     * managed block only gets its plugin list updated, when it is an unedited earlier list
+     * ([PREVIOUS_PLUGIN_LISTS]). Returns null (leave the file alone) when already current,
+     * when the user changed the plugin line, or when the line is not the single managed
+     * occurrence.
      */
     fun upgradeManagedZshrc(text: String): String? {
-        if (text.contains(MARKER)) return null
+        if (text.contains(MARKER)) return updatePluginList(text)
         val lines = text.split("\n")
         val hits = lines.indices.filter { lines[it].trim() == LEGACY_PLUGINS_LINE }
         if (hits.size != 1) return null
@@ -203,6 +222,18 @@ fi
         val indent = lines[start].takeWhile { it == ' ' || it == '\t' }
         val block = managedBlock(indent).removeSuffix("\n").split("\n")
         return (lines.subList(0, start) + block + lines.subList(sourceIdx + 1, lines.size))
+            .joinToString("\n")
+    }
+
+    private fun updatePluginList(text: String): String? {
+        val previous = PREVIOUS_PLUGIN_LISTS.map(::pluginLoopLine).toSet()
+        val lines = text.split("\n")
+        val hits = lines.indices.filter { lines[it].trim() in previous }
+        if (hits.size != 1) return null
+        val i = hits.single()
+        val indent = lines[i].takeWhile { it == ' ' || it == '\t' }
+        return lines.toMutableList()
+            .apply { this[i] = indent + pluginLoopLine(PLUGINS) }
             .joinToString("\n")
     }
 
