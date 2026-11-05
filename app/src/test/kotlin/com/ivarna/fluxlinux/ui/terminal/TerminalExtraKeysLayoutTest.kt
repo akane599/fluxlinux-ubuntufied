@@ -69,14 +69,15 @@ class TerminalExtraKeysLayoutTest {
         KeyRepeat.REPEATABLE_KEYS.forEach { assertTrue(it, it in allKeys) }
     }
 
+    /** Termux's glyphs, except Tab: spelled out, because the small ↹ didn't read as a Tab key. */
     @Test
-    fun labels_useTermuxGlyphs() {
+    fun labels_useTermuxGlyphs_butSpellOutTab() {
         assertEquals(
             listOf("ESC", "/", "―", "HOME", "↑", "END", "PGUP"),
             TerminalExtraKeysLayout.TERMUX_ROWS[0].map(TerminalExtraKeysLayout::label),
         )
         assertEquals(
-            listOf("↹", "CTRL", "ALT", "←", "↓", "→", "PGDN"),
+            listOf("TAB", "CTRL", "ALT", "←", "↓", "→", "PGDN"),
             TerminalExtraKeysLayout.TERMUX_ROWS[1].map(TerminalExtraKeysLayout::label),
         )
     }

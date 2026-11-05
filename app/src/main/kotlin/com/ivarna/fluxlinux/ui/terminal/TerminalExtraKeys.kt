@@ -249,13 +249,13 @@ object TerminalExtraKeysLayout {
 
     val F_KEYS: List<String> = (1..COLUMNS).map { "F$it" }
 
-    // Termux DEFAULT_CHAR_DISPLAY (classic arrows, ↹ tab, ― minus); other keys show their name.
+    // Termux DEFAULT_CHAR_DISPLAY (classic arrows, ― minus); other keys show their name.
+    // TAB too: Termux's ↹ came out small in the fallback font and didn't read as a Tab key.
     private val LABELS: Map<String, String> = mapOf(
         "UP" to "↑",
         "DOWN" to "↓",
         "LEFT" to "←",
         "RIGHT" to "→",
-        "TAB" to "↹",
         "-" to "―",
         SHIFT to "SHFT",
         "ENTER" to "ENT",
@@ -437,8 +437,8 @@ fun TerminalExtraKeys(
 }
 
 /**
- * Every cap is cut in the terminal's mono face: single glyphs (arrows, ↹, symbols) read larger,
- * like Termux's keys; word keys (ESC, HOME, CTRL) stay compact in the label sizes.
+ * Every cap is cut in the terminal's mono face: single glyphs (arrows, symbols) read larger,
+ * like Termux's keys; word keys (ESC, TAB, HOME, CTRL) stay compact in the label sizes.
  */
 @Composable
 private fun labelStyle(label: String): TextStyle {
@@ -678,7 +678,7 @@ private fun KeyLabel(label: String, description: String?, color: Color) {
         style = labelStyle(label),
         color = color,
         maxLines = 1,
-        // TalkBack reads the description instead of a glyph like "↹".
+        // TalkBack reads the description instead of a glyph like "↑" or a word like "PGUP".
         modifier = if (description != null) Modifier.semantics { contentDescription = description } else Modifier
     )
 }
