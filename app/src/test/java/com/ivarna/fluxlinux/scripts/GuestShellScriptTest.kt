@@ -60,6 +60,9 @@ class GuestShellScriptTest {
     fun prootSkipsFullPapirusPackageFallback() = runNamed("papirus_proot_fallback_test.sh")
 
     @Test
+    fun terminalOnlySetupSkipsOnlyTheDesktop() = runNamed("desktop_optional_test.sh")
+
+    @Test
     fun everyShellTestIsWiredHere() {
         val wired = setOf(
             "xfwm4_no_compositing_test.sh",
@@ -67,6 +70,7 @@ class GuestShellScriptTest {
             "pulse_unix_socket_test.sh",
             "pulse_repair_chroot_test.sh",
             "papirus_proot_fallback_test.sh",
+            "desktop_optional_test.sh",
         )
         val present = repoDir("src/test/shell").listFiles { f -> f.name.endsWith("_test.sh") }
             .orEmpty().map { it.name }.toSet()

@@ -159,16 +159,29 @@ _flux_sha256_ok() {
 }
 
 echo "FluxLinux: Installing customization packages..."
-# Never install `curl` on openSUSE — it replaces libcurl-mini and breaks zypper.
-if command -v zypper >/dev/null 2>&1; then
-    _flux_pkg_add wget unzip fontconfig git zsh bash || handle_error "customization deps"
+# FLUX_CUSTOMIZE_DESKTOP=0 (the app's terminal-only setup): only the shell part runs
+# (Oh My Zsh, plugins, pokemon, .zshrc, fastfetch). Unset or 1 also applies the XFCE
+# theme, icons, cursor, wallpaper, Nerd Font and xfconf, as before.
+if [ "${FLUX_CUSTOMIZE_DESKTOP:-1}" != 0 ]; then
+    # unzip: theme/icon/cursor/wallpaper/font zips; fontconfig: fc-list / fc-cache.
+    _flux_desktop_pkgs="unzip fontconfig"
 else
-    _flux_pkg_add curl wget unzip fontconfig git zsh bash || handle_error "customization deps"
+    echo "FluxLinux: terminal-only: skipping XFCE theme, icons, fonts and settings"
+    _flux_desktop_pkgs=""
 fi
-# xz for tar -xJf of theme/icon/cursor archives (self-sufficient re-runs on
-# containers whose family pre-dates xz in the base set). Best-effort.
-_flux_pkg_add xz-utils 2>/dev/null || _flux_pkg_add xz 2>/dev/null || true
-_flux_pkg_add xfce4-screenshooter 2>/dev/null || true
+# Never install `curl` on openSUSE — it replaces libcurl-mini and breaks zypper.
+# shellcheck disable=SC2086
+if command -v zypper >/dev/null 2>&1; then
+    _flux_pkg_add wget $_flux_desktop_pkgs git zsh bash || handle_error "customization deps"
+else
+    _flux_pkg_add curl wget $_flux_desktop_pkgs git zsh bash || handle_error "customization deps"
+fi
+if [ "${FLUX_CUSTOMIZE_DESKTOP:-1}" != 0 ]; then
+    # xz for tar -xJf of theme/icon/cursor archives (self-sufficient re-runs on
+    # containers whose family pre-dates xz in the base set). Best-effort.
+    _flux_pkg_add xz-utils 2>/dev/null || _flux_pkg_add xz 2>/dev/null || true
+    _flux_pkg_add xfce4-screenshooter 2>/dev/null || true
+fi
 _flux_pkg_add fastfetch 2>/dev/null || _flux_pkg_add neofetch 2>/dev/null || true
 
 # Fail closed: guest OMZ + pokemon need git and zsh. Host PREFIX/bin/git is
@@ -273,6 +286,10 @@ EOF
     fi
 fi
 
+# ── XFCE desktop customization (theme → xfconf) ─────────────────────────────
+# Skipped when FLUX_CUSTOMIZE_DESKTOP=0. Nothing below the matching `fi` reads what
+# this block sets. Kept unindented: tests extract its functions at column 0.
+if [ "${FLUX_CUSTOMIZE_DESKTOP:-1}" != 0 ]; then
 ASSET_REPO="abhay-byte/fluxlinux"
 ASSET_TAG="debian-v1"
 BASE_URL="https://github.com/$ASSET_REPO/releases/download/$ASSET_TAG"
@@ -810,6 +827,8 @@ cat > "$XFCONF_DIR/xfce4-desktop.xml" <<EOF
   </property>
 </channel>
 EOF
+fi
+# ── end XFCE desktop customization ──────────────────────────────────────────
 
 _flux_chown_r "$CUSTOM_USER:$CUSTOM_GROUP" "$USER_HOME/.config" 2>/dev/null || true
 _flux_chown_r "$CUSTOM_USER:$CUSTOM_GROUP" "$USER_HOME" 2>/dev/null || true

@@ -27,9 +27,16 @@ fi
 # setup_ubuntu_family.sh — Ubuntu 26.04 LTS (Resolute) XFCE (proot + chroot).
 # Debian-LIKE, not Debian: rewrite mirrors to ports.ubuntu.com, NEVER add debian.org.
 # Never install ubuntu-desktop / do-release-upgrade / PPAs.
+#
+# FLUX_INSTALL_DESKTOP=0 (exported by the app's terminal-only setup) skips the XFCE
+# packages, the startxfce4 check and the first-paint GPU mode. Unset or 1 installs the
+# desktop, so Distro Settings re-runs and the desktop add-on keep today's behaviour.
 
 DISTRO_NAME="${1:-ubuntu}"
 echo "FluxLinux: Configuring ${DISTRO_NAME} (Ubuntu Family)..."
+if [ "${FLUX_INSTALL_DESKTOP:-1}" = 0 ]; then
+    echo "FluxLinux: terminal-only: skipping XFCE (FLUX_INSTALL_DESKTOP=0)"
+fi
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "FluxLinux: ERROR: must run as root inside the guest (got uid=$(id -u))."
@@ -102,28 +109,42 @@ apt-get install -y --no-install-recommends \
 
 _flux_ensure_dbus
 
-_flux_log "Installing XFCE4 (targeted list — no xfce4 / ubuntu-desktop metapackage first)..."
-if ! apt-get install -y --no-install-recommends \
-    xfce4-session xfce4-panel xfce4-settings xfce4-terminal \
-    xfdesktop4 xfwm4 thunar \
-    adwaita-icon-theme fonts-dejavu-core \
-    libgl1-mesa-dri libegl1 mesa-utils; then
-    _flux_log "targeted XFCE install failed — falling back to xfce4 metapackage"
-    apt-get install -y --no-install-recommends xfce4 || {
-        echo "FluxLinux: XFCE install failed"
-        exit 1
-    }
+if [ "${FLUX_INSTALL_DESKTOP:-1}" != 0 ]; then
+    _flux_log "Installing XFCE4 (targeted list — no xfce4 / ubuntu-desktop metapackage first)..."
+    if ! apt-get install -y --no-install-recommends \
+        xfce4-session xfce4-panel xfce4-settings xfce4-terminal \
+        xfdesktop4 xfwm4 thunar \
+        adwaita-icon-theme fonts-dejavu-core \
+        libgl1-mesa-dri libegl1 mesa-utils; then
+        _flux_log "targeted XFCE install failed — falling back to xfce4 metapackage"
+        apt-get install -y --no-install-recommends xfce4 || {
+            echo "FluxLinux: XFCE install failed"
+            exit 1
+        }
+    fi
+else
+    _flux_log "terminal-only: skipping XFCE packages"
 fi
 
 _flux_ensure_en_us_locale || exit 1
-_flux_require_startxfce4
+if [ "${FLUX_INSTALL_DESKTOP:-1}" != 0 ]; then
+    _flux_require_startxfce4
+fi
 _flux_ensure_groups
 _flux_ensure_user
 _flux_ensure_sudo
 _flux_ensure_home
 _flux_setup_pulse
-_flux_write_gpu_mode virgl
+if [ "${FLUX_INSTALL_DESKTOP:-1}" != 0 ]; then
+    _flux_write_gpu_mode virgl
+else
+    _flux_log "terminal-only: skipping desktop GPU mode"
+fi
 _flux_fix_pm_writable
 
-echo "FluxLinux: ${DISTRO_NAME} Ubuntu setup complete!"
+if [ "${FLUX_INSTALL_DESKTOP:-1}" != 0 ]; then
+    echo "FluxLinux: ${DISTRO_NAME} Ubuntu setup complete!"
+else
+    echo "FluxLinux: ${DISTRO_NAME} Ubuntu setup complete (terminal only)!"
+fi
 exit 0

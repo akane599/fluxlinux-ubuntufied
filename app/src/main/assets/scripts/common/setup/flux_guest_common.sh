@@ -595,6 +595,12 @@ _flux_guest_pactl() {
     return 1
 }
 
+# The XFCE panel's volume plugin (apt) is wanted with a desktop, never in a terminal-only
+# install (FLUX_INSTALL_DESKTOP=0): it would pull xfce4-panel and its X/GTK stack.
+_flux_apt_pulse_plugin() {
+    [ "${FLUX_INSTALL_DESKTOP:-1}" != 0 ] && echo xfce4-pulseaudio-plugin
+}
+
 _flux_install_pulse_client() {
     _have=$(_flux_guest_pactl || true)
     if [ -n "$_have" ]; then
@@ -603,10 +609,18 @@ _flux_install_pulse_client() {
             || command -v zypper >/dev/null 2>&1; then
             _flux_mask_pipewire_pulse
         fi
+        # A terminal-only setup installed pactl without the panel plugin; a later
+        # desktop run (the add-on) adds it. Best-effort.
+        _plugin=$(_flux_apt_pulse_plugin || true)
+        if [ -n "$_plugin" ] && command -v apt-get >/dev/null 2>&1 \
+            && ! dpkg-query -W -f='${Status}' "$_plugin" 2>/dev/null | grep -q 'install ok installed'; then
+            _flux_try_install "$_plugin" || true
+        fi
         return 0
     fi
     if command -v apt-get >/dev/null 2>&1; then
-        _flux_try_install libpulse0 pulseaudio-utils xfce4-pulseaudio-plugin \
+        # shellcheck disable=SC2046
+        _flux_try_install libpulse0 pulseaudio-utils $(_flux_apt_pulse_plugin) \
             || _flux_try_install libpulse0 pulseaudio-utils || true
     elif _flux_is_chimera 2>/dev/null; then
         _flux_try_install libpulse libpulse-progs xfce4-pulseaudio-plugin \
