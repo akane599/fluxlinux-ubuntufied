@@ -5,12 +5,10 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
-# Keep Compose and Material Icons
+# Compose and Material Icons ship their own R8 rules, so there's no blanket keep here: R8
+# shrinks and optimizes them. A keep on androidx.compose.** kept all ~11k icon classes
+# (half the dex) and blocked R8's Compose optimizations.
 -dontwarn androidx.compose.**
--keep class androidx.compose.** { *; }
-
-# Keep Material Icons that are used (R8 should handle this automatically)
--keep class androidx.compose.material.icons.** { *; }
 
 # OkHttp rules
 -dontwarn okhttp3.**
