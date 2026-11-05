@@ -10,6 +10,7 @@ paths:
 - APK commit == tag commit == GitHub release commit == HEAD. No drift.
 - Build from the main checkout, never a git worktree: AGP 8.7 can't find git in a worktree and silently omits `META-INF/version-control-info.textproto`.
 - Clean tree, then build both APKs in one clean run from the same HEAD: `bash .claude/scripts/gradle-check.sh clean :app:assembleIvarnaRelease :app:assembleIvarnaDebug`.
+- Release APKs are signed with the user's own key, `~/.config/fluxlinux-ubuntufied/signing/Akane.p12`, through the repo-root `keystore.properties` (gitignored, written by the user; never read, print or commit either file). Without that file the build outputs an unsigned `app-ivarna-release-unsigned.apk`. The old fork key `release.jks` stays in the same folder; never regenerate or delete either key.
 - Verify the release APK with `unzip -p <apk> META-INF/version-control-info.textproto | grep revision` against `git rev-parse HEAD` and the tag. The debug APK strips `META-INF/**`; check that `aapt2 dump badging` shows the same versionCode/versionName as the release APK.
 - Releases go to `akane599/fluxlinux-ubuntufied`, titled "FluxLinux Ubuntu edition v<ver>", with two assets: `app/build/outputs/apk/ivarna/release/app-ivarna-release.apk` as `FluxLinux-Ubuntu-v<ver>.apk` and the debug APK as `FluxLinux-Ubuntu-v<ver>-debug.apk`.
 - The release commit is `chore(release): v<ver> (<code>); …`, with `docs/releases/v<ver>.md`, `changelogs/<code>.txt` and a PROGRESS.md decision-log line.
