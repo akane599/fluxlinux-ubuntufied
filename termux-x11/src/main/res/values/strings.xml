@@ -12,7 +12,7 @@
     <string name="exit_button_text">EXIT</string>
     <string name="chrome_back_desc">Back to AkaTerminal</string>
     <string name="chrome_keyboard_desc">Show keyboard</string>
-    <string name="x11_idle_mascot_cd">AkaTerminal mark beside an idle X11 display</string>
+    <string name="x11_idle_mascot_cd">AkaTerminal mark: a shell prompt with the sun on the horizon</string>
     <string name="extra_keys_config_desc">Here you can set value of extra-keys variable like in Termux app (read <a href="http://wiki.termux.com/wiki/Touch_Keyboard#Extra_Keys_Row">this</a>) and more \n
 E.g. <b>META</b> for <i>META key</i>, \n
 <b>KEYBOARD</b> for <i>soft keyboard toggling key</i>, \n
