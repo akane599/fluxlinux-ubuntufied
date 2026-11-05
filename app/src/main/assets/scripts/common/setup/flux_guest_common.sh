@@ -598,7 +598,7 @@ _flux_guest_pactl() {
 # The XFCE panel's volume plugin (apt) is wanted with a desktop, never in a terminal-only
 # install (FLUX_INSTALL_DESKTOP=0): it would pull xfce4-panel and its X/GTK stack. Unset
 # counts as a desktop here (first Pulse client install, older callers); adding it next to
-# an existing pactl needs an explicit 1 (_flux_install_pulse_client).
+# an existing pactl needs an explicit 1 or an XFCE panel in the guest (_flux_install_pulse_client).
 _flux_apt_pulse_plugin() {
     [ "${FLUX_INSTALL_DESKTOP:-1}" != 0 ] && echo xfce4-pulseaudio-plugin
 }
@@ -612,12 +612,15 @@ _flux_install_pulse_client() {
             _flux_mask_pipewire_pulse
         fi
         # A terminal-only setup installed pactl without the panel plugin; a later
-        # desktop run (the add-on) adds it. Best-effort, and only on an explicit
-        # FLUX_INSTALL_DESKTOP=1 (what the app's desktop runs export): Audio Settings →
-        # Repair guests leaves it unset, and on a terminal-only guest the plugin would
-        # pull xfce4-panel and its X/GTK stack.
+        # desktop run adds it. Best-effort: on an explicit FLUX_INSTALL_DESKTOP=1 (the
+        # app's desktop runs), or with the flag unset only when the guest has an XFCE
+        # panel (Distro Settings' XFCE install, Repair guests on a desktop guest). Repair
+        # on a terminal-only guest must not pull xfce4-panel and its X/GTK stack.
         _plugin=""
-        [ "${FLUX_INSTALL_DESKTOP:-}" = 1 ] && _plugin=$(_flux_apt_pulse_plugin || true)
+        case "${FLUX_INSTALL_DESKTOP:-}" in
+            1) _plugin=$(_flux_apt_pulse_plugin || true) ;;
+            "") command -v xfce4-panel >/dev/null 2>&1 && _plugin=$(_flux_apt_pulse_plugin || true) ;;
+        esac
         if [ -n "$_plugin" ] && command -v apt-get >/dev/null 2>&1 \
             && ! dpkg-query -W -f='${Status}' "$_plugin" 2>/dev/null | grep -q 'install ok installed'; then
             _flux_try_install "$_plugin" || true

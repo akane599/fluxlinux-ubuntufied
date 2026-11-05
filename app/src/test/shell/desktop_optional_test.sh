@@ -133,6 +133,17 @@ run_pulse repair_unset PACTL=/usr/bin/pactl DPKG_STATUS="unknown ok not-installe
     && fail "pulse repair (flag unset): installed with pactl present: $(cat "$T/pulse.repair_unset")"
 run_pulse present_off PACTL=/usr/bin/pactl FLUX_INSTALL_DESKTOP=0
 [ -s "$T/pulse.present_off" ] && fail "pulse off: installed with pactl present: $(cat "$T/pulse.present_off")"
+# Unset with an XFCE panel in the guest: Distro Settings → "XFCE4 Desktop" (the family
+# script installs xfce4-panel before _flux_setup_pulse, flag unset) and Repair guests on a
+# desktop guest. The panel plugin belongs there; an explicit 0 still wins.
+mkdir -p "$T/panelbin"
+printf '#!/bin/sh\nexit 0\n' > "$T/panelbin/xfce4-panel"
+chmod +x "$T/panelbin/xfce4-panel"
+run_pulse panel_unset PACTL=/usr/bin/pactl DPKG_STATUS="unknown ok not-installed" PATH="$T/bin:$T/panelbin"
+grep -qx "xfce4-pulseaudio-plugin" "$T/pulse.panel_unset" \
+    || fail "pulse (flag unset, XFCE panel present): plugin not added: $(cat "$T/pulse.panel_unset")"
+run_pulse panel_off PACTL=/usr/bin/pactl DPKG_STATUS="unknown ok not-installed" FLUX_INSTALL_DESKTOP=0 PATH="$T/bin:$T/panelbin"
+[ -s "$T/pulse.panel_off" ] && fail "pulse off (XFCE panel present): installed: $(cat "$T/pulse.panel_off")"
 
 # ── setup_customization_xfce.sh ────────────────────────────────────────────
 GUARD='if [ "${FLUX_CUSTOMIZE_DESKTOP:-1}" != 0 ]; then'
